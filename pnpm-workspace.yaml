@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  bcrypt: set this to true or false
+  esbuild: set this to true or false
+  prisma: true
