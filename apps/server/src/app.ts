@@ -4,12 +4,12 @@ import helmet from "helmet";
 import compression from "compression";
 import cookieParser from "cookie-parser";
 
-import routes from "./routes/index";
+import routes from "./routes/index.js";
 
-app.use
 
 const app = express();
 
+app.use("/api/v1", routes);
 app.use(cors());
 app.use(helmet());
 app.use(compression());
