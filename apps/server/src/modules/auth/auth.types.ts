@@ -1,42 +1,51 @@
-export interface RegisterDTO {
-    email : string;
-    password : string;
-}
+export type UserRole = "USER" | "ADMIN";
 
-export interface LoginDTO {
-    email : string;
-    password : string;
-}
+export interface UserEntity {
+    id: string;
+    email: string;
+    password: string;
+    role: UserRole;
 
-export interface JwtPayload {
-    userId : string;
-    email : string;
-}
-
-export interface AuthTokens {
-    accessToken : string;
-    refreshToken : string;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 export interface AuthUser {
-    id : string;
-    email : string;
-    role : "USER" | "ADMIN";
+    id: string;
+    email: string;
+    role: UserRole;
 }
 
-export interface LoginResponse {
-    user : AuthUser;
-    tokens : AuthTokens;
+export interface RegisterDTO {
+    email: string;
+    password: string;
 }
 
-export interface RegisterResponse {
-    user : AuthUser;
+export interface LoginDTO {
+    email: string;
+    password: string;
 }
 
 export interface RefreshTokenDTO {
-    refreshToken : string;
+    refreshToken: string;
 }
 
-export interface AuthRequest {
-    user ?: AuthUser;
+export interface JwtPayload {
+    userId: string;
+    email: string;
+    role: UserRole;
+}
+
+export interface AuthTokens {
+    accessToken: string;
+    refreshToken: string;
+}
+
+export interface RegisterResponse {
+    user: AuthUser;
+}
+
+export interface LoginResponse {
+    user: AuthUser;
+    tokens: AuthTokens;
 }
