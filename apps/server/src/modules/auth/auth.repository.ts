@@ -1,45 +1,20 @@
-import type {
-    RegisterDTO,
-    AuthUser,
-} from "./auth.types.js";
+import * as Database from "@jobpilot/database";
 
-export interface AuthRepository {
-    create(data : RegisterDTO) : Promise<AuthUser>;
+// Fallback to dynamic access in case the package doesn't export a typed `userRepository`
+const userRepository = (Database as any).userRepository;
+import type { Prisma, User } from "@jobpilot/database";
 
-    findById(id : string) : Promise<AuthUser | null>;
-
-    findByEmail(email : string) : Promise<AuthUser | null>;
-
-    saveRefreshToken(
-        userId : string,
-        refreshToken : string,
-    ) : Promise<void>;
-}
-
-export class AuthRepository implements IAuthRepository {
-    async create(_ : RegisterDTO) : Promise<AuthUser> {
-        throw new Error("Not implemented");
+class AuthRepository {
+    async createUser(data: Prisma.UserCreateInput): Promise<User> {
+        return userRepository.create(data);
     }
 
-    async fundById(_: string) : Promise<AuthUser | null> {
-        throw new Error("Not implemented");
+    async findUserByEmail(email: string): Promise<User | null> {
+        return userRepository.findByEmail(email);
     }
 
-    async findByEmail(_: string) : Promise<AuthUser | null> {
-        throw new Error  ("Not implemented");
-    }
-
-    async saveRefreshToken(
-        _: string,
-        __: string
-    ): Promise<void> {
-        throw new Error("Not implemented.");
-    }
-
-    async revokeRefreshToken(
-        _: string
-    ): Promise<void> {
-        throw new Error("Not implemented.");
+    async findUserById(id: string): Promise<User | null> {
+        return userRepository.findById(id);
     }
 }
 

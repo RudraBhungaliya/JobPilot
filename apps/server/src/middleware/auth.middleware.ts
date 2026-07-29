@@ -15,12 +15,6 @@ interface JwtPayload {
     role: "USER" | "ADMIN";
 }
 
-declare module "express-serve-static-core" {
-    interface Request {
-        user?: JwtPayload;
-    }
-}
-
 export const authenticate: RequestHandler = (
     req: Request,
     _res: Response,
@@ -46,7 +40,11 @@ export const authenticate: RequestHandler = (
             process.env.JWT_ACCESS_SECRET!
         ) as JwtPayload;
 
-        req.user = payload;
+        req.user = {
+            id: payload.userId,
+            email: payload.email,
+            role: payload.role,
+        };
 
         next();
     } catch {
