@@ -12,51 +12,98 @@ enum UserRole {
   ADMIN
 }
 
+enum JobStatus {
+  SAVED
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+}
+
+enum ResumeStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
 model User {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  email     String   @unique
-  password  String
+  email    String @unique
+  password String
 
-  role      UserRole @default(USER)
+  role UserRole @default(USER)
 
   resumes   Resume[]
   jobs      Job[]
+  companies Company[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model Job {
-  id        String   @id @default(cuid())
+model Company {
+  id String @id @default(cuid())
 
-  company   String
-  title     String
-  location  String
+  name     String
+  website  String?
+  linkedin String?
+  location String?
 
-  url       String
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  status    String   @default("SAVED")
-  notes     String?
-
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs Job[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
 }
 
 model Resume {
-  id            String   @id @default(cuid())
+  id String @id @default(cuid())
 
   title         String
   originalName  String
   fileUrl       String
   extractedText String?
 
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status ResumeStatus @default(PROCESSING)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Job {
+  id String @id @default(cuid())
+
+  title    String
+  location String
+  url      String
+
+  status JobStatus @default(SAVED)
+
+  notes String?
+
+  appliedAt   DateTime?
+  coverLetter String?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([companyId])
 }

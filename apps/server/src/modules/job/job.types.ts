@@ -9,7 +9,7 @@ export interface JobEntity {
     id: string;
     userId: string;
 
-    company: string;
+    companyId: string;
     title: string;
     location: string;
     url: string;
