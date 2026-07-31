@@ -8,7 +8,7 @@ import routes from "./routes/index.js";
 import errorMiddleware from "./middleware/error.middleware.js";
 import { authRoutes } from "./modules/auth/index.js";
 import userRoutes from "./modules/user/index.js";
-
+import jobRoutes from "./modules/job/index.js";
 
 const app = express();
 
@@ -19,15 +19,16 @@ app.use(compression());
 app.use(cookieParser());
 
 app.use(express.json());
-app.use(express.urlencoded({ extended : true }));
+app.use(express.urlencoded({ extended: true }));
 app.use(errorMiddleware);
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
+app.use("/api/v1/jobs", jobRoutes);
 
 app.get("/", (req, res) => {
     res.json({
-        success : true,
-        message : "Server is running",
+        success: true,
+        message: "Server is running",
     });
 });
 
