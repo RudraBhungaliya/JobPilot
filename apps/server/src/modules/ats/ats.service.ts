@@ -1,31 +1,61 @@
-import { extractKeywords } from "./ats.utils.js";
+import atsRepository from "./ats.repository.js";
+import {
+    extractKeywords,
+    findMissingKeywords,
+} from "./ats.utils.js";
 
 import type { ATSResult } from "./ats.types.js";
 
+const REQUIRED_KEYWORDS = [
+    "react",
+    "typescript",
+    "node",
+    "express",
+    "postgresql",
+    "docker",
+    "aws",
+    "git",
+];
+
 class ATSService {
     async analyzeResume(
-        resumeText: string,
+        resumeId: string,
     ): Promise<ATSResult> {
 
-        const keywords =
-            extractKeywords(resumeText);
+        const resume =
+            await atsRepository.getResume(resumeId);
+
+        if (!resume) {
+            throw new Error("Resume not found.");
+        }
+
+        const text =
+            resume.extractedText ?? "";
+
+        const strengths =
+            extractKeywords(text);
+
+        const missing =
+            findMissingKeywords(
+                text,
+                REQUIRED_KEYWORDS,
+            );
 
         const score =
-            Math.min(
-                100,
-                keywords.length * 7,
+            Math.max(
+                0,
+                100 - missing.length * 8,
             );
 
         return {
             score,
-
-            missingKeywords: [],
-
-            strengths: keywords,
-
+            strengths,
+            missingKeywords: missing,
             weaknesses: [],
-
-            suggestions: [],
+            suggestions: missing.map(
+                keyword =>
+                    `Include "${keyword}" in your resume.`,
+            ),
         };
     }
 }

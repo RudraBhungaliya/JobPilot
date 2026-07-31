@@ -1,9 +1,9 @@
 export interface ATSResult {
     score: number;
 
-    missingKeywords: string[];
-
     strengths: string[];
+
+    missingKeywords: string[];
 
     weaknesses: string[];
 
