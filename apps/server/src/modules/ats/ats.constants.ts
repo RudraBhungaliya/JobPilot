@@ -1,0 +1,8 @@
+export const ATS_CONSTANTS = {
+    MAX_SCORE: 100,
+
+    KEYWORD_WEIGHT: 40,
+    EXPERIENCE_WEIGHT: 25,
+    SKILLS_WEIGHT: 20,
+    FORMAT_WEIGHT: 15,
+} as const;

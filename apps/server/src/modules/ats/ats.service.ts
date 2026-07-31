@@ -1,16 +1,27 @@
+import { extractKeywords } from "./ats.utils.js";
+
 import type { ATSResult } from "./ats.types.js";
 
 class ATSService {
     async analyzeResume(
-        resumeId: string,
+        resumeText: string,
     ): Promise<ATSResult> {
 
+        const keywords =
+            extractKeywords(resumeText);
+
+        const score =
+            Math.min(
+                100,
+                keywords.length * 7,
+            );
+
         return {
-            score: 0,
+            score,
 
             missingKeywords: [],
 
-            strengths: [],
+            strengths: keywords,
 
             weaknesses: [],
 
