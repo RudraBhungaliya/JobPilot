@@ -1,0 +1,7 @@
+export const APPLICATION = {
+    MAX_RETRIES: 3,
+
+    DEFAULT_BATCH_SIZE: 10,
+
+    MAX_CONCURRENT_APPLICATIONS: 3,
+} as const;

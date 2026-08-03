@@ -34,9 +34,10 @@ model User {
 
   role UserRole @default(USER)
 
-  resumes   Resume[]
-  jobs      Job[]
-  companies Company[]
+  resumes      Resume[]
+  jobs         Job[]
+  companies    Company[]
+  applications Application[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -69,6 +70,7 @@ model Resume {
   originalName  String
   fileUrl       String
   extractedText String?
+  applications  Application[]
 
   status ResumeStatus @default(PROCESSING)
 
@@ -88,7 +90,8 @@ model Job {
   location String
   url      String
 
-  status JobStatus @default(SAVED)
+  status       JobStatus     @default(SAVED)
+  applications Application[]
 
   notes String?
 
@@ -106,4 +109,44 @@ model Job {
 
   @@index([userId])
   @@index([companyId])
+}
+
+model Application {
+  id String @id @default(cuid())
+
+  status ApplicationStatus @default(PENDING)
+
+  attempts Int @default(0)
+
+  appliedAt DateTime?
+
+  failureReason String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  jobId String
+  job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  resumeId String
+  resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, jobId])
+  @@index([userId])
+  @@index([jobId])
+  @@index([resumeId])
+  @@index([status])
+}
+
+enum ApplicationStatus {
+  PENDING
+  MATCHED
+  QUEUED
+  RUNNING
+  SUBMITTED
+  FAILED
+  SKIPPED
 }

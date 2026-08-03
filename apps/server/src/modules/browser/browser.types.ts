@@ -19,3 +19,23 @@ export interface BrowserPageInfo {
 
     title: string;
 }
+
+export interface JobPosting {
+    title: string;
+
+    company: string;
+
+    location: string;
+
+    description: string;
+
+    url: string;
+
+    platform:
+        | "linkedin"
+        | "greenhouse"
+        | "lever"
+        | "workday"
+        | "ashby"
+        | "indeed";
+}

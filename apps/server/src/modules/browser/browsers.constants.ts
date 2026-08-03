@@ -7,3 +7,12 @@ export const BROWSER_CONSTANTS = {
 
     DOWNLOAD_DIR: "uploads/downloads",
 } as const;
+
+export const JOB_SOURCES = [
+    "linkedin",
+    "greenhouse",
+    "lever",
+    "workday",
+    "ashby",
+    "indeed",
+] as const;
