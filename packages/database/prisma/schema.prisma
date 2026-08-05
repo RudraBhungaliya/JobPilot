@@ -32,7 +32,8 @@ model User {
   email    String @unique
   password String
 
-  role UserRole @default(USER)
+  role     UserRole  @default(USER)
+  profile  Profile?
 
   resumes      Resume[]
   jobs         Job[]
@@ -73,6 +74,10 @@ model Resume {
   applications  Application[]
 
   status ResumeStatus @default(PROCESSING)
+
+  profileId String?
+
+  profile Profile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -125,6 +130,10 @@ model Application {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  profileId String?
+
+  profile Profile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+
   jobId String
   job   Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
@@ -149,4 +158,267 @@ enum ApplicationStatus {
   SUBMITTED
   FAILED
   SKIPPED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  FREELANCE
+}
+
+enum WorkMode {
+  REMOTE
+  HYBRID
+  ONSITE
+}
+
+model Profile {
+  id String @id @default(cuid())
+
+  firstName  String
+  middleName String?
+  lastName   String
+
+  email String?
+  phone String?
+
+  dateOfBirth DateTime?
+
+  gender      String?
+  nationality String?
+
+  address String?
+  city    String?
+  state   String?
+  country String?
+  zipCode String?
+
+  currentTitle   String?
+  currentCompany String?
+
+  resumes Resume[]
+
+  applications Application[]
+
+  yearsOfExperience Float?
+
+  expectedSalary Int?
+  currentSalary  Int?
+
+  noticePeriod Int?
+
+  github    String?
+  linkedin  String?
+  portfolio String?
+  website   String?
+
+  leetcode   String?
+  codeforces String?
+
+  workMode       WorkMode       @default(HYBRID)
+  employmentType EmploymentType @default(FULL_TIME)
+
+  willingToRelocate Boolean @default(false)
+  willingToTravel   Boolean @default(false)
+
+  remoteOnly Boolean @default(false)
+
+  sponsorshipRequired Boolean @default(false)
+
+  visaStatus String?
+
+  governmentEmployee Boolean @default(false)
+
+  militaryService Boolean @default(false)
+
+  veteran Boolean @default(false)
+
+  criminalRecord Boolean @default(false)
+
+  securityClearance Boolean @default(false)
+
+  disability Boolean @default(false)
+
+  summary String?
+
+  isDefault Boolean @default(false)
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  educations ProfileEducation[]
+
+  experiences ProfileExperience[]
+
+  skills ProfileSkill[]
+
+  languages ProfileLanguage[]
+
+  certifications ProfileCertification[]
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  profileProjects ProfileProject[]
+  profileLinks    ProfileLink[]
+
+  @@index([userId])
+}
+
+model ProfileSkill {
+  id String @id @default(cuid())
+
+  name String
+
+  category String?
+
+  level String?
+
+  yearsOfExperience Float?
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+  @@index([name])
+}
+
+model ProfileEducation {
+  id String @id @default(cuid())
+
+  degree String
+
+  institution String
+
+  fieldOfStudy String?
+
+  grade String?
+
+  startDate DateTime?
+
+  endDate DateTime?
+
+  currentlyStudying Boolean @default(false)
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+}
+
+model ProfileExperience {
+  id String @id @default(cuid())
+
+  company String
+
+  title String
+
+  location String?
+
+  description String?
+
+  employmentType EmploymentType?
+
+  startDate DateTime?
+
+  endDate DateTime?
+
+  currentlyWorking Boolean @default(false)
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+}
+
+model ProfileLanguage {
+  id String @id @default(cuid())
+
+  name String
+
+  proficiency String?
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+}
+
+model ProfileCertification {
+  id String @id @default(cuid())
+
+  name String
+
+  issuer String?
+
+  credentialId String?
+
+  credentialUrl String?
+
+  issuedAt DateTime?
+
+  expiresAt DateTime?
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+}
+
+model ProfileProject {
+  id String @id @default(cuid())
+
+  title String
+
+  description String?
+
+  githubUrl String?
+
+  liveUrl String?
+
+  technologies String?
+
+  startDate DateTime?
+
+  endDate DateTime?
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
+}
+
+model ProfileLink {
+  id String @id @default(cuid())
+
+  label String
+
+  url String
+
+  profileId String
+  profile   Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([profileId])
 }
