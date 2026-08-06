@@ -1,0 +1,9 @@
+export const WORKFLOW = {
+    DEFAULT_BATCH_SIZE: 10,
+
+    MAX_CONCURRENT_WORKERS: 3,
+
+    RETRY_LIMIT: 3,
+
+    RETRY_DELAY_MS: 3000,
+} as const;
