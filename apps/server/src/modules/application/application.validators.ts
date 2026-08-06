@@ -17,7 +17,7 @@ export const updateApplicationSchema =
             "FAILED",
             "SKIPPED",
         ]),
-
+        attempts: z.number().int().optional(),
         failureReason:
             z.string().optional(),
     });
