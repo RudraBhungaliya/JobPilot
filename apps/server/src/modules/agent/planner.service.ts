@@ -1,14 +1,22 @@
-import type { AgentState } from "./state.js";
+import type { 
+    AgentStateType,
+    AgentStateUpdate,
+} from "./state.js";
 
 class PlanarService {
     async plan(
-        state : AgentState
-    ) : Promise<AgentState> {
+        state : AgentStateType
+    ) : Promise<AgentStateUpdate> {
         /*
             LangGraph planner will
             decide the next node later.
         */
-        return state;
+        return {
+            history : [
+                ...state.history,
+                "Agent execution started",
+            ],
+        }
     }
 }
 

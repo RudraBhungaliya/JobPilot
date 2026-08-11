@@ -1,12 +1,18 @@
-import plannerService from "./planner.service.js";
+import {
+    agentGraph,
+} from "./graph.js";
 
-import type { AgentState } from "./state.js";
+import type {
+    AgentStateType,
+} from "./state.js";
 
 class ExecutorService {
     async execute(
-        state : AgentState,
-    ) : Promise<AgentState>{
-        return plannerService.plan(state);
+        state: AgentStateType,
+    ) {
+        return agentGraph.invoke(
+            state,
+        );
     }
 }
 

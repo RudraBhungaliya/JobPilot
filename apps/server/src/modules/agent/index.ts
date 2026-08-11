@@ -1,8 +1,17 @@
 export {
-    default as agentGraph,
+    agentGraph,
 } from "./graph.js";
 
-export * from "./state.js";
+export {
+    AgentState,
+} from "./state.js";
+
+export type {
+    AgentStateType,
+} from "./state.js";
+
 export * from "./agent.types.js";
+
 export * from "./agent.constants.js";
+
 export * from "./agent.validators.js";

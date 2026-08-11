@@ -1,12 +1,11 @@
-import type { AgentState } from "../state.js";
+import type { AgentStateType } from "../state.js";
 
 class DiscoverNode {
     async execute(
-        state: AgentState,
-    ): Promise<Partial<AgentState>> {
+        state: AgentStateType,
+    ): Promise<Partial<AgentStateType>> {
         /*
             Search sources
-            later.
         */
 
         return {
