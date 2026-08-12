@@ -1,11 +1,28 @@
-import type { AgentState } from "../state.js";
+import type {
+    AgentStateType,
+    AgentStateUpdate,
+} from "../state.js";
 
 class RetryNode {
     async execute(
-        state: AgentState,
-    ): Promise<Partial<AgentState>> {
+        state: AgentStateType,
+    ): Promise<AgentStateUpdate> {
+        if (state.errors.length === 0) {
+            return {
+                history: [
+                    ...state.history,
+                    "No retry required.",
+                ],
+            };
+        }
 
-        return {};
+        return {
+            errors: [],
+            history: [
+                ...state.history,
+                "Retry state prepared.",
+            ],
+        };
     }
 }
 
