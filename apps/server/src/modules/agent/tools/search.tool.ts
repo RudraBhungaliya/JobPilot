@@ -1,13 +1,14 @@
 import crawlerService from "../../crawler/crawler.service.js";
 
+import type {
+    CrawlDTO,
+} from "../../crawler/crawler.validators.js";
 class SearchTool {
     async search(
-        ...args: Parameters<
-            typeof crawlerService.crawl
-        >
+        dto : CrawlDTO,
     ) {
         return crawlerService.crawl(
-            ...args,
+            dto,
         );
     }
 }

@@ -1,16 +1,25 @@
-import type { AgentState } from "../state.js";
+import discoveryService from "../discovery.service.js";
+
+import type {
+    AgentStateType,
+    AgentStateUpdate,
+} from "../state.js";
 
 class DiscoverNode {
     async execute(
-        state: AgentState,
-    ): Promise<Partial<AgentState>> {
-        /*
-            Search sources
-            later.
-        */
+        state: AgentStateType,
+    ): Promise<AgentStateUpdate> {
+        const jobs = await discoveryService.discover(
+            state.query,
+        );
 
         return {
-            jobs: [],
+            jobs,
+            selectedJobs: [],
+            history: [
+                ...state.history,
+                `Discovered ${jobs.length} jobs for: ${state.query}`,
+            ],
         };
     }
 }

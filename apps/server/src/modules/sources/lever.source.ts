@@ -9,6 +9,7 @@ import type {
 
 class LeverSource
     implements JobSource {
+    readonly name = "lever";
 
     async search(
         options: SearchOptions,

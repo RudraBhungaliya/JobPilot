@@ -1,17 +1,30 @@
-import type { AgentState } from "../state.js";
+import type { AgentStateType, AgentStateUpdate } from "../state.js";
 
 class FetchNode {
     async execute(
-        state: AgentState,
-    ): Promise<Partial<AgentState>> {
+        state: AgentStateType,
+    ): Promise<AgentStateUpdate> {
 
         /*
             Crawl jobs
             later.
         */
 
+        if (state.jobs.length === 0) {
+            return {
+                history: [
+                    ...state.history,
+                    "No jobs found to fetch.",
+                ],
+            };
+        }
+
         return {
             jobs: state.jobs,
+            history: [
+                ...state.history,
+                `Fetched ${state.jobs.length} discovered jobs.`,
+            ],
         };
     }
 }

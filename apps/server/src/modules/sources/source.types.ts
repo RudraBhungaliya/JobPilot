@@ -1,19 +1,24 @@
-export interface SearchOptions {
+export interface SourceSearchInput {
     keyword: string;
-
     location?: string;
-
     remote?: boolean;
 }
 
 export interface SourceJob {
+    externalId : string;
     title: string;
-
     company: string;
-
-    location: string;
-
+    url : string;
+    location?: string;
     description: string;
-
-    url: string;
+    source : string;
 }
+
+export interface JobSource {
+    name : string;
+    search(
+        input : SourceSearchInput,
+    ) : Promise<SourceJob[]>;
+}
+
+export type SearchOptions = SourceSearchInput;
