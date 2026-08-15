@@ -9,6 +9,7 @@ import type {
 
 class WorkdaySource
     implements JobSource {
+    readonly name = "workday";
 
     async search(
         options: SearchOptions,

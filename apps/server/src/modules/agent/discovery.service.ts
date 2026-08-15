@@ -1,3 +1,5 @@
+import crypto from "crypto";
+
 import searchTool from "./tools/search.tool.js";
 
 import type {
@@ -45,8 +47,6 @@ class DiscoveryService {
                         >;
 
                     if (
-                        typeof value.id !==
-                            "string" ||
                         typeof value.title !==
                             "string" ||
                         typeof value.company !==
@@ -57,11 +57,16 @@ class DiscoveryService {
                         return null;
                     }
 
+                    const id = crypto
+                        .createHash("sha256")
+                        .update(value.url)
+                        .digest("hex")
+                        .slice(0, 12);
+
                     return {
-                        id: value.id,
+                        id,
                         title: value.title,
-                        company:
-                            value.company,
+                        company: value.company,
                         url: value.url,
                     };
                 },

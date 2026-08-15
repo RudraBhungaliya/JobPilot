@@ -9,6 +9,7 @@ import type {
 
 class GreenhouseSource
     implements JobSource {
+    readonly name = "greenhouse";
 
     async search(
         options: SearchOptions,

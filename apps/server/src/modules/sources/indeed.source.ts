@@ -9,6 +9,7 @@ import type {
 
 class IndeedSource
     implements JobSource {
+    readonly name = "indeed";
 
     async search(
         options: SearchOptions,
