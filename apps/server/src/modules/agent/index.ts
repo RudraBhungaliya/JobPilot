@@ -8,6 +8,7 @@ export {
 
 export type {
     AgentStateType,
+    AgentStateUpdate,
 } from "./state.js";
 
 export * from "./agent.types.js";

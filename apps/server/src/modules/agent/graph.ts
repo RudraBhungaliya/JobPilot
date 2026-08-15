@@ -4,6 +4,7 @@ import {
     StateGraph,
 } from "@langchain/langgraph";
 
+import plannerNode from "./nodes/planner.node.js";
 import discoverNode from "./nodes/discover.node.js";
 import fetchNode from "./nodes/fetch.node.js";
 import rankNode from "./nodes/rank.node.js";
@@ -17,7 +18,12 @@ import { AgentState } from "./state.js";
 
 const workflow = new StateGraph(
     AgentState,
-)
+)   
+    .addNode(
+        "planner",
+        async (state) =>
+            plannerNode.execute(state),
+    )
     .addNode(
         "discover",
         async (state) => {
@@ -65,37 +71,66 @@ const workflow = new StateGraph(
     )
 
     .addEdge(
-        START,
-        "discover",
+            START,
+            "planner",
+        )
+
+    .addConditionalEdges(
+        "planner",
+        (state) => state.plannerAction,
+        {
+            DISCOVER: "discover",
+            FETCH: "fetch",
+            RANK: "rank",
+            TAILOR: "tailor",
+            APPLY: "apply",
+            VERIFY: "verify",
+            PERSIST: "persist",
+            RETRY: "retry",
+            END: END,
+        },
     )
+
     .addEdge(
         "discover",
-        "fetch",
+        "planner",
     )
+
     .addEdge(
         "fetch",
-        "rank",
+        "planner",
     )
+
     .addEdge(
         "rank",
-        "tailor",
+        "planner",
     )
+
     .addEdge(
         "tailor",
-        "apply",
+        "planner",
     )
+
     .addEdge(
         "apply",
-        "verify",
+        "planner",
     )
+
     .addEdge(
         "verify",
-        "persist",
+        "planner",
     )
+
     .addEdge(
         "persist",
-        END,
+        "planner",
+    )
+
+    .addEdge(
+        "retry",
+        "planner",
     );
+
 
 export const agentGraph =
     workflow.compile();

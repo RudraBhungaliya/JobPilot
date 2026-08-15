@@ -36,6 +36,14 @@ export const AgentState = new StateSchema({
         .custom<AgentBrowserSession>()
         .optional(),
 
+    plannerAction: z
+        .string()
+        .default("DISCOVER"),
+
+    plannerReason: z
+        .string()
+        .default(""),
+
     history: z
         .array(z.string())
         .default([]),
