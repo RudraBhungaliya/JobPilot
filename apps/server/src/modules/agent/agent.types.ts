@@ -1,20 +1,20 @@
 export interface AgentJob {
-    id : string;
-    title : string;
-    company : string;
-    url : string;
-    score ?: number;
+    id: string;
+    title: string;
+    company: string;
+    url: string;
+    score?: number;
 }
 
 export interface AgentJobSearchResult {
-    id : string;
-    path : string;
-    tailored : string;
+    id: string;
+    path: string;
+    tailored: string;
 }
 
 export interface AgentJobSearchResults {
-    id : string;
-    status : 
+    id: string;
+    status:
         | "PENDING"
         | "RUNNING"
         | "SUBMITTED"
@@ -24,14 +24,6 @@ export interface AgentJobSearchResults {
 export interface AgentBrowserSession {
     sessionId: string;
     currentUrl?: string;
-}
-
-export interface AgentJob {
-    id: string;
-    title: string;
-    company: string;
-    url: string;
-    score?: number;
 }
 
 export interface AgentResume {
@@ -47,9 +39,4 @@ export interface AgentApplication {
         | "RUNNING"
         | "SUBMITTED"
         | "FAILED";
-}
-
-export interface AgentBrowserSession {
-    sessionId: string;
-    currentUrl?: string;
 }

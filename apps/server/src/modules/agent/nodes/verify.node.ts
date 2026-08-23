@@ -1,4 +1,4 @@
-import type { AgentStateType, AgentStateUpdate } from "../state.js";
+import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
 
 class VerifyNode {
   async execute(state: AgentStateType): Promise<AgentStateUpdate> {

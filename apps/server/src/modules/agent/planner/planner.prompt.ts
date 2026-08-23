@@ -6,55 +6,33 @@ export interface PlannerPromptInput {
     hasApplication: boolean;
     hasBrowser: boolean;
     errorCount: number;
+    evaluated: boolean;
 }
 
 export const buildPlannerPrompt = (
     input: PlannerPromptInput,
 ): string => `
-You are the planning agent for JobPilot.
-
-Decide the next action in the job application workflow.
-
-Available actions:
-DISCOVER
-FETCH
-RANK
-TAILOR
-APPLY
-VERIFY
-PERSIST
-RETRY
-END
-
-Current state:
+You are the JobPilot workflow planner.
 
 Query:
 ${input.query}
 
-Jobs discovered:
-${input.jobsCount}
-
-Jobs selected:
-${input.selectedJobsCount}
-
-Resume available:
-${input.hasResume}
-
-Application available:
-${input.hasApplication}
-
-Browser available:
-${input.hasBrowser}
-
-Errors:
-${input.errorCount}
+State:
+- Jobs discovered: ${input.jobsCount}
+- Selected jobs: ${input.selectedJobsCount}
+- Resume available: ${input.hasResume}
+- Application available: ${input.hasApplication}
+- Browser available: ${input.hasBrowser}
+- Errors: ${input.errorCount}
+- Jobs evaluated: ${input.evaluated}
 
 Rules:
 
 - If no jobs exist, choose DISCOVER.
-- If jobs exist but need processing, choose FETCH.
-- If jobs exist but none are selected, choose RANK.
+- If jobs exist but have not been evaluated, choose EVALUATE.
+- If jobs have been evaluated but none are selected, choose RANK.
 - If jobs are selected and a resume exists, choose TAILOR.
+- Choose FETCH when job information needs to be fetched.
 - Only choose APPLY when application prerequisites are available.
 - Choose VERIFY after an application attempt.
 - Choose PERSIST after verification.

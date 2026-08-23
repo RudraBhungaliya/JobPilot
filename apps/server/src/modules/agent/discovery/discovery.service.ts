@@ -1,10 +1,10 @@
 import crypto from "crypto";
 
-import searchTool from "./tools/search.tool.js";
+import searchTool from "../tools/search.tool.js";
 
 import type {
     AgentJob,
-} from "./agent.types.js";
+} from "../agent.types.js";
 
 class DiscoveryService {
     async discover(

@@ -1,10 +1,10 @@
 import {
     agentGraph,
-} from "./graph.js";
+} from "../graph/graph.js";
 
 import type {
     AgentStateType,
-} from "./state.js";
+} from "../graph/state.js";
 
 class ExecutorService {
     async execute(

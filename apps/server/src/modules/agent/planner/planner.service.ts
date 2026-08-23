@@ -1,34 +1,15 @@
-import { z } from "zod";
-
-import aiTool from "./tools/ai.tool.js";
-
+import aiTool from "../tools/ai.tool.js";
 import {
     buildPlannerPrompt,
-} from "./prompts/planner.prompt.js";
+} from "./planner.prompt.js";
 
 import type {
     AgentStateType,
-} from "./state.js";
+} from "../graph/state.js";
 
 import type {
     PlannerDecision,
 } from "./planner.types.js";
-
-const plannerDecisionSchema =
-    z.object({
-        action: z.enum([
-            "DISCOVER",
-            "FETCH",
-            "RANK",
-            "TAILOR",
-            "APPLY",
-            "VERIFY",
-            "PERSIST",
-            "RETRY",
-            "END",
-        ]),
-        reason: z.string(),
-    });
 
 class PlannerService {
     async decide(
@@ -37,17 +18,22 @@ class PlannerService {
         const prompt =
             buildPlannerPrompt({
                 query: state.query,
-                jobsCount: state.jobs.length,
+                jobsCount:
+                    state.jobs.length,
                 selectedJobsCount:
                     state.selectedJobs.length,
                 hasResume:
                     Boolean(state.resume),
                 hasApplication:
-                    Boolean(state.application),
+                    Boolean(
+                        state.application,
+                    ),
                 hasBrowser:
                     Boolean(state.browser),
                 errorCount:
                     state.errors.length,
+                evaluated:
+                    state.evaluated,
             });
 
         const response =
@@ -67,9 +53,7 @@ class PlannerService {
             );
         }
 
-        return plannerDecisionSchema.parse(
-            parsed,
-        );
+        return parsed as PlannerDecision;
     }
 }
 
