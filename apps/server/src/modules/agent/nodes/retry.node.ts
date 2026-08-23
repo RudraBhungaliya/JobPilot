@@ -1,7 +1,7 @@
 import type {
     AgentStateType,
     AgentStateUpdate,
-} from "../state.js";
+} from "../graph/state.js";
 
 class RetryNode {
     async execute(

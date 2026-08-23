@@ -1,6 +1,6 @@
-import { checkpointService } from "../../core/checkpoint/index.js";
+import { checkpointService } from "../../../core/checkpoint/index.js";
 
-import type { AgentCheckpoint } from "../../core/checkpoint/index.js";
+import type { AgentCheckpoint } from "../../../core/checkpoint/index.js";
 
 class MemoryService {
     save(

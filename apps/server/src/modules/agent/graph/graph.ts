@@ -4,15 +4,15 @@ import {
     StateGraph,
 } from "@langchain/langgraph";
 
-import plannerNode from "./nodes/planner.node.js";
-import discoverNode from "./nodes/discover.node.js";
-import fetchNode from "./nodes/fetch.node.js";
-import rankNode from "./nodes/rank.node.js";
-import tailorNode from "./nodes/tailor.node.js";
-import applyNode from "./nodes/apply.node.js";
-import verifyNode from "./nodes/verify.node.js";
-import persistNode from "./nodes/persist.node.js";
-import retryNode from "./nodes/retry.node.js";
+import plannerNode from "../nodes/planner.node.js";
+import discoverNode from "../nodes/discover.node.js";
+import fetchNode from "../nodes/fetch.node.js";
+import rankNode from "../nodes/rank.node.js";
+import tailorNode from "../nodes/tailor.node.js";
+import applyNode from "../nodes/apply.node.js";
+import verifyNode from "../nodes/verify.node.js";
+import persistNode from "../nodes/persist.node.js";
+import retryNode from "../nodes/retry.node.js";
 
 import { AgentState } from "./state.js";
 
@@ -26,33 +26,28 @@ const workflow = new StateGraph(
     )
     .addNode(
         "discover",
-        async (state) => {
-            discoverNode.execute(state);
-        }
+        async (state) =>
+            discoverNode.execute(state),
     )
     .addNode(
         "fetch",
-        async (state) => {
-            fetchNode.execute(state);
-        }
+        async (state) =>
+            fetchNode.execute(state),
     )
     .addNode(
         "rank",
-        async (state) => {
-            rankNode.execute(state);
-        }
+        async (state) =>
+            rankNode.execute(state),
     )
     .addNode(
         "tailor",
-        async (state) => {
-            tailorNode.execute(state);
-        }
+        async (state) =>
+            tailorNode.execute(state),
     )
     .addNode(
         "apply",
-        async (state) => {
-            applyNode.execute(state);
-        }
+        async (state) =>
+            applyNode.execute(state),
     )
     .addNode(
         "verify",

@@ -1,9 +1,9 @@
-import plannerService from "../planner.service.js";
+import plannerService from "../planner/planner.service.js";
 
 import type {
     AgentStateType,
     AgentStateUpdate,
-} from "../state.js";
+} from "../graph/state.js";
 
 class PlannerNode {
     async execute(

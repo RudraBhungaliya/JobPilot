@@ -3,7 +3,7 @@ import applicationTool from "../tools/application.tool.js";
 import type {
     AgentStateType,
     AgentStateUpdate,
-} from "../state.js";
+} from "../graph/state.js";
 
 class PersistNode {
     async execute(

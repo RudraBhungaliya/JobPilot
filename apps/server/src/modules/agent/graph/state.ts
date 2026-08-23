@@ -9,7 +9,7 @@ import type {
     AgentBrowserSession,
     AgentJob,
     AgentResume,
-} from "./agent.types.js";
+} from "../agent.types.js";
 
 export const AgentState = new StateSchema({
     threadId: z.string().default(""),
@@ -47,6 +47,10 @@ export const AgentState = new StateSchema({
     history: z
         .array(z.string())
         .default([]),
+
+    evaluated: z
+        .boolean()
+        .default(false),
 
     errors: z
         .array(z.string())

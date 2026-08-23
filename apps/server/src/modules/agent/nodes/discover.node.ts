@@ -1,21 +1,35 @@
-import discoveryService from "../discovery.service.js";
+import crypto from "crypto";
+import searchTool from "../tools/search.tool.js";
 
 import type {
     AgentStateType,
     AgentStateUpdate,
-} from "../state.js";
+} from "../graph/state.js";
 
 class DiscoverNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        const jobs = await discoveryService.discover(
-            state.query,
-        );
+        const rawJobs =
+            await searchTool.search({
+                keyword: state.query,
+            });
+
+        const jobs = rawJobs.map((job) => ({
+            id: crypto
+                .createHash("sha256")
+                .update(job.url)
+                .digest("hex")
+                .slice(0, 12),
+            title: job.title,
+            company: job.company,
+            url: job.url,
+        }));
 
         return {
             jobs,
             selectedJobs: [],
+            evaluated: false,
             history: [
                 ...state.history,
                 `Discovered ${jobs.length} jobs for: ${state.query}`,

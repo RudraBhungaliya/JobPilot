@@ -1,6 +1,6 @@
 import aiTool from "../tools/ai.tool.js";
 
-import type { AgentStateType, AgentStateUpdate } from "../state.js";
+import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
 
 class TailorNode {
   async execute(state: AgentStateType): Promise<AgentStateUpdate> {
