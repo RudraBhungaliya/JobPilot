@@ -1,34 +1,56 @@
-import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
+import applicationTool from "../tools/application.tool.js";
+
+import type {
+    AgentStateType,
+    AgentStateUpdate,
+} from "../graph/state.js";
 
 class VerifyNode {
-  async execute(state: AgentStateType): Promise<AgentStateUpdate> {
-    if (state.selectedJobs.length === 0) {
-      return {
-        errors: [...state.errors, "No jobs were selected for application."],
-        history: [...state.history, "Application verification skipped."],
-      };
-    }
+    async execute(
+        state: AgentStateType,
+    ): Promise<AgentStateUpdate> {
+        if (!state.application) {
+            return {
+                errors: [
+                    ...state.errors,
+                    "No application available for verification.",
+                ],
+                history: [
+                    ...state.history,
+                    "Application verification skipped.",
+                ],
+            };
+        }
 
-    if (!state.browser) {
-      return {
-        errors: [
-          ...state.errors,
-          "No browser session is available for verification.",
-        ],
-        history: [
-          ...state.history,
-          "Application verification failed: browser session unavailable.",
-        ],
-      };
-    }
+        const application =
+            await applicationTool.getApplication(
+                state.application.id,
+            );
 
-    return {
-      history: [
-        ...state.history,
-        `Verification stage reached for ${state.selectedJobs.length} jobs.`,
-      ],
-    };
-  }
+        if (!application) {
+            return {
+                errors: [
+                    ...state.errors,
+                    `Application ${state.application.id} could not be found.`,
+                ],
+                history: [
+                    ...state.history,
+                    "Application verification failed.",
+                ],
+            };
+        }
+
+        return {
+            application: {
+                id: application.id,
+                status: application.status,
+            },
+            history: [
+                ...state.history,
+                `Application ${application.id} verified with status ${application.status}.`,
+            ],
+        };
+    }
 }
 
 export default new VerifyNode();

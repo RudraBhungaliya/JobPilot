@@ -7,14 +7,21 @@ import type {
 
 class PlannerNode {
     async execute(
-        state : AgentStateType,
-    ) : Promise<AgentStateUpdate> {
-        const decision = await plannerService.decide(state);
+        state: AgentStateType,
+    ): Promise<AgentStateUpdate> {
+        const decision =
+            await plannerService.decide(
+                state,
+            );
 
         return {
-            plannerAction : decision.action,
-            plannerReason : decision.reason,
-            history : [
+            plannerAction:
+                decision.action,
+
+            plannerReason:
+                decision.reason,
+
+            history: [
                 ...state.history,
                 `Planner: ${decision.action} - ${decision.reason}`,
             ],

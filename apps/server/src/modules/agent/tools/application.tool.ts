@@ -1,10 +1,13 @@
 import applicationService from "../../application/application.service.js";
+import browserTool from "./browser.tool.js";
 
 class ApplicationTool {
     async getApplication(
-        id : string,
-    ){
-        return applicationService.getApplication(id);
+        id: string,
+    ) {
+        return applicationService.getApplication(
+            id,
+        );
     }
 
     async getApplications(
@@ -45,6 +48,12 @@ class ApplicationTool {
         return applicationService.deleteApplication(
             id,
         );
+    }
+
+    async openJobPage(
+        url: string,
+    ) {
+        return browserTool.openPage(url);
     }
 }
 
