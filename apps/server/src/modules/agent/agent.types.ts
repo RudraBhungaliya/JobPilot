@@ -1,3 +1,5 @@
+import type { ApplicationStatus } from "../application/application.types.js";
+
 export interface AgentJob {
     id: string;
     title: string;
@@ -14,11 +16,7 @@ export interface AgentJobSearchResult {
 
 export interface AgentJobSearchResults {
     id: string;
-    status:
-        | "PENDING"
-        | "RUNNING"
-        | "SUBMITTED"
-        | "FAILED";
+    status: ApplicationStatus;
 }
 
 export interface AgentBrowserSession {
@@ -34,9 +32,5 @@ export interface AgentResume {
 
 export interface AgentApplication {
     id: string;
-    status:
-        | "PENDING"
-        | "RUNNING"
-        | "SUBMITTED"
-        | "FAILED";
+    status: ApplicationStatus;
 }

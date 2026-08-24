@@ -25,6 +25,16 @@ class ProfileRepository {
             where: {
                 userId,
             },
+            include: {
+                skills: true,
+                experiences: true,
+                educations: true,
+                languages: true,
+                certifications: true,
+                profileProjects: true,
+                profileLinks: true,
+                resumes: true,
+            },
         });
     }
 

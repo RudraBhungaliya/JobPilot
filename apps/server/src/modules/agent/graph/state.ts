@@ -13,9 +13,11 @@ import type {
 
 export const AgentState = new StateSchema({
     threadId: z.string().default(""),
+
     userId: z.string(),
+
     query: z.string(),
-    
+
     jobs: z
         .array(z.custom<AgentJob>())
         .default([]),
@@ -37,20 +39,39 @@ export const AgentState = new StateSchema({
         .optional(),
 
     plannerAction: z
-        .string()
+        .enum([
+            "DISCOVER",
+            "EVALUATE",
+            "FETCH",
+            "RANK",
+            "TAILOR",
+            "APPLY",
+            "VERIFY",
+            "PERSIST",
+            "RETRY",
+            "END",
+        ])
         .default("DISCOVER"),
 
     plannerReason: z
         .string()
         .default(""),
 
-    history: z
-        .array(z.string())
-        .default([]),
-
     evaluated: z
         .boolean()
         .default(false),
+
+    ranked: z
+        .boolean()
+        .default(false),
+
+    tailoringInstructions: z
+        .array(z.string())
+        .default([]),
+
+    history: z
+        .array(z.string())
+        .default([]),
 
     errors: z
         .array(z.string())

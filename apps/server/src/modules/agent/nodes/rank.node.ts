@@ -10,6 +10,7 @@ class RankNode {
         if (state.jobs.length === 0) {
             return {
                 selectedJobs: [],
+                ranked: true,
                 history: [
                     ...state.history,
                     "No jobs available for ranking.",
@@ -19,6 +20,7 @@ class RankNode {
 
         if (!state.evaluated) {
             return {
+                ranked: false,
                 history: [
                     ...state.history,
                     "Ranking skipped because jobs have not been evaluated.",
@@ -34,16 +36,19 @@ class RankNode {
                 (a.score ?? 0),
         );
 
+        const selectedJobs =
+            rankedJobs.filter(
+                (job) =>
+                    (job.score ?? 0) > 50,
+            );
+
         return {
             jobs: rankedJobs,
-            selectedJobs:
-                rankedJobs.filter(
-                    (job) =>
-                        (job.score ?? 0) > 50,
-                ),
+            selectedJobs,
+            ranked: true,
             history: [
                 ...state.history,
-                `Ranked ${rankedJobs.length} evaluated jobs.`,
+                `Ranked ${rankedJobs.length} evaluated jobs and selected ${selectedJobs.length}.`,
             ],
         };
     }

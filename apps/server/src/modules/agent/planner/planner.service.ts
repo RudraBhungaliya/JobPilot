@@ -1,4 +1,5 @@
 import aiTool from "../tools/ai.tool.js";
+
 import {
     buildPlannerPrompt,
 } from "./planner.prompt.js";
@@ -25,15 +26,19 @@ class PlannerService {
                 hasResume:
                     Boolean(state.resume),
                 hasApplication:
-                    Boolean(
-                        state.application,
-                    ),
+                    Boolean(state.application),
                 hasBrowser:
                     Boolean(state.browser),
                 errorCount:
                     state.errors.length,
                 evaluated:
                     state.evaluated,
+                ranked:
+                    state.ranked,
+                tailoringInstructionsCount:
+                    state
+                        .tailoringInstructions
+                        .length,
             });
 
         const response =
