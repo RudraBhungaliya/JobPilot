@@ -1,3 +1,5 @@
+import applicationTool from "../tools/application.tool.js";
+
 import type {
     AgentStateType,
     AgentStateUpdate,
@@ -7,19 +9,41 @@ class PersistNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        if (!state.application) {
+        if (state.applications.length === 0) {
             return {
                 history: [
                     ...state.history,
-                    "No application available for persistence.",
+                    "No applications available for persistence.",
                 ],
             };
         }
 
+        const persisted = [];
+
+        for (const application of state.applications) {
+            const current =
+                await applicationTool.getApplication(
+                    application.id,
+                );
+
+            if (!current) {
+                continue;
+            }
+
+            persisted.push({
+                id: current.id,
+                status: current.status,
+            });
+        }
+
         return {
+            applications: persisted,
+
+            application: persisted[0],
+
             history: [
                 ...state.history,
-                `Application ${state.application.id} persisted successfully.`,
+                `Persisted ${persisted.length} application records.`,
             ],
         };
     }

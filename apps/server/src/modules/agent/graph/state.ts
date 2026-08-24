@@ -34,6 +34,12 @@ export const AgentState = new StateSchema({
         .custom<AgentApplication>()
         .optional(),
 
+    applications: z
+        .array(
+            z.custom<AgentApplication>(),
+        )
+        .default([]),
+
     browser: z
         .custom<AgentBrowserSession>()
         .optional(),
