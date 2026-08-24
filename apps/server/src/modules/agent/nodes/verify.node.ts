@@ -40,14 +40,30 @@ class VerifyNode {
             };
         }
 
+        if (
+            application.status !==
+            "SUBMITTED"
+        ) {
+            return {
+                errors: [
+                    ...state.errors,
+                    `Application ${application.id} was not submitted. Current status: ${application.status}.`,
+                ],
+                history: [
+                    ...state.history,
+                    `Application ${application.id} verification failed.`,
+                ],
+            };
+        }
+
         return {
             application: {
                 id: application.id,
-                status: application.status,
+                status: "SUBMITTED",
             },
             history: [
                 ...state.history,
-                `Application ${application.id} verified with status ${application.status}.`,
+                `Application ${application.id} successfully verified as SUBMITTED.`,
             ],
         };
     }

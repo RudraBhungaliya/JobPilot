@@ -47,9 +47,7 @@ class ApplyNode {
 
         const applications = [];
 
-        for (
-            const job of state.selectedJobs
-        ) {
+        for (const job of state.selectedJobs) {
             const application =
                 await applicationTool.createApplication(
                     state.userId,
@@ -60,6 +58,8 @@ class ApplyNode {
                     },
                 );
 
+            let page;
+
             try {
                 await applicationTool.updateApplication(
                     application.id,
@@ -68,7 +68,7 @@ class ApplyNode {
                     },
                 );
 
-                const page =
+                page =
                     await applicationTool.openJobPage(
                         job.url,
                     );
@@ -84,18 +84,56 @@ class ApplyNode {
                     );
                 }
 
-                await page.close();
+                const missing =
+                    await formTool.validateRequiredFields(
+                        page,
+                    );
 
-                const updated =
+                if (missing.length > 0) {
+                    throw new Error(
+                        `Required fields are missing: ${missing
+                            .map(
+                                (field) =>
+                                    field.label ||
+                                    field.name ||
+                                    field.selector,
+                            )
+                            .join(", ")}`,
+                    );
+                }
+
+                const submission =
+                    await formTool.submit(
+                        page,
+                    );
+
+                if (!submission.submitted) {
+                    throw new Error(
+                        submission.reason,
+                    );
+                }
+
+                const success =
+                    await formTool.detectSubmissionSuccess(
+                        page,
+                    );
+
+                if (!success) {
+                    throw new Error(
+                        "Submission could not be verified.",
+                    );
+                }
+
+                const submitted =
                     await applicationTool.updateApplication(
                         application.id,
                         {
-                            status: "RUNNING",
+                            status: "SUBMITTED",
                         },
                     );
 
                 applications.push(
-                    updated,
+                    submitted,
                 );
             } catch (error) {
                 const failed =
@@ -113,6 +151,12 @@ class ApplyNode {
                 applications.push(
                     failed,
                 );
+            } finally {
+                if (page) {
+                    await page.close().catch(
+                        () => undefined,
+                    );
+                }
             }
         }
 
@@ -149,7 +193,7 @@ class ApplyNode {
 
             history: [
                 ...state.history,
-                `Detected application forms for ${applications.length} selected job(s).`,
+                `Processed ${applications.length} application(s).`,
             ],
         };
     }
