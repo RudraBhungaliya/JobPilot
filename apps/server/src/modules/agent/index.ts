@@ -19,3 +19,8 @@ export * from "./discovery/index.js";
 export * from "./agent.types.js";
 export * from "./agent.constants.js";
 export * from "./agent.validators.js";
+
+export { default as agentService } from "./agent.service.js";
+export { default as agentController } from "./agent.controller.js";
+export { default as agentRepository } from "./agent.repository.js";
+export { default as agentRoutes } from "./agent.routes.js";
