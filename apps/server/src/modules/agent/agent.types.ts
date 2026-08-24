@@ -34,3 +34,21 @@ export interface AgentApplication {
     id: string;
     status: ApplicationStatus;
 }
+
+export interface AgentRunInput {
+    userId: string;
+    query: string;
+    resumeId?: string;
+}
+
+export interface AgentRunResult {
+    threadId: string;
+    status:
+        | "RUNNING"
+        | "COMPLETED"
+        | "FAILED";
+
+    history: string[];
+
+    errors: string[];
+}

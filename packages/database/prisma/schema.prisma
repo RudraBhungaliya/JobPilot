@@ -39,6 +39,7 @@ model User {
   jobs         Job[]
   companies    Company[]
   applications Application[]
+  agentRuns AgentRun[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -421,4 +422,31 @@ model ProfileLink {
   updatedAt DateTime @updatedAt
 
   @@index([profileId])
+}
+
+enum AgentRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model AgentRun {
+  id String @id @default(cuid())
+
+  threadId String @unique
+  query    String
+
+  status AgentRunStatus @default(RUNNING)
+
+  history String[] @default([])
+  errors  String[] @default([])
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
 }
