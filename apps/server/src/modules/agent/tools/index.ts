@@ -18,3 +18,6 @@ from "./resume.tool.js";
 
 export { default as searchTool }
 from "./search.tool.js";
+
+export { default as formTool }
+from "./form.tool.js";

@@ -1,5 +1,7 @@
 import type { Page } from "playwright";
 
+import candidateTool from "../candidate/candidate.tool.js";
+
 export interface FormField {
     selector: string;
     name: string;
@@ -8,147 +10,168 @@ export interface FormField {
     required: boolean;
 }
 
-export interface FormSubmissionResult {
-    submitted: boolean;
-    reason: string;
+export interface FormFillResult {
+    selector: string;
+    name: string;
+    value: string;
+    filled: boolean;
+    reason?: string;
 }
 
 class FormTool {
     async detectFields(
         page: Page,
     ): Promise<FormField[]> {
-        return page.locator(
-            "input, textarea, select",
-        ).evaluateAll((elements) =>
-            elements.map((element) => {
-                const input =
-                    element as HTMLInputElement;
+        return page
+            .locator("input, textarea, select")
+            .evaluateAll((elements) =>
+                elements.map((element) => {
+                    const input =
+                        element as HTMLInputElement;
 
-                const id = input.id;
+                    const id = input.id;
 
-                const label =
-                    id
+                    const label = id
                         ? document.querySelector(
-                              `label[for="${id}"]`,
+                              `label[for="${CSS.escape(id)}"]`,
                           )?.textContent ?? ""
-                        : input.getAttribute(
-                              "aria-label",
-                          ) ?? "";
+                        : "";
 
-                return {
-                    selector: id
-                        ? `#${CSS.escape(id)}`
-                        : input.name
-                          ? `${input.tagName.toLowerCase()}[name="${CSS.escape(input.name)}"]`
-                          : input.tagName.toLowerCase(),
+                    return {
+                        selector: id
+                            ? `#${CSS.escape(id)}`
+                            : input.name
+                              ? `${input.tagName.toLowerCase()}[name="${CSS.escape(input.name)}"]`
+                              : input.tagName.toLowerCase(),
 
-                    name:
-                        input.name ||
-                        input.getAttribute(
-                            "aria-label",
-                        ) ||
-                        "",
+                        name:
+                            input.name ||
+                            input.getAttribute(
+                                "aria-label",
+                            ) ||
+                            "",
 
-                    type:
-                        input.type ||
-                        input.tagName.toLowerCase(),
+                        type:
+                            input.type ||
+                            input.tagName.toLowerCase(),
 
-                    label: label.trim(),
+                        label: label.trim(),
 
-                    required:
-                        input.required ||
-                        input.getAttribute(
-                            "aria-required",
-                        ) === "true",
-                };
-            }),
-        );
+                        required:
+                            input.required,
+                    };
+                }),
+            );
     }
 
-    async validateRequiredFields(
+    async fillFields(
         page: Page,
-    ): Promise<FormField[]> {
-        const fields =
-            await this.detectFields(page);
-
-        const missing: FormField[] = [];
+        fields: FormField[],
+        userId: string,
+        resumeId?: string,
+    ): Promise<FormFillResult[]> {
+        const results: FormFillResult[] = [];
 
         for (const field of fields) {
-            if (!field.required) {
+            if (
+                field.type === "hidden" ||
+                field.type === "submit" ||
+                field.type === "button"
+            ) {
                 continue;
             }
 
-            const value =
-                await page
-                    .locator(field.selector)
-                    .inputValue()
-                    .catch(() => "");
+            const answer =
+                await candidateTool.answer(
+                    userId,
+                    field.name,
+                    field.label,
+                    resumeId,
+                );
 
-            if (!value.trim()) {
-                missing.push(field);
+            if (!answer.value) {
+                results.push({
+                    selector:
+                        field.selector,
+                    name: field.name,
+                    value: "",
+                    filled: false,
+                    reason:
+                        "No verified candidate value available.",
+                });
+
+                continue;
             }
+
+            const locator =
+                page.locator(
+                    field.selector,
+                );
+
+            if (
+                field.type === "checkbox"
+            ) {
+                const value =
+                    answer.value.toLowerCase();
+
+                const checked =
+                    value === "true" ||
+                    value === "yes";
+
+                await locator.setChecked(
+                    checked,
+                );
+            } else if (
+                field.type === "radio"
+            ) {
+                await locator.check();
+            } else if (
+                field.type === "select"
+            ) {
+                await locator.selectOption({
+                    label: answer.value,
+                });
+            } else {
+                await locator.fill(
+                    answer.value,
+                );
+            }
+
+            results.push({
+                selector:
+                    field.selector,
+                name: field.name,
+                value: answer.value,
+                filled: true,
+            });
         }
 
-        return missing;
+        return results;
     }
 
     async submit(
         page: Page,
-    ): Promise<FormSubmissionResult> {
-        const submitButton =
-            page.locator(
-                'button[type="submit"], input[type="submit"]',
-            ).first();
+    ): Promise<void> {
+        const submit = page.locator(
+            'button[type="submit"], input[type="submit"]',
+        );
 
-        if (
-            await submitButton.count() ===
-            0
-        ) {
-            return {
-                submitted: false,
-                reason:
-                    "Submit button was not found.",
-            };
+        const count =
+            await submit.count();
+
+        if (count === 0) {
+            throw new Error(
+                "Application submit button not found.",
+            );
         }
 
-        await submitButton.click();
+        await submit
+            .first()
+            .click();
 
         await page.waitForLoadState(
             "domcontentloaded",
-            {
-                timeout: 15000,
-            },
-        ).catch(() => undefined);
-
-        return {
-            submitted: true,
-            reason:
-                "Application form submitted.",
-        };
-    }
-
-    async detectSubmissionSuccess(
-        page: Page,
-    ): Promise<boolean> {
-        const url =
-            page.url().toLowerCase();
-
-        if (
-            /success|confirmation|thank-you|thankyou|submitted/.test(
-                url,
-            )
-        ) {
-            return true;
-        }
-
-        const bodyText =
-            await page.locator("body")
-                .innerText()
-                .catch(() => "");
-
-        return /application submitted|application received|thank you for applying|thanks for applying|successfully applied|application complete/i.test(
-            bodyText,
-        );
+        ).catch(() => {});
     }
 }
 

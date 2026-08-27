@@ -9,11 +9,11 @@ class VerifyNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        if (state.applications.length === 0) {
+        if (!state.application) {
             return {
                 errors: [
                     ...state.errors,
-                    "No applications available for verification.",
+                    "No application available for verification.",
                 ],
                 history: [
                     ...state.history,
@@ -22,48 +22,73 @@ class VerifyNode {
             };
         }
 
-        const verified = [];
-        const errors: string[] = [];
+        const application =
+            await applicationTool.getApplication(
+                state.application.id,
+            );
 
-        for (const application of state.applications) {
-            const current =
-                await applicationTool.getApplication(
-                    application.id,
-                );
+        if (!application) {
+            return {
+                errors: [
+                    ...state.errors,
+                    `Application ${state.application.id} could not be found.`,
+                ],
+                history: [
+                    ...state.history,
+                    "Application verification failed.",
+                ],
+            };
+        }
 
-            if (!current) {
-                errors.push(
-                    `Application ${application.id} could not be found.`,
-                );
-                continue;
-            }
+        if (
+            application.status ===
+            "SUBMITTED"
+        ) {
+            return {
+                application: {
+                    id: application.id,
+                    status: application.status,
+                },
 
-            if (current.status !== "SUBMITTED") {
-                errors.push(
-                    `Application ${current.id} has status ${current.status}.`,
-                );
-                continue;
-            }
+                history: [
+                    ...state.history,
+                    `Application ${application.id} verified successfully as SUBMITTED.`,
+                ],
+            };
+        }
 
-            verified.push({
-                id: current.id,
-                status: current.status,
-            });
+        if (
+            application.status ===
+            "FAILED"
+        ) {
+            return {
+                application: {
+                    id: application.id,
+                    status: application.status,
+                },
+
+                errors: [
+                    ...state.errors,
+                    application.failureReason ??
+                        "Application failed.",
+                ],
+
+                history: [
+                    ...state.history,
+                    `Application ${application.id} verification detected failure.`,
+                ],
+            };
         }
 
         return {
-            applications: verified,
-
-            application: verified[0],
-
-            errors: [
-                ...state.errors,
-                ...errors,
-            ],
+            application: {
+                id: application.id,
+                status: application.status,
+            },
 
             history: [
                 ...state.history,
-                `Verified ${verified.length}/${state.applications.length} applications.`,
+                `Application ${application.id} verified with status ${application.status}.`,
             ],
         };
     }

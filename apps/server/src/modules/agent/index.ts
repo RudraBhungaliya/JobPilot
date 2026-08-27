@@ -15,6 +15,7 @@ export * from "./tools/index.js";
 export * from "./memory/index.js";
 export * from "./execution/index.js";
 export * from "./discovery/index.js";
+export * from "./candidate/index.js";
 
 export * from "./agent.types.js";
 export * from "./agent.constants.js";
