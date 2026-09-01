@@ -13,7 +13,7 @@ class QueueService {
             this.jobs.values(),
         ).find(
             (job) =>
-                job.runId === input.runId &&
+                (input.runId ? job.runId === input.runId : false) &&
                 job.status !== "COMPLETED" &&
                 job.status !== "FAILED",
         );
@@ -29,6 +29,8 @@ class QueueService {
             type: "AGENT_RUN",
             runId: input.runId,
             userId: input.userId,
+            query: input.query,
+            resumeId: input.resumeId,
             status: "QUEUED",
             attempts: 0,
             maxAttempts:

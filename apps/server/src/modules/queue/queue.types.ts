@@ -10,8 +10,10 @@ export type QueueJobStatus =
 export interface QueueJob {
     id: string;
     type: QueueJobType;
-    runId: string;
+    runId?: string;
     userId: string;
+    query: string;
+    resumeId?: string;
     status: QueueJobStatus;
     attempts: number;
     maxAttempts: number;
@@ -22,7 +24,9 @@ export interface QueueJob {
 }
 
 export interface EnqueueAgentRunInput {
-    runId: string;
+    runId?: string;
     userId: string;
+    query: string;
+    resumeId?: string;
     maxAttempts?: number;
 }

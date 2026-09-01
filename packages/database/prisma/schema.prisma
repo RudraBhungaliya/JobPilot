@@ -39,7 +39,9 @@ model User {
   jobs         Job[]
   companies    Company[]
   applications Application[]
-  agentRuns AgentRun[]
+  agentRuns    AgentRun[]
+  notifications Notification[]
+  auditLogs    AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -98,6 +100,7 @@ model Job {
 
   status       JobStatus     @default(SAVED)
   applications Application[]
+  auditLogs    AuditLog[]
 
   notes String?
 
@@ -140,6 +143,9 @@ model Application {
 
   resumeId String
   resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  notifications Notification[]
+  auditLogs     AuditLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -444,6 +450,9 @@ model AgentRun {
   userId String
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -485,5 +494,51 @@ model Notification {
   @@index([userId, readAt])
   @@index([applicationId])
   @@index([agentRunId])
+  @@index([createdAt])
+}
+
+enum AuditAction {
+  AGENT_STARTED
+  AGENT_COMPLETED
+  AGENT_FAILED
+  JOB_DISCOVERED
+  JOB_SELECTED
+  APPLICATION_CREATED
+  APPLICATION_STARTED
+  APPLICATION_SUBMITTED
+  APPLICATION_FAILED
+  APPLICATION_RETRIED
+  USER_ACTION_REQUIRED
+  USER_ACTION_COMPLETED
+  SYSTEM
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  action      AuditAction
+  description String
+
+  agentRunId String?
+  agentRun   AgentRun? @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  applicationId String?
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  jobId String?
+  job   Job? @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([agentRunId])
+  @@index([applicationId])
+  @@index([jobId])
   @@index([createdAt])
 }

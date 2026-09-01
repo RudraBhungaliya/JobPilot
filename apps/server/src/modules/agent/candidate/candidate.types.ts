@@ -49,6 +49,7 @@ export interface CandidateContext {
     disability?: boolean | null;
 
     summary?: string | null;
+    resumeText?: string | null;
 
     skills: string[];
     languages: string[];

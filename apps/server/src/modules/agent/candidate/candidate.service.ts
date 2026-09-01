@@ -86,6 +86,8 @@ class CandidateService {
 
       summary: profile?.summary,
 
+      resumeText: resume?.extractedText,
+
       skills: profile?.skills?.map((skill) => skill.name) ?? [],
 
       languages: profile?.languages?.map((language) => language.name) ?? [],

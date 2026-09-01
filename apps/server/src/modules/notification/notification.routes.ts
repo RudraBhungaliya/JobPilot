@@ -1,130 +1,45 @@
-import type {
-    Request,
-    Response,
-} from "express";
+import { Router } from "express";
 
-import notificationService from "./notification.service.js";
+import authMiddleware from "../auth/auth.middleware.js";
+import notificationController from "./notification.controller.js";
 
-import {
-    createNotificationSchema,
-    notificationListSchema,
-} from "./notification.validators.js";
+const router = Router();
 
-class NotificationController {
-    async getNotifications(
-        req: Request,
-        res: Response,
-    ) {
-        const userId = req.user.id;
+router.use(authMiddleware);
 
-        const options =
-            notificationListSchema.parse(
-                req.query,
-            );
+router.get(
+    "/",
+    notificationController.getNotifications.bind(notificationController),
+);
 
-        const notifications =
-            await notificationService.getNotifications(
-                userId,
-                options,
-            );
+router.post(
+    "/",
+    notificationController.createNotification.bind(notificationController),
+);
 
-        return res.status(200).json(
-            notifications,
-        );
-    }
+router.get(
+    "/unread-count",
+    notificationController.getUnreadCount.bind(notificationController),
+);
 
-    async getNotification(
-        req: Request,
-        res: Response,
-    ) {
-        const notification =
-            await notificationService.getNotification(
-                req.user.id,
-                req.params.id,
-            );
+router.patch(
+    "/read-all",
+    notificationController.markAllRead.bind(notificationController),
+);
 
-        if (!notification) {
-            return res
-                .status(404)
-                .json({
-                    message:
-                        "Notification not found.",
-                });
-        }
+router.patch(
+    "/:id/read",
+    notificationController.markRead.bind(notificationController),
+);
 
-        return res.status(200).json(
-            notification,
-        );
-    }
+router.get(
+    "/:id",
+    notificationController.getNotification.bind(notificationController),
+);
 
-    async createNotification(
-        req: Request,
-        res: Response,
-    ) {
-        const data =
-            createNotificationSchema.parse(
-                req.body,
-            );
+router.delete(
+    "/:id",
+    notificationController.delete.bind(notificationController),
+);
 
-        const notification =
-            await notificationService.create(
-                req.user.id,
-                data,
-            );
-
-        return res
-            .status(201)
-            .json(notification);
-    }
-
-    async markRead(
-        req: Request,
-        res: Response,
-    ) {
-        await notificationService.markRead(
-            req.user.id,
-            req.params.id,
-        );
-
-        return res.status(204).send();
-    }
-
-    async markAllRead(
-        req: Request,
-        res: Response,
-    ) {
-        await notificationService.markAllRead(
-            req.user.id,
-        );
-
-        return res.status(204).send();
-    }
-
-    async getUnreadCount(
-        req: Request,
-        res: Response,
-    ) {
-        const count =
-            await notificationService.getUnreadCount(
-                req.user.id,
-            );
-
-        return res.status(200).json({
-            count,
-        });
-    }
-
-    async delete(
-        req: Request,
-        res: Response,
-    ) {
-        await notificationService.delete(
-            req.user.id,
-            req.params.id,
-        );
-
-        return res.status(204).send();
-    }
-}
-
-export default new NotificationController();
+export default router;

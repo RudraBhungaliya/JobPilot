@@ -37,10 +37,14 @@ class NotificationController {
         req: Request,
         res: Response,
     ) {
+        const id = Array.isArray(req.params.id)
+            ? req.params.id[0]
+            : req.params.id;
+
         const notification =
             await notificationService.getNotification(
                 req.user.id,
-                req.params.id,
+                id,
             );
 
         if (!notification) {
@@ -81,9 +85,13 @@ class NotificationController {
         req: Request,
         res: Response,
     ) {
+        const id = Array.isArray(req.params.id)
+            ? req.params.id[0]
+            : req.params.id;
+
         await notificationService.markRead(
             req.user.id,
-            req.params.id,
+            id,
         );
 
         return res.status(204).send();
@@ -118,9 +126,13 @@ class NotificationController {
         req: Request,
         res: Response,
     ) {
+        const id = Array.isArray(req.params.id)
+            ? req.params.id[0]
+            : req.params.id;
+
         await notificationService.delete(
             req.user.id,
-            req.params.id,
+            id,
         );
 
         return res.status(204).send();
