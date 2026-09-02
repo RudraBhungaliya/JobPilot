@@ -1,5 +1,6 @@
 export type AgentAction = 
     | "DISCOVER"
+    | "EVALUATE"
     | "FETCH"
     | "RANK"
     | "TAILOR"
@@ -7,6 +8,7 @@ export type AgentAction =
     | "VERIFY"
     | "PERSIST"
     | "RETRY"
+    | "WAITING_FOR_USER"
     | "END";
 
 export interface PlannerDecision {

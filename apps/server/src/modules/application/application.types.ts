@@ -5,7 +5,8 @@ export type ApplicationStatus =
     | "RUNNING"
     | "SUBMITTED"
     | "FAILED"
-    | "SKIPPED";
+    | "SKIPPED"
+    | "WAITING_FOR_USER";
 
 export interface JobApplication {
     id: string;

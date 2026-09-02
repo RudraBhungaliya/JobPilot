@@ -9,14 +9,14 @@ import type {
 
 import liveAtsService from "./live-ats.service.js";
 
-class AshbySource implements JobSource {
-    readonly name = "ashby";
+class RemoteSource implements JobSource {
+    readonly name = "remote";
 
     async search(
         options: SearchOptions,
     ): Promise<SourceJob[]> {
-        return liveAtsService.searchAshby(options);
+        return liveAtsService.searchRemote(options);
     }
 }
 
-export default new AshbySource();
+export default new RemoteSource();

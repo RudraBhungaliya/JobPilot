@@ -27,6 +27,8 @@ export interface AgentBrowserSession {
 export interface AgentResume {
     id: string;
     path: string;
+    fileUrl?: string;
+    originalName?: string;
     tailored: boolean;
 }
 
@@ -46,7 +48,8 @@ export interface AgentRunResult {
     status:
         | "RUNNING"
         | "COMPLETED"
-        | "FAILED";
+        | "FAILED"
+        | "WAITING_FOR_USER";
 
     history: string[];
 

@@ -9,7 +9,14 @@ class PersistNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        if (state.applications.length === 0) {
+        const appsToPersist =
+            state.applications.length > 0
+                ? state.applications
+                : state.application
+                  ? [state.application]
+                  : [];
+
+        if (appsToPersist.length === 0) {
             return {
                 history: [
                     ...state.history,
@@ -20,7 +27,7 @@ class PersistNode {
 
         const persisted = [];
 
-        for (const application of state.applications) {
+        for (const application of appsToPersist) {
             const current =
                 await applicationTool.getApplication(
                     application.id,

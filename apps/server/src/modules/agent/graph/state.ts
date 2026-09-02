@@ -18,6 +18,8 @@ export const AgentState = new StateSchema({
 
     query: z.string(),
 
+    resumeId: z.string().optional(),
+
     jobs: z
         .array(z.custom<AgentJob>())
         .default([]),
@@ -55,6 +57,7 @@ export const AgentState = new StateSchema({
             "VERIFY",
             "PERSIST",
             "RETRY",
+            "WAITING_FOR_USER",
             "END",
         ])
         .default("DISCOVER"),

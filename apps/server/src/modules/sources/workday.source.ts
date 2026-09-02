@@ -7,15 +7,15 @@ import type {
     SourceJob,
 } from "./source.types.js";
 
-class WorkdaySource
-    implements JobSource {
+import liveAtsService from "./live-ats.service.js";
+
+class WorkdaySource implements JobSource {
     readonly name = "workday";
 
     async search(
         options: SearchOptions,
     ): Promise<SourceJob[]> {
-
-        return [];
+        return liveAtsService.searchGeneral(options, "workday");
     }
 }
 

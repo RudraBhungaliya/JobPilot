@@ -6,6 +6,7 @@ import {
 
 import plannerNode from "../nodes/planner.node.js";
 import discoverNode from "../nodes/discover.node.js";
+import evaluateNode from "../nodes/evaluate.node.js";
 import fetchNode from "../nodes/fetch.node.js";
 import rankNode from "../nodes/rank.node.js";
 import tailorNode from "../nodes/tailor.node.js";
@@ -28,6 +29,11 @@ const workflow = new StateGraph(
         "discover",
         async (state) =>
             discoverNode.execute(state),
+    )
+    .addNode(
+        "evaluate",
+        async (state) =>
+            evaluateNode.execute(state),
     )
     .addNode(
         "fetch",
@@ -75,6 +81,7 @@ const workflow = new StateGraph(
         (state) => state.plannerAction,
         {
             DISCOVER: "discover",
+            EVALUATE: "evaluate",
             FETCH: "fetch",
             RANK: "rank",
             TAILOR: "tailor",
@@ -82,12 +89,18 @@ const workflow = new StateGraph(
             VERIFY: "verify",
             PERSIST: "persist",
             RETRY: "retry",
+            WAITING_FOR_USER: END,
             END: END,
         },
     )
 
     .addEdge(
         "discover",
+        "planner",
+    )
+
+    .addEdge(
+        "evaluate",
         "planner",
     )
 

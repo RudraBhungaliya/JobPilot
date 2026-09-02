@@ -16,6 +16,10 @@ import applicationRoutes from "./modules/application/index.js";
 import { agentRoutes } from "./modules/agent/index.js";
 import { notificationRouter } from "./modules/notification/index.js";
 import { auditRouter } from "./modules/audit/index.js";
+import { queueRoutes } from "./modules/queue/index.js";
+import sourceBootstrap from "./modules/sources/source.bootstrap.js";
+
+sourceBootstrap.initialize();
 
 const app = express();
 
@@ -36,6 +40,7 @@ app.use("/api/v1/profile", profileRoutes);
 app.use("/api/v1/profiles", profileRoutes);
 app.use("/api/v1/applications", applicationRoutes);
 app.use("/api/v1/agent", agentRoutes);
+app.use("/api/v1/queue", queueRoutes);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/audit", auditRouter);
 

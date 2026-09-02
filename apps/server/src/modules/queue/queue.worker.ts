@@ -1,5 +1,6 @@
 import queueService from "./queue.service.js";
-import agentService from "../agent/agent.service.js";
+
+import { agentService } from "../agent/index.js";
 
 class QueueWorker {
     private running = false;
@@ -9,41 +10,108 @@ class QueueWorker {
             return false;
         }
 
-        const jobs =
-            await queueService.getPendingJobs();
-
-        const job = jobs[0];
+        const job =
+            queueService
+                .getPendingJobs()[0];
 
         if (!job) {
+            return false;
+        }
+
+        const runningJob =
+            queueService.markRunning(
+                job.id,
+            );
+
+        if (!runningJob) {
             return false;
         }
 
         this.running = true;
 
         try {
-            await queueService.markRunning(
-                job.id,
-            );
+            const result =
+                await agentService.run({
+                    userId:
+                        runningJob.userId,
+                    query:
+                        runningJob.query,
+                    resumeId:
+                        runningJob.resumeId,
+                }, runningJob.runId);
 
-            await agentService.run({
-                userId: job.userId,
-                query: job.query,
-                resumeId:
-                    job.resumeId ?? undefined,
-            });
+            if (
+                result.status ===
+                "COMPLETED"
+            ) {
+                queueService.markCompleted(
+                    runningJob.id,
+                );
 
-            await queueService.markCompleted(
-                job.id,
-            );
+                return true;
+            }
 
-            return true;
+            if (
+                result.status ===
+                "WAITING_FOR_USER"
+            ) {
+                queueService.markWaitingForUser(
+                    runningJob.id,
+                );
+
+                return false;
+            }
+
+            const error =
+                result.errors.join(
+                    "; ",
+                ) ||
+                "Agent run failed.";
+
+            if (
+                runningJob.attempts <
+                runningJob.maxAttempts
+            ) {
+                queueService.markFailed(
+                    runningJob.id,
+                    error,
+                );
+
+                queueService.requeue(
+                    runningJob.id,
+                );
+            } else {
+                queueService.markFailed(
+                    runningJob.id,
+                    error,
+                );
+            }
+
+            return false;
         } catch (error) {
-            await queueService.markFailed(
-                job.id,
+            const message =
                 error instanceof Error
                     ? error.message
-                    : "Queue job failed.",
-            );
+                    : "Agent execution failed.";
+
+            if (
+                runningJob.attempts <
+                runningJob.maxAttempts
+            ) {
+                queueService.markFailed(
+                    runningJob.id,
+                    message,
+                );
+
+                queueService.requeue(
+                    runningJob.id,
+                );
+            } else {
+                queueService.markFailed(
+                    runningJob.id,
+                    message,
+                );
+            }
 
             return false;
         } finally {
@@ -51,24 +119,16 @@ class QueueWorker {
         }
     }
 
-    async start(
-        intervalMs: number = 5000,
-    ): Promise<void> {
-        if (this.running) {
-            return;
+    async processAll(): Promise<void> {
+        while (
+            await this.processNext()
+        ) {
+            //
         }
+    }
 
-        while (true) {
-            await this.processNext();
-
-            await new Promise<void>(
-                (resolve) =>
-                    setTimeout(
-                        resolve,
-                        intervalMs,
-                    ),
-            );
-        }
+    isRunning(): boolean {
+        return this.running;
     }
 }
 

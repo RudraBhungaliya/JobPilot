@@ -22,7 +22,8 @@ class AgentRepository {
             status?:
                 | "RUNNING"
                 | "COMPLETED"
-                | "FAILED";
+                | "FAILED"
+                | "WAITING_FOR_USER";
 
             history?: string[];
 
@@ -45,6 +46,17 @@ class AgentRepository {
             where: {
                 userId,
                 threadId,
+            },
+        });
+    }
+
+    async findActiveRun(userId: string) {
+        return prisma.agentRun.findFirst({
+            where: {
+                userId,
+                status: {
+                    in: ["RUNNING", "WAITING_FOR_USER"],
+                },
             },
         });
     }

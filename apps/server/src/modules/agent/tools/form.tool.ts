@@ -149,6 +149,108 @@ class FormTool {
         return results;
     }
 
+    async detectHumanVerification(
+        page: Page,
+    ): Promise<{ detected: boolean; type?: string; message?: string }> {
+        const captchaSelectors = [
+            { selector: 'iframe[src*="recaptcha"], .g-recaptcha, [data-sitekey]', type: "reCAPTCHA", message: "Google reCAPTCHA verification challenge detected." },
+            { selector: 'iframe[src*="hcaptcha"], .h-captcha', type: "hCaptcha", message: "hCaptcha human verification challenge detected." },
+            { selector: 'iframe[src*="turnstile"], iframe[src*="challenges.cloudflare.com"], .cf-turnstile, #challenge-stage', type: "Cloudflare Turnstile", message: "Cloudflare bot challenge detected." },
+            { selector: 'iframe[src*="arkoselabs"], iframe[src*="funcaptcha"]', type: "Arkose", message: "Arkose Labs verification challenge detected." },
+        ];
+
+        for (const item of captchaSelectors) {
+            try {
+                const count = await page.locator(item.selector).count();
+                if (count > 0) {
+                    return {
+                        detected: true,
+                        type: item.type,
+                        message: item.message,
+                    };
+                }
+            } catch {
+                // Ignore locator check failures
+            }
+        }
+
+        // Check for 2FA / OTP verification inputs
+        try {
+            const verificationInputs = page.locator(
+                'input[name*="otp" i], input[name*="2fa" i], input[name*="verification" i], input[autocomplete="one-time-code"]'
+            );
+            if ((await verificationInputs.count()) > 0) {
+                return {
+                    detected: true,
+                    type: "2FA_OTP",
+                    message: "Two-factor authentication or one-time passcode verification code required.",
+                };
+            }
+        } catch {
+            // Ignore
+        }
+
+        // Check page body text for human challenge indicators
+        try {
+            const bodyText = (await page.locator("body").innerText()).toLowerCase();
+            if (
+                bodyText.includes("verify you are human") ||
+                bodyText.includes("complete the security check") ||
+                bodyText.includes("please solve the puzzle") ||
+                bodyText.includes("security verification required") ||
+                bodyText.includes("enter the 6-digit code") ||
+                bodyText.includes("enter the code sent to")
+            ) {
+                return {
+                    detected: true,
+                    type: "SECURITY_CHALLENGE",
+                    message: "Security verification or bot challenge detected on application page.",
+                };
+            }
+        } catch {
+            // Ignore
+        }
+
+        return { detected: false };
+    }
+
+    detectOutsiderRequiredFields(
+        fields: FormField[],
+        fillResults: FormFillResult[],
+    ): { field: FormField; reason: string }[] {
+        const missing: { field: FormField; reason: string }[] = [];
+
+        for (const field of fields) {
+            const result = fillResults.find(
+                (r) => r.selector === field.selector,
+            );
+
+            if (!result || !result.filled) {
+                const label = (field.label || field.name).toLowerCase();
+                const isCustomQuestion =
+                    label.includes("why") ||
+                    label.includes("tell us") ||
+                    label.includes("describe") ||
+                    label.includes("explain") ||
+                    label.includes("authorized") ||
+                    label.includes("clearance") ||
+                    label.includes("passcode") ||
+                    label.includes("password");
+
+                if (field.required || isCustomQuestion) {
+                    missing.push({
+                        field,
+                        reason:
+                            result?.reason ||
+                            "Candidate information not available in profile or resume.",
+                    });
+                }
+            }
+        }
+
+        return missing;
+    }
+
     async submit(
         page: Page,
     ): Promise<void> {

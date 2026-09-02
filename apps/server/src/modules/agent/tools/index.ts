@@ -1,6 +1,8 @@
 export { default as browserTool }
 from "./browser.tool.js";
 
+export { default as resumeUploadTool } from "./resume-upload.tool.js";
+
 export { default as aiTool }
 from "./ai.tool.js";
 

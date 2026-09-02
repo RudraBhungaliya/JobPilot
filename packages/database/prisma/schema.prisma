@@ -165,6 +165,7 @@ enum ApplicationStatus {
   SUBMITTED
   FAILED
   SKIPPED
+  WAITING_FOR_USER
 }
 
 enum EmploymentType {
@@ -434,6 +435,7 @@ enum AgentRunStatus {
   RUNNING
   COMPLETED
   FAILED
+  WAITING_FOR_USER
 }
 
 model AgentRun {

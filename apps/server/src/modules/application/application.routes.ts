@@ -35,6 +35,13 @@ router.patch(
     ),
 );
 
+router.post(
+    "/:id/resume",
+    applicationController.resume.bind(
+        applicationController,
+    ),
+);
+
 router.delete(
     "/:id",
     applicationController.delete.bind(

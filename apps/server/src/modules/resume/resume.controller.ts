@@ -60,6 +60,13 @@ class ResumeController {
 
         const resume = await resumeService.getResume(id);
 
+        if (!resume || resume.userId !== req.user.id) {
+            return res.status(404).json({
+                success: false,
+                message: "Resume not found",
+            });
+        }
+
         return res.status(200).json({
             success: true,
             data: resume,
@@ -73,6 +80,15 @@ class ResumeController {
             return res.status(400).json({
                 success: false,
                 message: "Resume id is required",
+            });
+        }
+
+        const resume = await resumeService.getResume(id);
+
+        if (!resume || resume.userId !== req.user.id) {
+            return res.status(404).json({
+                success: false,
+                message: "Resume not found",
             });
         }
 

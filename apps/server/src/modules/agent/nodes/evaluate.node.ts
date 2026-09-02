@@ -20,10 +20,25 @@ class EvaluateNode {
             };
         }
 
+        const candidateSkills: string[] = [];
+        try {
+            const candidateTool = (await import("../candidate/candidate.tool.js")).default;
+            const context = await candidateTool.getContext(
+                state.userId,
+                state.resumeId || state.resume?.id,
+            );
+            if (Array.isArray(context.skills)) {
+                candidateSkills.push(...context.skills);
+            }
+        } catch {
+            // Ignore
+        }
+
         const result =
             await evaluationService.evaluate(
                 state.query,
                 state.jobs,
+                candidateSkills,
             );
 
         const scoreMap = new Map(

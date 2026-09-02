@@ -7,6 +7,8 @@ import {
     updateApplicationSchema,
 } from "./application.validators.js";
 
+import auditService from "../audit/audit.service.js";
+
 class ApplicationController {
     async create(
         req: Request,
@@ -53,6 +55,12 @@ class ApplicationController {
         const application =
             await applicationService.getApplication(id);
 
+        if (!application || application.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Application not found.",
+            });
+        }
+
         return res.status(200).json({
             success: true,
             data: application,
@@ -66,6 +74,13 @@ class ApplicationController {
         const id = Array.isArray(req.params.id)
             ? req.params.id[0]
             : req.params.id;
+
+        const existing = await applicationService.getApplication(id);
+        if (!existing || existing.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Application not found.",
+            });
+        }
 
         const body =
             updateApplicationSchema.parse(req.body);
@@ -82,6 +97,39 @@ class ApplicationController {
         });
     }
 
+    async resume(
+        req: Request,
+        res: Response,
+    ) {
+        const id = Array.isArray(req.params.id)
+            ? req.params.id[0]
+            : req.params.id;
+
+        const existing = await applicationService.getApplication(id);
+        if (!existing || existing.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Application not found.",
+            });
+        }
+
+        const application = await applicationService.updateApplication(id, {
+            status: "QUEUED",
+        });
+
+        await auditService.create(req.user.id, {
+            action: "USER_ACTION_COMPLETED",
+            description: `User action completed for application ${id}.`,
+            applicationId: id,
+            jobId: existing.jobId,
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Application resumed.",
+            data: application,
+        });
+    }
+
     async delete(
         req: Request,
         res: Response,
@@ -89,6 +137,13 @@ class ApplicationController {
         const id = Array.isArray(req.params.id)
             ? req.params.id[0]
             : req.params.id;
+
+        const existing = await applicationService.getApplication(id);
+        if (!existing || existing.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Application not found.",
+            });
+        }
 
         await applicationService.deleteApplication(id);
 

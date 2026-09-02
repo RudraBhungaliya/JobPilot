@@ -20,8 +20,10 @@ class CompanyController {
         });
     }
 
-      async getAll(req: Request, res: Response) {
-        const companies = await companyService.getCompanies();
+    async getAll(req: Request, res: Response) {
+        const companies = (await companyService.getCompanies()).filter(
+            (c) => c.userId === req.user.id,
+        );
 
         return res.status(200).json({
             success: true,
@@ -36,6 +38,12 @@ class CompanyController {
 
         const company = await companyService.getCompany(id);
 
+        if (!company || company.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Company not found.",
+            });
+        }
+
         return res.status(200).json({
             success: true,
             data: company,
@@ -46,6 +54,13 @@ class CompanyController {
         const id = Array.isArray(req.params.id)
             ? req.params.id[0]
             : req.params.id;
+
+        const existing = await companyService.getCompany(id);
+        if (!existing || existing.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Company not found.",
+            });
+        }
 
         const body = updateCompanySchema.parse(req.body);
 
@@ -64,6 +79,13 @@ class CompanyController {
         const id = Array.isArray(req.params.id)
             ? req.params.id[0]
             : req.params.id;
+
+        const existing = await companyService.getCompany(id);
+        if (!existing || existing.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Company not found.",
+            });
+        }
 
         await companyService.deleteCompany(id);
 

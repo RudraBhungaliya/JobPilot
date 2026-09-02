@@ -13,9 +13,13 @@ class QueueService {
             this.jobs.values(),
         ).find(
             (job) =>
+                job.userId === input.userId &&
                 (input.runId ? job.runId === input.runId : false) &&
-                job.status !== "COMPLETED" &&
-                job.status !== "FAILED",
+                (job.status === "QUEUED" || job.status === "RUNNING" || job.status === "WAITING_FOR_USER"),
+        ) || Array.from(this.jobs.values()).find(
+            (job) =>
+                job.userId === input.userId &&
+                (job.status === "QUEUED" || job.status === "RUNNING"),
         );
 
         if (existing) {
@@ -49,6 +53,10 @@ class QueueService {
         return this.jobs.get(id) ?? null;
     }
 
+    getJobByRunId(runId: string): QueueJob | null {
+        return Array.from(this.jobs.values()).find((j) => j.runId === runId) ?? null;
+    }
+
     getPendingJobs(): QueueJob[] {
         return Array.from(
             this.jobs.values(),
@@ -72,6 +80,32 @@ class QueueService {
         job.attempts += 1;
         job.startedAt = new Date();
 
+        return job;
+    }
+
+    markWaitingForUser(
+        id: string,
+    ): QueueJob | null {
+        const job = this.jobs.get(id);
+
+        if (!job) {
+            return null;
+        }
+
+        job.status = "WAITING_FOR_USER";
+        return job;
+    }
+
+    resumeJob(
+        id: string,
+    ): QueueJob | null {
+        const job = this.jobs.get(id);
+
+        if (!job) {
+            return null;
+        }
+
+        job.status = "QUEUED";
         return job;
     }
 

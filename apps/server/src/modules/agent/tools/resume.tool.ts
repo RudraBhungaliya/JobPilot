@@ -4,7 +4,7 @@ class ResumeTool {
     async getResumes(
         userId : string,
     ){
-        return resumeService.getResume(userId);
+        return resumeService.getUserResumes(userId);
     }
 
     async getResume(

@@ -16,10 +16,12 @@ export const updateApplicationSchema =
             "SUBMITTED",
             "FAILED",
             "SKIPPED",
+            "WAITING_FOR_USER",
         ]),
         attempts: z.number().int().optional(),
+        appliedAt: z.coerce.date().optional(),
         failureReason:
-            z.string().optional(),
+            z.string().nullable().optional(),
     });
 
 export type CreateApplicationDTO =

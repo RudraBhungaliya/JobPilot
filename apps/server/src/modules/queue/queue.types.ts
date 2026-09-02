@@ -5,7 +5,8 @@ export type QueueJobStatus =
     | "QUEUED"
     | "RUNNING"
     | "COMPLETED"
-    | "FAILED";
+    | "FAILED"
+    | "WAITING_FOR_USER";
 
 export interface QueueJob {
     id: string;

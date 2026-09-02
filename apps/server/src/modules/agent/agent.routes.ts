@@ -12,6 +12,16 @@ router.post(
     agentController.run.bind(agentController),
 );
 
+router.post(
+    "/auto-apply",
+    agentController.autoApply.bind(agentController),
+);
+
+router.post(
+    "/runs/:threadId/resume",
+    agentController.resumeRun.bind(agentController),
+);
+
 router.get(
     "/runs",
     agentController.getRuns.bind(agentController),

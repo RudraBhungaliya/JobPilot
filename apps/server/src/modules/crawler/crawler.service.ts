@@ -29,15 +29,36 @@ class CrawlerService {
 
         for (const sourceJob of sourceJobs) {
             try {
-                const html = await pageFetcherService.fetch(sourceJob.url);
-                const platform = this.detect(sourceJob.url);
-                const rawJob = {
-                    url: sourceJob.url,
-                    html,
-                    platform,
-                };
-                const parsedJob = await parserService.parse(rawJob);
-                parsedJobs.push(parsedJob);
+                let parsedJob: ParsedJob | undefined;
+
+                try {
+                    const html = await pageFetcherService.fetch(sourceJob.url);
+                    if (html && html.trim()) {
+                        const platform = this.detect(sourceJob.url);
+                        parsedJob = await parserService.parse({
+                            url: sourceJob.url,
+                            html,
+                            platform,
+                        });
+                    }
+                } catch {
+                    // Fallback to structured source job metadata
+                }
+
+                if (!parsedJob || !parsedJob.title) {
+                    parsedJob = {
+                        title: sourceJob.title,
+                        company: sourceJob.company,
+                        location: sourceJob.location || "Remote",
+                        description: sourceJob.description,
+                        url: sourceJob.url,
+                        platform: this.detect(sourceJob.url),
+                    };
+                }
+
+                if (parsedJob) {
+                    parsedJobs.push(parsedJob);
+                }
             } catch (err) {
                 console.error(`Failed to crawl job at ${sourceJob.url}:`, err);
             }

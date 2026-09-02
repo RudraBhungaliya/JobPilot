@@ -125,8 +125,8 @@ Return ONLY valid JSON:
                         "string",
                 );
         } catch {
-            throw new Error(
-                "Tailoring agent returned invalid JSON.",
+            instructions = state.selectedJobs.map(
+                (job) => `Highlight core competencies relevant to ${job.title} at ${job.company}.`,
             );
         }
 

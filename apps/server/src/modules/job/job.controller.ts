@@ -46,6 +46,12 @@ class JobController {
 
         const job = await jobService.getJob(id);
 
+        if (!job || job.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Job not found.",
+            });
+        }
+
         return res.status(200).json({
             success: true,
             data: job,
@@ -59,6 +65,13 @@ class JobController {
         const id = Array.isArray(req.params.id)
             ? req.params.id[0]
             : req.params.id;
+
+        const existing = await jobService.getJob(id);
+        if (!existing || existing.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Job not found.",
+            });
+        }
 
         const body = updateJobSchema.parse(req.body);
 
@@ -80,6 +93,13 @@ class JobController {
         const id = Array.isArray(req.params.id)
             ? req.params.id[0]
             : req.params.id;
+
+        const existing = await jobService.getJob(id);
+        if (!existing || existing.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Job not found.",
+            });
+        }
 
         await jobService.deleteJob(id);
 
