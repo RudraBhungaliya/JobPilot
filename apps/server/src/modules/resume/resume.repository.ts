@@ -1,44 +1,43 @@
-import { prisma } from "@jobpilot/database";
-import type { Prisma, Resume } from "@jobpilot/database";
+import { prisma, type Prisma } from "@jobpilot/database";
 
 class ResumeRepository {
-    async create(data : Prisma.ResumeCreateInput) : Promise<Resume> {
+    async create(data: Prisma.ResumeCreateInput) {
         return prisma.resume.create({
-            data
+            data,
         });
     }
 
-    async findById(id : string) : Promise<Resume | null> {
+    async findById(id: string) {
         return prisma.resume.findUnique({
-            where : {
+            where: {
                 id,
             },
         });
     }
 
-    async findByUserId(userId : string) : Promise<Resume[]>{
+    async findByUserId(userId: string) {
         return prisma.resume.findMany({
-            where : {
+            where: {
                 userId,
             },
-            orderBy : {
-                createdAt : "desc"
-            }
+            orderBy: {
+                createdAt: "desc",
+            },
         });
     }
 
-    async update(id : string, data : Prisma.ResumeUpdateInput) : Promise<Resume> {
+    async update(id: string, data: Prisma.ResumeUpdateInput) {
         return prisma.resume.update({
-            where : {
+            where: {
                 id,
             },
             data,
         });
     }
 
-    async delete(id : string) : Promise<Resume> {
+    async delete(id: string) {
         return prisma.resume.delete({
-            where : {
+            where: {
                 id,
             },
         });

@@ -11,7 +11,7 @@ class DiscoverNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        const queries: string[] = [state.query];
+        const queries: string[] = state.query ? [state.query] : [];
         let remoteOnly = false;
         const candidateSkills: string[] = [];
 
@@ -30,31 +30,41 @@ class DiscoverNode {
                 candidateSkills.push(...context.skills);
             }
 
-            // Extract technical keywords from resume text
+            // Extract technical keywords and title from resume text
             if (context.resumeText) {
-                const text = context.resumeText.toLowerCase();
-                const techKeywords = [
-                    "react", "typescript", "javascript", "node", "python", "go",
-                    "golang", "rust", "java", "c++", "docker", "kubernetes", "aws",
-                    "graphql", "sql", "postgresql", "mongodb", "next.js", "tailwind",
-                ];
-                for (const kw of techKeywords) {
-                    if (text.includes(kw) && !candidateSkills.includes(kw)) {
+                const resumeParser = (await import("../../resume/resume.parser.js")).default;
+                const keywords = resumeParser.extractKeywords(context.resumeText);
+                for (const kw of keywords) {
+                    if (!candidateSkills.includes(kw)) {
                         candidateSkills.push(kw);
                     }
                 }
             }
 
-            // Formulate targeted queries from resume skills
-            if (candidateSkills.length > 0) {
-                const topSkill = candidateSkills[0];
-                const combined = `${topSkill} ${state.query}`.trim();
-                if (!queries.includes(combined)) {
+            // If base query was empty or generic, use currentTitle or top skill
+            if (queries.length === 0) {
+                if (context.currentTitle) {
+                    queries.push(context.currentTitle);
+                } else if (candidateSkills.length > 0) {
+                    queries.push(`${candidateSkills[0]} developer`);
+                } else {
+                    queries.push("software engineer");
+                }
+            }
+
+            // Formulate targeted queries from top resume skills
+            const topSkills = candidateSkills.slice(0, 3);
+            for (const skill of topSkills) {
+                const combined = state.query ? `${skill} ${state.query}`.trim() : `${skill} developer`;
+                if (!queries.includes(combined) && queries.length < 3) {
                     queries.push(combined);
                 }
             }
         } catch {
             // Gracefully proceed with base query
+            if (queries.length === 0) {
+                queries.push(state.query || "software engineer");
+            }
         }
 
         // 2. Perform live search across queries
@@ -85,6 +95,8 @@ class DiscoverNode {
                     title: rawJob.title,
                     company: rawJob.company,
                     url: rawJob.url,
+                    description: rawJob.description,
+                    location: rawJob.location,
                 });
             }
         }

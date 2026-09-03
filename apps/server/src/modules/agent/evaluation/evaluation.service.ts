@@ -39,10 +39,13 @@ class EvaluationService {
                 );
 
             // Boost score if job matches candidate's extracted resume skills
-            const jobText = `${job.title} ${job.company}`.toLowerCase();
-            const matchedSkills = candidateSkills.filter((s) =>
-                s && s.length > 1 && jobText.includes(s.toLowerCase()),
-            );
+            const jobText = `${job.title} ${job.company} ${job.description || ""} ${job.location || ""}`.toLowerCase();
+            const matchedSkills = candidateSkills.filter((s) => {
+                if (!s || s.length < 2) return false;
+                const lowerSkill = s.toLowerCase();
+                // Check word boundary or substring match
+                return jobText.includes(lowerSkill);
+            });
 
             if (matchedSkills.length > 0) {
                 score = Math.min(100, score + matchedSkills.length * 15);
@@ -52,7 +55,7 @@ class EvaluationService {
                 score >= 35
                     ? `Strong match with terms: ${matchesTerms.join(", ")}${
                           matchedSkills.length
-                              ? ` (Matched resume skills: ${matchedSkills.join(", ")})`
+                              ? ` (Matched resume skills: ${matchedSkills.slice(0, 5).join(", ")})`
                               : ""
                       }`
                     : "Weak match with query terms.";

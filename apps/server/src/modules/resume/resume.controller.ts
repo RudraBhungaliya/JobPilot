@@ -28,7 +28,8 @@ class ResumeController {
             req.user.id,
             body,
             file.path,
-            file.originalname
+            file.originalname,
+            file.path
         );
 
         return res.status(201).json({
