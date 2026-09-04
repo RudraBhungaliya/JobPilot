@@ -1,4 +1,4 @@
-export type AgentAction = 
+export type AgentAction =
     | "DISCOVER"
     | "FETCH"
     | "RANK"
@@ -7,6 +7,7 @@ export type AgentAction =
     | "VERIFY"
     | "PERSIST"
     | "RETRY"
+    | "WAITING_FOR_USER"
     | "END";
 
 export interface PlannerDecision {

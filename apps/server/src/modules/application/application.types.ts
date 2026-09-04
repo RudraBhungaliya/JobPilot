@@ -3,6 +3,7 @@ export type ApplicationStatus =
     | "MATCHED"
     | "QUEUED"
     | "RUNNING"
+    | "WAITING_FOR_USER"
     | "SUBMITTED"
     | "FAILED"
     | "SKIPPED";

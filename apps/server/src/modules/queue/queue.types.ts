@@ -4,6 +4,7 @@ export type QueueJobType =
 export type QueueJobStatus =
     | "QUEUED"
     | "RUNNING"
+    | "WAITING_FOR_USER"
     | "COMPLETED"
     | "FAILED";
 

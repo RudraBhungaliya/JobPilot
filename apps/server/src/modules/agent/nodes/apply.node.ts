@@ -1,6 +1,7 @@
 import applicationTool from "../tools/application.tool.js";
 import browserTool from "../tools/browser.tool.js";
 import formTool from "../tools/form.tool.js";
+import humanActionService from "../../human-action/human-action.service.js";
 
 import type {
     AgentStateType,
@@ -135,15 +136,59 @@ class ApplyNode {
                         requiredUnfilled.length >
                         0
                     ) {
-                        throw new Error(
-                            `Required fields could not be filled: ${requiredUnfilled
-                                .map(
-                                    (item) =>
-                                        item.name ||
-                                        item.selector,
-                                )
-                                .join(", ")}`,
+                        // --- HITL: pause and ask the user instead of failing ---
+                        const questions =
+                            requiredUnfilled.map(
+                                (r) => {
+                                    const field =
+                                        fields.find(
+                                            (f) =>
+                                                f.selector ===
+                                                r.selector,
+                                        )!;
+
+                                    return {
+                                        selector:
+                                            field.selector,
+                                        label:
+                                            field.label ||
+                                            field.name ||
+                                            field.selector,
+                                        type: field.type,
+                                        required:
+                                            field.required,
+                                        hint:
+                                            r.reason,
+                                    };
+                                },
+                            );
+
+                        await humanActionService.createAction(
+                            {
+                                userId:
+                                    state.userId,
+                                applicationId:
+                                    application.id,
+                                questions,
+                            },
                         );
+
+                        await page.close();
+
+                        return {
+                            application: {
+                                id: application.id,
+                                status: "WAITING_FOR_USER",
+                            },
+
+                            plannerAction:
+                                "WAITING_FOR_USER",
+
+                            history: [
+                                ...state.history,
+                                `Application ${application.id} paused: ${questions.length} required field(s) need user input (${questions.map((q) => q.label).join(", ")}).`,
+                            ],
+                        };
                     }
 
                     await formTool.submit(

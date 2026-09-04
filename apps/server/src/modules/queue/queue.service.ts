@@ -136,6 +136,45 @@ class QueueService {
 
         return job;
     }
+
+    markWaitingForUser(
+        id: string,
+    ): QueueJob | null {
+        const job =
+            this.jobs.get(id);
+
+        if (!job) {
+            return null;
+        }
+
+        job.status = "WAITING_FOR_USER";
+
+        return job;
+    }
+
+    resumeJob(
+        id: string,
+    ): QueueJob | null {
+        const job =
+            this.jobs.get(id);
+
+        if (!job) {
+            return null;
+        }
+
+        if (
+            job.status !==
+            "WAITING_FOR_USER"
+        ) {
+            return null;
+        }
+
+        job.status = "QUEUED";
+        job.startedAt = undefined;
+        job.completedAt = undefined;
+
+        return job;
+    }
 }
 
 export default new QueueService();

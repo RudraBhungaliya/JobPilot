@@ -25,16 +25,33 @@ class QueueWorker {
                 job.id,
             );
 
-            await agentService.run({
-                userId: job.userId,
-                query: job.query,
-                resumeId:
-                    job.resumeId ?? undefined,
-            });
+            const result =
+                await agentService.run({
+                    userId: job.userId,
+                    query: job.query,
+                    resumeId:
+                        job.resumeId ?? undefined,
+                });
 
-            await queueService.markCompleted(
-                job.id,
-            );
+            // If the agent paused waiting for human input,
+            // hold the queue job in WAITING_FOR_USER state
+            // instead of marking it completed. The job will
+            // be re-queued by queueService.resumeJob() after
+            // the user submits answers via POST /applications/:id/resume.
+            const waitingForUser =
+                result.history.some((h) =>
+                    h.includes("waiting for user input"),
+                );
+
+            if (waitingForUser) {
+                await queueService.markWaitingForUser(
+                    job.id,
+                );
+            } else {
+                await queueService.markCompleted(
+                    job.id,
+                );
+            }
 
             return true;
         } catch (error) {

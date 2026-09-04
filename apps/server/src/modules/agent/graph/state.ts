@@ -55,6 +55,7 @@ export const AgentState = new StateSchema({
             "VERIFY",
             "PERSIST",
             "RETRY",
+            "WAITING_FOR_USER",
             "END",
         ])
         .default("DISCOVER"),
