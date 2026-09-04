@@ -1,4 +1,4 @@
-export type AgentAction = 
+export type AgentAction =
     | "DISCOVER"
     | "EVALUATE"
     | "FETCH"

@@ -16,10 +16,15 @@ import applicationRoutes from "./modules/application/index.js";
 import { agentRoutes } from "./modules/agent/index.js";
 import { notificationRouter } from "./modules/notification/index.js";
 import { auditRouter } from "./modules/audit/index.js";
+<<<<<<< HEAD
 import { queueRoutes } from "./modules/queue/index.js";
 import sourceBootstrap from "./modules/sources/source.bootstrap.js";
 
 sourceBootstrap.initialize();
+=======
+import eventsRouter from "./modules/events/events.routes.js";
+
+>>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
 
 const app = express();
 
@@ -43,6 +48,8 @@ app.use("/api/v1/agent", agentRoutes);
 app.use("/api/v1/queue", queueRoutes);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/audit", auditRouter);
+app.use("/api/v1/events", eventsRouter);
+
 
 app.get("/", (req, res) => {
     res.json({

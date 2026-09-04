@@ -1,68 +1,43 @@
 import aiTool from "../tools/ai.tool.js";
-
 import resumeService from "../../resume/resume.service.js";
 import profileService from "../../profile/profile.service.js";
 
-import type {
-    AgentStateType,
-    AgentStateUpdate,
-} from "../graph/state.js";
+import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
 
+// Generates job-specific resume tailoring instructions using the candidate's
+// profile and resume. Instructions are stored in state so the apply node
+// can persist them against each application after submission.
 class TailorNode {
-    async execute(
-        state: AgentStateType,
-    ): Promise<AgentStateUpdate> {
+    async execute(state: AgentStateType): Promise<AgentStateUpdate> {
         if (state.selectedJobs.length === 0) {
             return {
                 tailoringInstructions: [],
-                history: [
-                    ...state.history,
-                    "No selected jobs available for tailoring.",
-                ],
+                history: [...state.history, "Tailoring skipped: no selected jobs."],
             };
         }
 
         if (!state.resume) {
             return {
                 tailoringInstructions: [],
-                history: [
-                    ...state.history,
-                    "No resume available for tailoring.",
-                ],
+                history: [...state.history, "Tailoring skipped: no resume in state."],
             };
         }
 
-        const resume =
-            await resumeService.getResume(
-                state.resume.id,
-            );
+        const resume = await resumeService.getResume(state.resume.id);
 
-        if (
-            !resume ||
-            resume.status !== "READY" ||
-            !resume.extractedText
-        ) {
+        if (!resume || resume.status !== "READY" || !resume.extractedText) {
             return {
                 tailoringInstructions: [],
-                history: [
-                    ...state.history,
-                    "Resume is not ready for tailoring.",
-                ],
+                history: [...state.history, "Tailoring skipped: resume not ready."],
             };
         }
 
-        const profile =
-            await profileService.getProfile(
-                state.userId,
-            );
+        const profile = await profileService.getProfile(state.userId);
 
         if (!profile) {
             return {
                 tailoringInstructions: [],
-                history: [
-                    ...state.history,
-                    "Candidate profile could not be found.",
-                ],
+                history: [...state.history, "Tailoring skipped: profile not found."],
             };
         }
 
@@ -78,20 +53,15 @@ ${resume.extractedText}
 Selected jobs:
 ${JSON.stringify(state.selectedJobs)}
 
-Generate concise, job-specific resume tailoring instructions.
+Generate one concise, job-specific tailoring instruction per selected job.
 
 Rules:
-- Never invent skills.
-- Never invent experience.
-- Never invent achievements.
-- Never invent projects.
-- Never change factual claims.
-- Use only information supported by the candidate profile or resume.
-- Prioritize information relevant to each selected job.
-- Do not rewrite the resume yet.
-- Return instructions only.
+- Never invent skills, experience, achievements, or projects.
+- Only use information present in the profile or resume.
+- Prioritise information relevant to each job.
+- Do not rewrite the resume — return instructions only.
 
-Return ONLY valid JSON:
+Return ONLY valid JSON array, one string per job in the same order:
 
 [
     "instruction for job 1",
@@ -99,23 +69,18 @@ Return ONLY valid JSON:
 ]
 `;
 
-        const result =
-            await aiTool.generate(
-                prompt,
-            );
+        const result = await aiTool.generate(prompt);
 
         let instructions: string[];
 
         try {
-            const parsed =
-                JSON.parse(result);
+            const parsed = JSON.parse(result);
 
             if (!Array.isArray(parsed)) {
-                throw new Error(
-                    "Invalid tailoring response.",
-                );
+                throw new Error("Expected an array.");
             }
 
+<<<<<<< HEAD
             instructions =
                 parsed.filter(
                     (
@@ -127,15 +92,20 @@ Return ONLY valid JSON:
         } catch {
             instructions = state.selectedJobs.map(
                 (job) => `Highlight core competencies relevant to ${job.title} at ${job.company}.`,
+=======
+            instructions = parsed.filter(
+                (item): item is string => typeof item === "string",
+>>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
             );
+        } catch {
+            throw new Error("Tailoring agent returned invalid JSON.");
         }
 
         return {
-            tailoringInstructions:
-                instructions,
+            tailoringInstructions: instructions,
             history: [
                 ...state.history,
-                `Generated tailoring instructions for ${state.selectedJobs.length} jobs.`,
+                `Generated tailoring instructions for ${state.selectedJobs.length} job(s).`,
             ],
         };
     }
