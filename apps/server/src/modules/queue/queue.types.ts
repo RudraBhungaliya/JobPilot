@@ -1,5 +1,4 @@
-export type QueueJobType =
-    | "AGENT_RUN";
+export type QueueJobType = "AGENT_RUN";
 
 export type QueueJobStatus =
     | "QUEUED"

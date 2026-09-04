@@ -1,6 +1,7 @@
 import humanActionRepository from "./human-action.repository.js";
 import applicationRepository from "../application/application.repository.js";
 import auditRepository from "../audit/audit.repository.js";
+import { eventEmitter } from "../../core/events/index.js";
 
 import type {
     CreateHumanActionInput,
@@ -33,10 +34,17 @@ class HumanActionService {
             metadata: {
                 humanActionId: humanAction.id,
                 questionCount: input.questions.length,
-                fields: input.questions.map(
-                    (q) => q.label || q.selector,
-                ),
+                fields: input.questions.map((q) => q.label || q.selector),
             },
+        });
+
+        eventEmitter.emit({
+            type: "human_action.required",
+            userId: input.userId,
+            applicationId: input.applicationId,
+            humanActionId: humanAction.id,
+            questionCount: input.questions.length,
+            timestamp: new Date().toISOString(),
         });
 
         return humanAction;
@@ -90,12 +98,19 @@ class HumanActionService {
             action: "USER_ACTION_COMPLETED",
             description: `User provided answers for application ${humanAction.applicationId}.`,
             applicationId: humanAction.applicationId,
-            agentRunId:
-                humanAction.agentRunId ?? undefined,
+            agentRunId: humanAction.agentRunId ?? undefined,
             metadata: {
                 humanActionId: id,
                 answeredFields: Object.keys(answers),
             },
+        });
+
+        eventEmitter.emit({
+            type: "human_action.resolved",
+            userId,
+            applicationId: humanAction.applicationId,
+            humanActionId: id,
+            timestamp: new Date().toISOString(),
         });
 
         return resolved;

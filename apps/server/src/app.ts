@@ -16,6 +16,8 @@ import applicationRoutes from "./modules/application/index.js";
 import { agentRoutes } from "./modules/agent/index.js";
 import { notificationRouter } from "./modules/notification/index.js";
 import { auditRouter } from "./modules/audit/index.js";
+import eventsRouter from "./modules/events/events.routes.js";
+
 
 const app = express();
 
@@ -38,6 +40,8 @@ app.use("/api/v1/applications", applicationRoutes);
 app.use("/api/v1/agent", agentRoutes);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/audit", auditRouter);
+app.use("/api/v1/events", eventsRouter);
+
 
 app.get("/", (req, res) => {
     res.json({
