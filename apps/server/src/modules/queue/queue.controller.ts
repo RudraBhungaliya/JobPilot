@@ -55,7 +55,7 @@ class QueueController {
             : String(req.params.id);
 
         const job =
-            queueService.getJob(id);
+            await queueService.getJob(id);
 
         if (!job) {
             res.status(404).json({
@@ -88,8 +88,8 @@ class QueueController {
         res: Response,
     ): Promise<void> {
         const jobs =
-            queueService
-                .getPendingJobs()
+            (await queueService
+                .getPendingJobs())
                 .filter(
                     (job) =>
                         job.userId ===

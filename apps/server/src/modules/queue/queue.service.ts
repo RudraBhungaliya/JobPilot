@@ -47,28 +47,7 @@ class QueueService {
                 },
             });
 
-<<<<<<< HEAD
-    enqueueAgentRun(
-        input: EnqueueAgentRunInput,
-    ): QueueJob {
-        const existing = Array.from(
-            this.jobs.values(),
-        ).find(
-            (job) =>
-                job.userId === input.userId &&
-                (input.runId ? job.runId === input.runId : false) &&
-                (job.status === "QUEUED" || job.status === "RUNNING" || job.status === "WAITING_FOR_USER"),
-        ) || Array.from(this.jobs.values()).find(
-            (job) =>
-                job.userId === input.userId &&
-                (job.status === "QUEUED" || job.status === "RUNNING"),
-        );
-
-        if (existing) {
-            return existing;
-=======
             if (existing) return toQueueJob(existing);
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
         }
 
         const row = await prisma.queueJob.create({
@@ -90,19 +69,16 @@ class QueueService {
         return row ? toQueueJob(row) : null;
     }
 
-<<<<<<< HEAD
-    getJobByRunId(runId: string): QueueJob | null {
-        return Array.from(this.jobs.values()).find((j) => j.runId === runId) ?? null;
+    async getJobByRunId(runId: string): Promise<QueueJob | null> {
+        const row = await prisma.queueJob.findFirst({
+            where: {
+                runId,
+                status: { notIn: ["COMPLETED", "FAILED"] },
+            },
+        });
+        return row ? toQueueJob(row) : null;
     }
 
-    getPendingJobs(): QueueJob[] {
-        return Array.from(
-            this.jobs.values(),
-        ).filter(
-            (job) =>
-                job.status === "QUEUED",
-        );
-=======
     async getPendingJobs(): Promise<QueueJob[]> {
         const rows = await prisma.queueJob.findMany({
             where: { status: "QUEUED" },
@@ -110,7 +86,6 @@ class QueueService {
         });
 
         return rows.map(toQueueJob);
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
     }
 
     async markRunning(id: string): Promise<QueueJob | null> {
@@ -174,99 +149,7 @@ class QueueService {
             data: { status: "QUEUED", startedAt: null, completedAt: null },
         });
 
-<<<<<<< HEAD
-        return job;
-    }
-
-    markWaitingForUser(
-        id: string,
-    ): QueueJob | null {
-        const job = this.jobs.get(id);
-
-        if (!job) {
-            return null;
-        }
-
-        job.status = "WAITING_FOR_USER";
-        return job;
-    }
-
-    resumeJob(
-        id: string,
-    ): QueueJob | null {
-        const job = this.jobs.get(id);
-
-        if (!job) {
-            return null;
-        }
-
-        job.status = "QUEUED";
-        return job;
-    }
-
-    markCompleted(
-        id: string,
-    ): QueueJob | null {
-        const job =
-            this.jobs.get(id);
-
-        if (!job) {
-            return null;
-        }
-
-        job.status = "COMPLETED";
-        job.completedAt = new Date();
-
-        return job;
-    }
-
-    markFailed(
-        id: string,
-        error: string,
-    ): QueueJob | null {
-        const job =
-            this.jobs.get(id);
-
-        if (!job) {
-            return null;
-        }
-
-        job.status = "FAILED";
-        job.error = error;
-        job.completedAt = new Date();
-
-        return job;
-    }
-
-    requeue(
-        id: string,
-    ): QueueJob | null {
-        const job =
-            this.jobs.get(id);
-
-        if (!job) {
-            return null;
-        }
-
-        if (
-            job.attempts >=
-            job.maxAttempts
-        ) {
-            return this.markFailed(
-                id,
-                job.error ??
-                    "Maximum retry attempts reached.",
-            );
-        }
-
-        job.status = "QUEUED";
-        job.startedAt = undefined;
-        job.completedAt = undefined;
-
-        return job;
-=======
         return toQueueJob(row);
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
     }
 }
 

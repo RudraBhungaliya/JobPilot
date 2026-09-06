@@ -20,7 +20,7 @@ import { AgentState } from "./state.js";
 
 const workflow = new StateGraph(
     AgentState,
-)   
+)
     .addNode(
         "planner",
         async (state) =>
@@ -78,9 +78,9 @@ const workflow = new StateGraph(
     )
 
     .addEdge(
-            START,
-            "planner",
-        )
+        START,
+        "planner",
+    )
 
     .addConditionalEdges(
         "planner",
@@ -95,11 +95,7 @@ const workflow = new StateGraph(
             VERIFY: "verify",
             PERSIST: "persist",
             RETRY: "retry",
-<<<<<<< HEAD
-            WAITING_FOR_USER: END,
-=======
             WAITING_FOR_USER: "waitForUser",
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
             END: END,
         },
     )

@@ -1,15 +1,11 @@
 import crypto from "crypto";
 import searchTool from "../tools/search.tool.js";
-<<<<<<< HEAD
 import candidateTool from "../candidate/candidate.tool.js";
-=======
 import applicationRepository from "../../application/application.repository.js";
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
 
 import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
 
 class DiscoverNode {
-<<<<<<< HEAD
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
@@ -80,7 +76,7 @@ class DiscoverNode {
         );
 
         const seenUrls = new Set<string>();
-        const jobs = [];
+        const allJobs = [];
 
         for (const res of searchResults) {
             if (res.status !== "fulfilled") continue;
@@ -88,7 +84,7 @@ class DiscoverNode {
                 if (!rawJob.url || seenUrls.has(rawJob.url)) continue;
                 seenUrls.add(rawJob.url);
 
-                jobs.push({
+                allJobs.push({
                     id: crypto
                         .createHash("sha256")
                         .update(rawJob.url)
@@ -102,19 +98,8 @@ class DiscoverNode {
                 });
             }
         }
-=======
-    async execute(state: AgentStateType): Promise<AgentStateUpdate> {
-        const rawJobs = await searchTool.search({ keyword: state.query });
 
-        const allJobs = rawJobs.map((job) => ({
-            id: crypto.createHash("sha256").update(job.url).digest("hex").slice(0, 12),
-            title: job.title,
-            company: job.company,
-            url: job.url,
-        }));
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
-
-        // Filter out jobs the user already has a submitted application for
+        // 3. Filter out jobs the user already has a SUBMITTED application for
         const filtered = await Promise.all(
             allJobs.map(async (job) => {
                 const existing = await applicationRepository.findByUserAndJob(
@@ -138,11 +123,7 @@ class DiscoverNode {
             evaluated: false,
             history: [
                 ...state.history,
-<<<<<<< HEAD
-                `Discovered ${jobs.length} live job openings across startups & MNCs for: ${queries.join(" | ")}`,
-=======
-                `Discovered ${jobs.length} new jobs (${allJobs.length - jobs.length} already applied, skipped).`,
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
+                `Discovered ${jobs.length} live job openings across startups & MNCs for: ${queries.join(" | ")} (${allJobs.length - jobs.length} already applied, skipped).`,
             ],
         };
     }

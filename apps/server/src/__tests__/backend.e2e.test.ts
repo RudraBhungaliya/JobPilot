@@ -14,64 +14,66 @@ import notificationService from "../modules/notification/notification.service.js
 import type { AgentStateType } from "../modules/agent/graph/state.js";
 
 test("Queue and Worker Coordination", async (t) => {
-    await t.test("enqueues jobs and prevents duplicate active runs", () => {
+    await t.test("enqueues jobs and prevents duplicate by runId", async () => {
         const userId = "test-user-1";
-        const job1 = queueService.enqueueAgentRun({
+        const job1 = await queueService.enqueueAgentRun({
             userId,
             query: "Frontend Engineer",
             resumeId: "resume-123",
+            runId: "run-dedup-1",
         });
 
         assert.ok(job1.id);
         assert.equal(job1.status, "QUEUED");
         assert.equal(job1.resumeId, "resume-123");
 
-        // Duplicate attempt with same user while job is active
-        const job2 = queueService.enqueueAgentRun({
+        // Duplicate attempt with same runId while job is active
+        const job2 = await queueService.enqueueAgentRun({
             userId,
             query: "Frontend Engineer",
             resumeId: "resume-123",
+            runId: "run-dedup-1",
         });
 
         assert.equal(job2.id, job1.id, "Should return existing active queue job");
     });
 
-    await t.test("marks queue job statuses and bounded retries", () => {
+    await t.test("marks queue job statuses and bounded retries", async () => {
         const userId = "test-user-retry";
-        const job = queueService.enqueueAgentRun({
+        const job = await queueService.enqueueAgentRun({
             userId,
             query: "DevOps",
             maxAttempts: 2,
         });
 
-        queueService.markRunning(job.id);
-        const running = queueService.getJob(job.id);
+        await queueService.markRunning(job.id);
+        const running = await queueService.getJob(job.id);
         assert.equal(running?.status, "RUNNING");
         assert.equal(running?.attempts, 1);
 
-        queueService.requeue(job.id);
-        const requeued = queueService.getJob(job.id);
+        await queueService.requeue(job.id);
+        const requeued = await queueService.getJob(job.id);
         assert.equal(requeued?.status, "QUEUED");
 
         // Second failure reaches max attempts (2)
-        queueService.markRunning(job.id);
-        queueService.requeue(job.id);
-        const failed = queueService.getJob(job.id);
+        await queueService.markRunning(job.id);
+        await queueService.requeue(job.id);
+        const failed = await queueService.getJob(job.id);
         assert.equal(failed?.status, "FAILED");
     });
 
-    await t.test("supports WAITING_FOR_USER and resumeJob", () => {
+    await t.test("supports WAITING_FOR_USER and resumeJob", async () => {
         const userId = "test-user-wait";
-        const job = queueService.enqueueAgentRun({
+        const job = await queueService.enqueueAgentRun({
             userId,
             query: "Backend Developer",
         });
 
-        queueService.markWaitingForUser(job.id);
-        assert.equal(queueService.getJob(job.id)?.status, "WAITING_FOR_USER");
+        await queueService.markWaitingForUser(job.id);
+        assert.equal((await queueService.getJob(job.id))?.status, "WAITING_FOR_USER");
 
-        queueService.resumeJob(job.id);
-        assert.equal(queueService.getJob(job.id)?.status, "QUEUED");
+        await queueService.resumeJob(job.id);
+        assert.equal((await queueService.getJob(job.id))?.status, "QUEUED");
     });
 });
 

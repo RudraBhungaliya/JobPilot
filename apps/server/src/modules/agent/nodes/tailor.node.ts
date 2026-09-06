@@ -80,25 +80,16 @@ Return ONLY valid JSON array, one string per job in the same order:
                 throw new Error("Expected an array.");
             }
 
-<<<<<<< HEAD
-            instructions =
-                parsed.filter(
-                    (
-                        item,
-                    ): item is string =>
-                        typeof item ===
-                        "string",
-                );
-        } catch {
-            instructions = state.selectedJobs.map(
-                (job) => `Highlight core competencies relevant to ${job.title} at ${job.company}.`,
-=======
             instructions = parsed.filter(
-                (item): item is string => typeof item === "string",
->>>>>>> 75ce97492af7e4d89d96cb0094053166cd490656
+                (item): item is string =>
+                    typeof item === "string",
             );
         } catch {
-            throw new Error("Tailoring agent returned invalid JSON.");
+            // Gracefully fall back to generic instructions so the agent can
+            // continue applying without blocking the entire run on a parse error.
+            instructions = state.selectedJobs.map(
+                (job) => `Highlight core competencies relevant to ${job.title} at ${job.company}.`,
+            );
         }
 
         return {
