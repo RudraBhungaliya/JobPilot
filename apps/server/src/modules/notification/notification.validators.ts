@@ -8,6 +8,7 @@ export const createNotificationSchema =
             "APPLICATION_STATUS",
             "AGENT_COMPLETED",
             "AGENT_FAILED",
+            "HUMAN_ACTION_REQUIRED",
             "SYSTEM",
         ]),
 

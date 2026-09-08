@@ -42,6 +42,7 @@ export interface HumanActionEvent extends BaseEvent {
 export interface NotificationEvent extends BaseEvent {
     type: "notification.created";
     notificationId: string;
+    notificationType: string;
     title: string;
     message: string;
 }

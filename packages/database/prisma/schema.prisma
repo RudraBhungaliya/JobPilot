@@ -171,7 +171,6 @@ enum ApplicationStatus {
   SUBMITTED
   FAILED
   SKIPPED
-  WAITING_FOR_USER
 }
 
 enum EmploymentType {
@@ -442,7 +441,6 @@ enum AgentRunStatus {
   WAITING_FOR_USER
   COMPLETED
   FAILED
-  WAITING_FOR_USER
 }
 
 model AgentRun {
@@ -479,6 +477,7 @@ enum NotificationType {
   APPLICATION_STATUS
   AGENT_COMPLETED
   AGENT_FAILED
+  HUMAN_ACTION_REQUIRED
   SYSTEM
 }
 

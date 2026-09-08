@@ -1,4 +1,6 @@
 import notificationRepository from "./notification.repository.js";
+import { eventEmitter } from "../../core/events/index.js";
+import emailProvider from "./providers/email.provider.js";
 
 import type {
     CreateNotificationDTO,
@@ -10,9 +12,38 @@ class NotificationService {
         userId: string,
         data: CreateNotificationDTO,
     ) {
-        return notificationRepository.create({
+        const notification =
+            await notificationRepository.create({
+                userId,
+                ...data,
+            });
+
+        // Push real-time SSE event to all connected clients for this user
+        eventEmitter.emit({
+            type: "notification.created",
             userId,
-            ...data,
+            notificationId: notification.id,
+            notificationType: notification.type,
+            title: notification.title,
+            message: notification.message,
+            timestamp:
+                notification.createdAt.toISOString(),
+        });
+
+        return notification;
+    }
+
+    async sendEmailNotification(
+        to: string,
+        subject: string,
+        html: string,
+        text?: string,
+    ) {
+        return emailProvider.send({
+            to,
+            subject,
+            html,
+            text,
         });
     }
 

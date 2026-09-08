@@ -1,6 +1,7 @@
 import humanActionRepository from "./human-action.repository.js";
 import applicationRepository from "../application/application.repository.js";
 import auditRepository from "../audit/audit.repository.js";
+import notificationService from "../notification/notification.service.js";
 import { eventEmitter } from "../../core/events/index.js";
 
 import type {
@@ -45,6 +46,14 @@ class HumanActionService {
             humanActionId: humanAction.id,
             questionCount: input.questions.length,
             timestamp: new Date().toISOString(),
+        });
+
+        await notificationService.create(input.userId, {
+            type: "HUMAN_ACTION_REQUIRED",
+            title: "Your Input Is Needed",
+            message: `An application requires your input for ${input.questions.length} field(s). Please provide the requested information so processing can continue.`,
+            applicationId: input.applicationId,
+            agentRunId: input.agentRunId,
         });
 
         return humanAction;
@@ -111,6 +120,14 @@ class HumanActionService {
             applicationId: humanAction.applicationId,
             humanActionId: id,
             timestamp: new Date().toISOString(),
+        });
+
+        await notificationService.create(userId, {
+            type: "APPLICATION_STATUS",
+            title: "Your Response Was Received",
+            message: `Your answers have been submitted. The application will resume processing shortly.`,
+            applicationId: humanAction.applicationId,
+            agentRunId: humanAction.agentRunId ?? undefined,
         });
 
         return resolved;

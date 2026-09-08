@@ -1,4 +1,5 @@
 import queueService from "./queue.service.js";
+import notificationService from "../notification/notification.service.js";
 
 import { agentService } from "../agent/index.js";
 
@@ -57,6 +58,15 @@ class QueueWorker {
                     runningJob.id,
                 );
 
+                await notificationService.create(
+                    runningJob.userId,
+                    {
+                        type: "APPLICATION_STATUS",
+                        title: "Queue Paused — Action Required",
+                        message: `Processing for "${runningJob.query}" is paused and waiting for your input. Please check pending actions to continue.`,
+                    },
+                );
+
                 return false;
             }
 
@@ -83,6 +93,15 @@ class QueueWorker {
                     runningJob.id,
                     error,
                 );
+
+                await notificationService.create(
+                    runningJob.userId,
+                    {
+                        type: "AGENT_FAILED",
+                        title: "Job Queue — All Retries Exhausted",
+                        message: `Processing for "${runningJob.query}" failed after ${runningJob.maxAttempts} attempt(s): ${error}`,
+                    },
+                );
             }
 
             return false;
@@ -108,6 +127,15 @@ class QueueWorker {
                 await queueService.markFailed(
                     runningJob.id,
                     message,
+                );
+
+                await notificationService.create(
+                    runningJob.userId,
+                    {
+                        type: "AGENT_FAILED",
+                        title: "Job Queue — All Retries Exhausted",
+                        message: `Processing for "${runningJob.query}" failed after ${runningJob.maxAttempts} attempt(s): ${message}`,
+                    },
                 );
             }
 
