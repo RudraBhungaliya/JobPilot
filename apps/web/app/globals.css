@@ -1,26 +1,153 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg-canvas: #f8f9fa;
+    --bg-surface: #ffffff;
+    --bg-surface-elevated: #ffffff;
+    --bg-subtle: #f3f4f6;
+    --bg-muted: #e9ecef;
+    --border-subtle: #e5e7eb;
+    --border-strong: #d1d5db;
+    --border-glow: rgba(22, 163, 74, 0.3);
+
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+    --text-tertiary: #9ca3af;
+
+    --brand-primary: #16a34a;
+    --brand-glow: rgba(22, 163, 74, 0.15);
+    --accent-emerald: #16a34a;
+    --accent-blue: #2563eb;
+    --accent-amber: #d97706;
+    --accent-purple: #7c3aed;
+    --accent-rose: #e11d48;
+    --accent-cyan: #0891b2;
+  }
+
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  body {
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: -0.012em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: rgba(22, 163, 74, 0.2);
+    color: #111827;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Light scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
 }
+
+::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Greenhouse-style card shadow */
+.shadow-card {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-card-md {
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.05);
+}
+
+.shadow-card-lg {
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.1), 0 4px 8px -2px rgba(0, 0, 0, 0.06);
+}
+
+/* Green glow for brand actions */
+.shadow-glow-green {
+  box-shadow: 0 0 16px -2px rgba(22, 163, 74, 0.3);
+}
+
+.shadow-glow-amber {
+  box-shadow: 0 0 16px -2px rgba(217, 119, 6, 0.25);
+}
+
+.shadow-glow-blue {
+  box-shadow: 0 0 16px -2px rgba(37, 99, 235, 0.25);
+}
+
+/* For legacy compat */
+.shadow-card-dark {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+}
+
+.shadow-glow-emerald {
+  box-shadow: 0 0 16px -2px rgba(22, 163, 74, 0.3);
+}
+
+/* Greenhouse-style grid pattern */
+.bg-grid-pattern {
+  background-size: 24px 24px;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+}
+
+/* Status dot pulse */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Product surface: calm, warm, and intentionally close to an ATS workspace. */
+.jobpilot-light {
+  background: #f7f8f5;
+  color: #17211b;
+}
+
+.jobpilot-light [class*="bg-[#090a0f]"],
+.jobpilot-light [class*="bg-[#0c0e15]"],
+.jobpilot-light [class*="bg-[#10121a]"],
+.jobpilot-light [class*="bg-[#12141c]"],
+.jobpilot-light [class*="bg-[#131622]"],
+.jobpilot-light [class*="bg-[#141724]"],
+.jobpilot-light [class*="bg-[#161924]"],
+.jobpilot-light [class*="bg-[#1c202e]"],
+.jobpilot-light [class*="bg-[#1e2333]"],
+.jobpilot-light [class*="bg-[#1f2333]"],
+.jobpilot-light [class*="bg-[#1f2434]"],
+.jobpilot-light [class*="bg-[#202538]"],
+.jobpilot-light [class*="bg-[#262b3d]"] {
+  background-color: #ffffff !important;
+}
+
+.jobpilot-light [class*="text-zinc-100"],
+.jobpilot-light [class*="text-zinc-200"] { color: #17211b !important; }
+.jobpilot-light [class*="text-zinc-300"] { color: #334038 !important; }
+.jobpilot-light [class*="text-zinc-400"] { color: #667269 !important; }
+.jobpilot-light [class*="text-zinc-500"],
+.jobpilot-light [class*="text-zinc-600"] { color: #7d887f !important; }
+.jobpilot-light [class*="border-white"] { border-color: #e2e7e1 !important; }
+.jobpilot-light [class*="hover:bg-[#"]:hover { background-color: #f1f5ef !important; }
+.jobpilot-light [class*="bg-blue-600"] { background-color: #197a45 !important; }
+.jobpilot-light [class*="hover:bg-blue-500"]:hover { background-color: #14683a !important; }
+.jobpilot-light [class*="text-blue-400"] { color: #197a45 !important; }
+.jobpilot-light [class*="border-blue-500"] { border-color: #b8d7c3 !important; }
+.jobpilot-light [class*="bg-blue-500/10"],
+.jobpilot-light [class*="bg-blue-500/15"] { background-color: #eaf5ed !important; }
+.jobpilot-light [class*="text-emerald-400"] { color: #197a45 !important; }
+.jobpilot-light .shadow-card-dark { box-shadow: 0 1px 3px rgba(19, 45, 29, .08); }

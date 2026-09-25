@@ -363,8 +363,15 @@ class LiveAtsService {
                 if (!isUsMatch) {
                     return false;
                 }
-            } else if (requestedLoc && !loc.includes(requestedLoc)) {
-                return false;
+            } else if (requestedLoc) {
+                // Career pages use both spellings; a Bengaluru search should not
+                // silently miss a locally listed "Bangalore" role.
+                const locationTerms = requestedLoc === "bengaluru" || requestedLoc === "bangalore"
+                    ? ["bengaluru", "bangalore"]
+                    : [requestedLoc];
+                if (!locationTerms.some((term) => loc.includes(term))) {
+                    return false;
+                }
             }
 
             if (terms.length === 0) return true;

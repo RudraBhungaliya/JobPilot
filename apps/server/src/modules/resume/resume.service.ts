@@ -3,8 +3,17 @@ import resumeExtractor from "./resume.extractor.js";
 import resumeParser from "./resume.parser.js";
 
 import type { UploadResumeDTO } from "./resume.validators.js";
+import path from "node:path";
 
 class ResumeService {
+    async parseFile(filePath: string, originalName: string) {
+        const extractedText = await resumeExtractor.extract(filePath, originalName);
+        return {
+            extractedText,
+            parsed: resumeParser.parse(extractedText),
+        };
+    }
+
     async createResume(
         userId: string,
         dto: UploadResumeDTO,
@@ -28,7 +37,7 @@ class ResumeService {
         }
 
         return resumeRepository.create({
-            title: dto.title,
+            title: dto.title || path.parse(originalName).name,
             user: {
                 connect: {
                     id: userId,

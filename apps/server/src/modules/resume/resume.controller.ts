@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import fs from "node:fs/promises";
 
 import resumeService from "./resume.service.js";
 import { uploadResumeSchema } from "./resume.validators.js";
@@ -12,6 +13,20 @@ function getParamId(req: Request): string | null {
 }
 
 class ResumeController {
+    async preview(req: Request, res: Response) {
+        const file = req.file;
+        if (!file) {
+            return res.status(400).json({ success: false, message: "Resume file is required" });
+        }
+
+        try {
+            const result = await resumeService.parseFile(file.path, file.originalname);
+            return res.status(200).json({ success: true, data: result });
+        } finally {
+            await fs.unlink(file.path).catch(() => undefined);
+        }
+    }
+
     async create(req: Request, res: Response) {
         const body = uploadResumeSchema.parse(req.body);
 

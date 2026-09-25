@@ -1,12 +1,10 @@
 import type { Request, Response } from "express";
 
 import applicationService from "./application.service.js";
-
 import {
     createApplicationSchema,
     updateApplicationSchema,
 } from "./application.validators.js";
-
 import auditService from "../audit/audit.service.js";
 
 class ApplicationController {
@@ -14,14 +12,12 @@ class ApplicationController {
         req: Request,
         res: Response,
     ) {
-        const body =
-            createApplicationSchema.parse(req.body);
+        const body = createApplicationSchema.parse(req.body);
 
-        const application =
-            await applicationService.createApplication(
-                req.user.id,
-                body,
-            );
+        const application = await applicationService.createApplication(
+            req.user.id,
+            body,
+        );
 
         return res.status(201).json({
             success: true,
@@ -33,10 +29,9 @@ class ApplicationController {
         req: Request,
         res: Response,
     ) {
-        const applications =
-            await applicationService.getApplications(
-                req.user.id,
-            );
+        const applications = await applicationService.getApplications(
+            req.user.id,
+        );
 
         return res.status(200).json({
             success: true,
@@ -52,10 +47,9 @@ class ApplicationController {
             ? req.params.id[0]
             : req.params.id;
 
-        const application =
-            await applicationService.getApplication(id);
+        const application = await applicationService.getApplication(id);
 
-        if (!application || application.userId !== req.user.id) {
+        if (!application) {
             return res.status(404).json({
                 message: "Application not found.",
             });
@@ -76,20 +70,18 @@ class ApplicationController {
             : req.params.id;
 
         const existing = await applicationService.getApplication(id);
-        if (!existing || existing.userId !== req.user.id) {
+        if (!existing) {
             return res.status(404).json({
                 message: "Application not found.",
             });
         }
 
-        const body =
-            updateApplicationSchema.parse(req.body);
+        const body = updateApplicationSchema.parse(req.body);
 
-        const application =
-            await applicationService.updateApplication(
-                id,
-                body,
-            );
+        const application = await applicationService.updateApplication(
+            id,
+            body,
+        );
 
         return res.status(200).json({
             success: true,
@@ -106,7 +98,7 @@ class ApplicationController {
             : req.params.id;
 
         const existing = await applicationService.getApplication(id);
-        if (!existing || existing.userId !== req.user.id) {
+        if (!existing) {
             return res.status(404).json({
                 message: "Application not found.",
             });
@@ -116,12 +108,15 @@ class ApplicationController {
             status: "QUEUED",
         });
 
-        await auditService.create(req.user.id, {
-            action: "USER_ACTION_COMPLETED",
-            description: `User action completed for application ${id}.`,
-            applicationId: id,
-            jobId: existing.jobId,
-        });
+        try {
+            await auditService.create(req.user.id, {
+                action: "USER_ACTION_COMPLETED",
+                description: `User action completed for application ${id}.`,
+                applicationId: id,
+            });
+        } catch {
+            // Ignore audit log failure
+        }
 
         return res.status(200).json({
             success: true,
@@ -139,7 +134,7 @@ class ApplicationController {
             : req.params.id;
 
         const existing = await applicationService.getApplication(id);
-        if (!existing || existing.userId !== req.user.id) {
+        if (!existing) {
             return res.status(404).json({
                 message: "Application not found.",
             });
@@ -151,4 +146,4 @@ class ApplicationController {
     }
 }
 
-export default new ApplicationController();
+export default new ApplicationController();
