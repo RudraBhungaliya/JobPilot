@@ -5,8 +5,27 @@ import {
     createJobSchema,
     updateJobSchema,
 } from "./job.validators.js";
+import sourceRegistry from "../sources/source.registry.js";
 
 class JobController {
+    async discover(req: Request, res: Response) {
+        const keyword = typeof req.query.keyword === "string" ? req.query.keyword : "software engineer";
+        const location = typeof req.query.location === "string" ? req.query.location : "Bengaluru";
+        const remote = req.query.remote === "true";
+
+        const jobs = await sourceRegistry.getService().search({ keyword, location, remote });
+
+        return res.status(200).json({
+            success: true,
+            data: jobs,
+            meta: {
+                location,
+                sources: sourceRegistry.getService().getSources(),
+                fetchedAt: new Date().toISOString(),
+            },
+        });
+    }
+
     async create(
         req: Request,
         res: Response,

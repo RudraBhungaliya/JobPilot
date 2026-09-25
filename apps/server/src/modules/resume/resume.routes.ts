@@ -6,9 +6,21 @@ import resumeController from "./resume.controller.js";
 
 const upload = multer({
     dest: "uploads/resumes",
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, callback) => {
+        const extension = file.originalname.split(".").pop()?.toLowerCase();
+        callback(null, extension === "pdf" || extension === "docx" || extension === "txt");
+    },
 });
 
 const router = Router();
+
+// Preview parsing is intentionally ephemeral: the uploaded file is deleted after extraction.
+router.post(
+    "/preview",
+    upload.single("resume"),
+    resumeController.preview.bind(resumeController)
+);
 
 router.post(
     "/",
