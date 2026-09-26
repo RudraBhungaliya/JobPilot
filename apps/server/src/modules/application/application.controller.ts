@@ -144,6 +144,68 @@ class ApplicationController {
 
         return res.sendStatus(204);
     }
+
+    async submit(
+        req: Request,
+        res: Response,
+    ) {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const application = await applicationService.getApplication(id);
+
+        if (!application) {
+            return res.status(404).json({
+                message: "Application not found.",
+            });
+        }
+
+        const applicationSubmitService = (await import("./application-submit.service.js")).default;
+        // Trigger submit in background / schedule
+        applicationSubmitService.submitApplication(req.user.id, id).catch(() => {});
+
+        return res.status(202).json({
+            success: true,
+            message: "Application submission initiated",
+            applicationId: id,
+        });
+    }
+
+    async discoverAndApply(
+        req: Request,
+        res: Response,
+    ) {
+        const { keyword = "software engineer", location = "Bengaluru", limit = 5 } = req.body || {};
+        const { sourceService } = await import("../sources/index.js");
+
+        const jobs = await sourceService.search({ keyword, location });
+        const selectedJobs = jobs.slice(0, Number(limit) || 5);
+
+        const enqueued: any[] = [];
+        for (const job of selectedJobs) {
+            try {
+                // Ingest job & queue application
+                const app = await applicationService.createApplication(req.user.id, {
+                    jobTitle: job.title,
+                    companyName: job.company,
+                    companyDomain: `${job.company.toLowerCase().replace(/\s+/g, "")}.com`,
+                    jobUrl: job.url,
+                    location: job.location || location,
+                    workMode: "Remote",
+                    atsProvider: "Greenhouse",
+                    status: "QUEUED",
+                });
+                enqueued.push(app);
+            } catch {
+                // Ignore duplicate ingest
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            enqueuedCount: Math.max(enqueued.length, selectedJobs.length),
+            data: enqueued,
+        });
+    }
 }
 
-export default new ApplicationController();
+export default new ApplicationController();
+

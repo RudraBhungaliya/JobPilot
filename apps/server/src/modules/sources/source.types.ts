@@ -2,6 +2,7 @@ export interface SourceSearchInput {
     keyword: string;
     location?: string;
     remote?: boolean;
+    companyTier?: 'MNC' | 'SEMI_MNC' | 'STARTUP' | 'ALL';
 }
 
 export interface SourceJob {

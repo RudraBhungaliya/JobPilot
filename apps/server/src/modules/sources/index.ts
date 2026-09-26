@@ -38,6 +38,10 @@ export {
     default as workdaySource,
 } from "./workday.source.js";
 
+export {
+    default as jsearchSource,
+} from "./jsearch.source.js";
+
 export type {
     JobSource,
     SourceJob,

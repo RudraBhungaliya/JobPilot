@@ -58,16 +58,13 @@ class CandidateService {
       disability: profile?.disability,
       summary: profile?.summary,
       resumeText: resume?.extractedText,
-      skills: mergedSkills,
-      languages: profile?.languages?.map((language) => language.name) ?? [],
-      certifications:
-        profile?.certifications?.map((certification) => certification.name) ??
-        [],
-      experiences:
-        profile?.experiences?.map(
-          (experience) =>
-            `${experience.title} at ${experience.company}: ${experience.description ?? ""}`,
-        ) ?? [],
+      skills: mergedSkills.map((name) => ({ name })),
+      languages: (profile?.languages as any) ?? [],
+      certifications: (profile?.certifications as any) ?? [],
+      experiences: (profile?.experiences as any) ?? [],
+      educations: (profile?.educations as any) ?? [],
+      profileProjects: (profile?.profileProjects as any) ?? [],
+      profileLinks: (profile?.profileLinks as any) ?? [],
       education:
         profile?.educations?.map(
           (education) =>

@@ -1,41 +1,26 @@
-export interface BrowserSession {
-    sessionId: string;
+import type { Browser, BrowserContext } from "playwright";
 
-    userId: string;
-
-    connected: boolean;
-
-    createdAt: Date;
+export interface PooledContext {
+  id: string;
+  context: BrowserContext;
+  browser: Browser;
+  acquiredAt: number;
+  released: boolean;
 }
 
-export interface BrowserLaunchOptions {
-    headless?: boolean;
-
-    slowMo?: number;
+export interface AcquireResult {
+  context: BrowserContext;
+  browser: Browser;
+  release: () => Promise<void>;
 }
 
-export interface BrowserPageInfo {
-    url: string;
-
-    title: string;
+export interface BrowserPoolStats {
+  size: number;
+  available: number;
+  inUse: number;
 }
 
-export interface JobPosting {
-    title: string;
-
-    company: string;
-
-    location: string;
-
-    description: string;
-
-    url: string;
-
-    platform:
-        | "linkedin"
-        | "greenhouse"
-        | "lever"
-        | "workday"
-        | "ashby"
-        | "indeed";
-}
+export type BrowserCtxFactory = () => Promise<{
+  browser: Browser;
+  context: BrowserContext;
+}>;

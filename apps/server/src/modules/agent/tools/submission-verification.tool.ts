@@ -82,6 +82,26 @@ class SubmissionVerificationTool {
       };
     }
 
+    // TR-14.3: Already applied detection
+    const alreadyAppliedMessages = [
+      "already applied",
+      "you have already applied",
+      "application already exists",
+      "you have submitted an application",
+      "already submitted an application",
+      "previously applied",
+    ];
+
+    const matchedAlreadyApplied = alreadyAppliedMessages.find((message) => bodyText.includes(message));
+
+    if (matchedAlreadyApplied) {
+      return {
+        verified: false,
+        reason: "already applied",
+        confirmationUrl,
+      };
+    }
+
     const errorMessages = [
       "required field",
       "this field is required",

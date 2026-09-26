@@ -44,6 +44,20 @@ router.post(
     ),
 );
 
+router.post(
+    "/discover-and-apply",
+    applicationController.discoverAndApply.bind(
+        applicationController,
+    ),
+);
+
+router.post(
+    "/:id/submit",
+    applicationController.submit.bind(
+        applicationController,
+    ),
+);
+
 router.delete(
     "/:id",
     applicationController.delete.bind(

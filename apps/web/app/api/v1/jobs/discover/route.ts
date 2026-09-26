@@ -14,239 +14,196 @@ export interface LiveJobItem {
   tags: string[];
 }
 
-const DISCOVERY_DATABASE: LiveJobItem[] = [
-  // S-Tier MNCs (Top Priority)
-  {
-    externalId: "gh-goog-01",
-    title: "Senior Staff Software Engineer - Cloud AI & Distributed Storage",
-    company: "Google",
-    url: "https://boards.greenhouse.io/google/jobs/5829104",
-    location: "Bengaluru, India / Mountain View, CA",
-    description: "Build next-generation distributed storage and cluster management systems powering Gemini and Vertex AI large scale inference pipelines.",
-    source: "greenhouse",
-    tier: "S",
-    salaryRange: "$260,000 – $340,000",
-    tags: ["Distributed Systems", "Kubernetes", "Go", "Borg", "Large Scale Inference", "PostgreSQL"],
-  },
-  {
-    externalId: "gh-strp-01",
-    title: "Staff Infrastructure Engineer - Global Payments Core",
-    company: "Stripe",
-    url: "https://boards.greenhouse.io/stripe/jobs/4910283",
-    location: "Remote (Global) / San Francisco, CA",
-    description: "Design high-reliability distributed ledger architectures processing hundreds of billions in financial volume with five-nines uptime.",
-    source: "greenhouse",
-    tier: "S",
-    salaryRange: "$240,000 – $310,000",
-    tags: ["Distributed Systems", "Go", "Kafka", "PostgreSQL", "Idempotency", "System Design"],
-  },
-  {
-    externalId: "ash-msft-01",
-    title: "Principal Distributed Systems Architect - Azure Core",
-    company: "Microsoft",
-    url: "https://jobs.ashbyhq.com/microsoft/d91a-4712",
-    location: "Bengaluru, India / Redmond, WA",
-    description: "Architect high-throughput, low-latency microservices and edge compute fabrics running hyper-scale enterprise infrastructure.",
-    source: "ashby",
-    tier: "S",
-    salaryRange: "$230,000 – $295,000",
-    tags: ["Distributed Systems", "Azure", "Go", "Kubernetes", "High Availability", "Kafka"],
-  },
-  {
-    externalId: "gh-nvda-01",
-    title: "Senior CUDA Systems Engineer - TensorRT & Accelerated Computing",
-    company: "NVIDIA",
-    url: "https://boards.greenhouse.io/nvidia/jobs/7102941",
-    location: "Bengaluru, India / Santa Clara, CA",
-    description: "Develop ultra-low latency inference engines and deep memory hierarchy optimizations for Blackwell architectures.",
-    source: "greenhouse",
-    tier: "S",
-    salaryRange: "$220,000 – $290,000",
-    tags: ["CUDA", "C++", "TensorRT", "GPU Architecture", "Deep Learning Compilers", "Distributed Systems"],
-  },
-  {
-    externalId: "ash-open-01",
-    title: "Research Systems Engineer - Inference & Training Infrastructure",
-    company: "OpenAI",
-    url: "https://jobs.ashbyhq.com/openai/9182-4112",
-    location: "San Francisco, CA / Remote",
-    description: "Frontier systems engineer specializing in low-overhead collective communications and petabyte-scale training checkpointing.",
-    source: "ashby",
-    tier: "S",
-    salaryRange: "$270,000 – $360,000",
-    tags: ["Distributed Systems", "PyTorch", "CUDA", "C++", "High Concurrency", "Python"],
-  },
-  {
-    externalId: "gh-meta-01",
-    title: "Production Engineer - AI Systems & PyTorch Core",
-    company: "Meta",
-    url: "https://boards.greenhouse.io/meta/jobs/6192834",
-    location: "Menlo Park, CA / London, UK / Hybrid",
-    description: "Optimize large model GPU clusters, network fabrics, and kernel performance across thousands of H100 GPU nodes.",
-    source: "greenhouse",
-    tier: "S",
-    salaryRange: "$250,000 – $320,000",
-    tags: ["Distributed Systems", "Python", "C++", "PyTorch", "Kernel Optimization", "Linux"],
-  },
+interface TargetBoard {
+  company: string;
+  type: "greenhouse" | "ashby" | "lever";
+  slug: string;
+  tier: "S" | "A" | "B" | "C";
+  defaultSalary: string;
+}
 
-  // A-Tier MNCs (Second Priority)
-  {
-    externalId: "gh-spot-01",
-    title: "Staff Backend Engineer - Audio Streaming & Discovery Engine",
-    company: "Spotify",
-    url: "https://boards.greenhouse.io/spotify/jobs/5201948",
-    location: "Stockholm, Sweden / New York / Remote",
-    description: "Scale high-performance event-driven streaming pipelines serving 600M+ active listeners with sub-100ms recommendation latency.",
-    source: "greenhouse",
-    tier: "A",
-    salaryRange: "$210,000 – $270,000",
-    tags: ["Distributed Systems", "Go", "Kafka", "Microservices", "gRPC", "Low Latency"],
-  },
-  {
-    externalId: "lev-atls-01",
-    title: "Senior Full Stack Engineer - Jira Enterprise Cloud",
-    company: "Atlassian",
-    url: "https://jobs.lever.co/atlassian/8210394",
-    location: "Bengaluru, India / Sydney, Australia / Remote",
-    description: "Develop resilient real-time collaboration engines and canvas components powering 300,000+ enterprise teams worldwide.",
-    source: "lever",
-    tier: "A",
-    salaryRange: "$190,000 – $250,000",
-    tags: ["React", "TypeScript", "Next.js", "GraphQL", "Microservices", "Docker"],
-  },
-  {
-    externalId: "gh-cflr-01",
-    title: "Senior Edge Infrastructure Engineer - Workers KV & R2",
-    company: "Cloudflare",
-    url: "https://boards.greenhouse.io/cloudflare/jobs/4820192",
-    location: "Austin, TX / London / Remote",
-    description: "Scale globally distributed key-value stores and edge caching across 300+ PoPs worldwide with Rust and eBPF.",
-    source: "greenhouse",
-    tier: "A",
-    salaryRange: "$200,000 – $260,000",
-    tags: ["Rust", "eBPF", "Distributed Systems", "DNS / BGP", "Distributed Caching"],
-  },
-  {
-    externalId: "ash-figm-01",
-    title: "Systems Engineer - WebGL & Multiplayer Canvas Engine",
-    company: "Figma",
-    url: "https://jobs.ashbyhq.com/figma/6102-1823",
-    location: "San Francisco, CA / New York / Hybrid",
-    description: "Design real-time CRDT synchronization protocols and GPU-accelerated rendering pipelines in C++ and WebAssembly.",
-    source: "ashby",
-    tier: "A",
-    salaryRange: "$220,000 – $280,000",
-    tags: ["TypeScript", "C++", "Rust", "WebAssembly", "CRDT Sync", "WebGL"],
-  },
-  {
-    externalId: "lev-coin-01",
-    title: "Senior Blockchain Platform Engineer - Layer 2 & Base Infrastructure",
-    company: "Coinbase",
-    url: "https://jobs.lever.co/coinbase/3910284",
-    location: "Remote (US/India/EMEA)",
-    description: "Build robust node clustering, rollups validation, and low-latency transaction routing fabrics for cryptographic settlement.",
-    source: "lever",
-    tier: "A",
-    salaryRange: "$215,000 – $275,000",
-    tags: ["Go", "Distributed Systems", "Cryptography", "Kubernetes", "PostgreSQL"],
-  },
+const TARGET_BOARDS: TargetBoard[] = [
+  // S-Tier MNCs
+  { company: "OpenAI", type: "ashby", slug: "openai", tier: "S", defaultSalary: "$260,000 – $380,000" },
+  { company: "Stripe", type: "greenhouse", slug: "stripe", tier: "S", defaultSalary: "$240,000 – $330,000" },
+  { company: "Databricks", type: "greenhouse", slug: "databricks", tier: "S", defaultSalary: "$250,000 – $340,000" },
+  { company: "Palantir", type: "lever", slug: "palantir", tier: "S", defaultSalary: "$230,000 – $310,000" },
+  { company: "GitHub", type: "greenhouse", slug: "github", tier: "S", defaultSalary: "$220,000 – $300,000" },
+  { company: "Discord", type: "greenhouse", slug: "discord", tier: "S", defaultSalary: "$210,000 – $290,000" },
 
-  // B-Tier Semi-MNCs (Third Priority)
-  {
-    externalId: "gh-rzrp-01",
-    title: "Lead Platform Engineer - Banking Core & UPI Switch",
-    company: "Razorpay",
-    url: "https://boards.greenhouse.io/razorpay/jobs/8201923",
-    location: "Bengaluru, Karnataka, India",
-    description: "Engineer high-frequency payment switches handling 10,000+ TPS with zero-downtime ledger consistency.",
-    source: "greenhouse",
-    tier: "B",
-    salaryRange: "₹45,00,000 – ₹70,00,000",
-    tags: ["Go", "Distributed Systems", "Kafka", "PostgreSQL", "UPI Architecture", "High TPS"],
-  },
-  {
-    externalId: "gh-post-01",
-    title: "Staff Software Engineer - API Runtime & Mocking Engine",
-    company: "Postman",
-    url: "https://boards.greenhouse.io/postman/jobs/3820192",
-    location: "Bengaluru, India / San Francisco / Remote",
-    description: "Scale the developer tool runtime used by 30+ million developers worldwide to design, test, and mock distributed APIs.",
-    source: "greenhouse",
-    tier: "B",
-    salaryRange: "$180,000 – $230,000",
-    tags: ["TypeScript", "Node.js", "Distributed Systems", "gRPC", "V8 Engine"],
-  },
-  {
-    externalId: "ash-supa-01",
-    title: "Senior Database Engineer - Postgres Realtime & Edge Functions",
-    company: "Supabase",
-    url: "https://jobs.ashbyhq.com/supabase/8192-3112",
-    location: "Remote (Global)",
-    description: "Extend open-source PostgreSQL with replication daemons, tenant isolation, and WebAssembly runtime integration.",
-    source: "ashby",
-    tier: "B",
-    salaryRange: "$170,000 – $220,000",
-    tags: ["PostgreSQL", "Elixir", "Rust", "TypeScript", "Realtime WebSocket", "Docker"],
-  },
-  {
-    externalId: "gh-vrc-01",
-    title: "Staff Edge Runtime Engineer - Next.js & Turbopack",
-    company: "Vercel",
-    url: "https://boards.greenhouse.io/vercel/jobs/5920192",
-    location: "Remote (Global)",
-    description: "Improve compilation speeds, bundler heuristics, and serverless compute primitives for modern web frameworks.",
-    source: "greenhouse",
-    tier: "B",
-    salaryRange: "$190,000 – $250,000",
-    tags: ["Rust", "Next.js", "TypeScript", "V8 Isolates", "Edge Runtime"],
-  },
-  {
-    externalId: "lev-lin-01",
-    title: "Product Engineer - Realtime Collaboration & Offline Sync",
-    company: "Linear",
-    url: "https://jobs.lever.co/linear/4920183",
-    location: "Remote (US/EU/Global)",
-    description: "Craft ultra-responsive, keyboard-first issue tracking software with instant optimistic updates and SQLite sync.",
-    source: "lever",
-    tier: "B",
-    salaryRange: "$180,000 – $240,000",
-    tags: ["TypeScript", "React", "SQLite", "CRDT", "WebSockets"],
-  },
+  // A-Tier Major Tech
+  { company: "Figma", type: "greenhouse", slug: "figma", tier: "A", defaultSalary: "$220,000 – $290,000" },
+  { company: "Cloudflare", type: "greenhouse", slug: "cloudflare", tier: "A", defaultSalary: "$200,000 – $270,000" },
+  { company: "Airbnb", type: "greenhouse", slug: "airbnb", tier: "A", defaultSalary: "$215,000 – $285,000" },
+  { company: "Ramp", type: "ashby", slug: "ramp", tier: "A", defaultSalary: "$210,000 – $275,000" },
+  { company: "GitLab", type: "greenhouse", slug: "gitlab", tier: "A", defaultSalary: "$190,000 – $260,000" },
+  { company: "MongoDB", type: "greenhouse", slug: "mongodb", tier: "A", defaultSalary: "$195,000 – $265,000" },
+  { company: "Elastic", type: "greenhouse", slug: "elastic", tier: "A", defaultSalary: "$185,000 – $250,000" },
 
-  // C-Tier Remote Startups (Fourth Priority)
-  {
-    externalId: "ash-rsnd-01",
-    title: "Full Stack Engineer - Email Infrastructure & SDKs",
-    company: "Resend",
-    url: "https://jobs.ashbyhq.com/resend/1029-4829",
-    location: "Remote (Global)",
-    description: "Build clean, developer-friendly transactional email APIs and React email components for modern applications.",
-    source: "ashby",
-    tier: "C",
-    salaryRange: "$140,000 – $180,000",
-    tags: ["React", "Next.js", "TypeScript", "SMTP / DNS", "Serverless Edge"],
-  },
-  {
-    externalId: "gh-calc-01",
-    title: "Senior Frontend Engineer - Open Source Scheduling",
-    company: "Cal.com",
-    url: "https://boards.greenhouse.io/calcom/jobs/2910283",
-    location: "Remote (Global)",
-    description: "Create seamless calendar booking workflows, timezone algorithms, and video integration extensions.",
-    source: "greenhouse",
-    tier: "C",
-    salaryRange: "$130,000 – $170,000",
-    tags: ["TypeScript", "Next.js", "React", "Prisma", "TailwindCSS"],
-  },
+  // B-Tier High-Growth / Semi-MNC
+  { company: "Supabase", type: "ashby", slug: "supabase", tier: "B", defaultSalary: "$170,000 – $230,000" },
+  { company: "Linear", type: "ashby", slug: "linear", tier: "B", defaultSalary: "$180,000 – $240,000" },
+  { company: "Sentry", type: "ashby", slug: "sentry", tier: "B", defaultSalary: "$175,000 – $235,000" },
+  { company: "Spotify", type: "lever", slug: "spotify", tier: "B", defaultSalary: "$180,000 – $240,000" },
+  { company: "Reddit", type: "greenhouse", slug: "reddit", tier: "B", defaultSalary: "$185,000 – $245,000" },
+
+  // C-Tier Fast-Paced Startups
+  { company: "Resend", type: "ashby", slug: "resend", tier: "C", defaultSalary: "$140,000 – $190,000" },
+  { company: "Cal.com", type: "greenhouse", slug: "calcom", tier: "C", defaultSalary: "$130,000 – $180,000" },
+  { company: "Raycast", type: "ashby", slug: "raycast", tier: "C", defaultSalary: "$145,000 – $195,000" },
 ];
+
+const SKILL_KEYWORDS = [
+  "TypeScript", "JavaScript", "React", "Next.js", "Node.js", "Python", "Go", "Golang",
+  "Rust", "Java", "C++", "Kubernetes", "Docker", "AWS", "GCP", "Azure", "PostgreSQL",
+  "Distributed Systems", "Kafka", "GraphQL", "REST", "Microservices", "CI/CD",
+  "Machine Learning", "LLM", "PyTorch", "High Throughput", "Security", "Infra"
+];
+
+function extractTags(text: string, title: string): string[] {
+  const combined = `${title} ${text}`.toLowerCase();
+  const found = new Set<string>();
+
+  for (const skill of SKILL_KEYWORDS) {
+    if (combined.includes(skill.toLowerCase())) {
+      found.add(skill === "Golang" ? "Go" : skill);
+    }
+  }
+
+  if (found.size === 0) {
+    found.add("Software Engineering");
+    found.add("Full Stack");
+    found.add("Backend");
+  }
+
+  return Array.from(found).slice(0, 6);
+}
+
+// In-memory cache to prevent spamming live ATS APIs
+let cachedJobs: LiveJobItem[] = [];
+let lastFetchedTimestamp = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
+async function fetchWithTimeout(url: string, timeoutMs = 4500): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "JobPilot-LiveCrawler/2.0 (+https://jobpilot.ai/bot)",
+        Accept: "application/json, text/plain, */*",
+      },
+      next: { revalidate: 300 },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchBoard(board: TargetBoard): Promise<LiveJobItem[]> {
+  try {
+    if (board.type === "greenhouse") {
+      const res = await fetchWithTimeout(`https://boards-api.greenhouse.io/v1/boards/${board.slug}/jobs`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!Array.isArray(data.jobs)) return [];
+
+      return data.jobs.map((job: any) => ({
+        externalId: `gh-${board.slug}-${job.id}`,
+        title: job.title || "Software Engineer",
+        company: board.company,
+        url: job.absolute_url,
+        location: job.location?.name || "Global / Remote",
+        description: `${job.title} at ${board.company}. Verified active opening on Greenhouse ATS.`,
+        source: "greenhouse" as const,
+        tier: board.tier,
+        salaryRange: board.defaultSalary,
+        tags: extractTags(job.title || "", job.title || ""),
+      }));
+    }
+
+    if (board.type === "ashby") {
+      const res = await fetchWithTimeout(`https://api.ashbyhq.com/posting-api/job-board/${board.slug}`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!Array.isArray(data.jobs)) return [];
+
+      return data.jobs.map((job: any) => ({
+        externalId: `ash-${board.slug}-${job.id}`,
+        title: job.title || "Software Engineer",
+        company: board.company,
+        url: job.jobUrl,
+        location: job.location || (job.isRemote ? "Remote" : "Global / Remote"),
+        description: (job.descriptionPlain || job.title || "").slice(0, 300),
+        source: "ashby" as const,
+        tier: board.tier,
+        salaryRange: board.defaultSalary,
+        tags: extractTags(job.descriptionPlain || "", job.title || ""),
+      }));
+    }
+
+    if (board.type === "lever") {
+      const res = await fetchWithTimeout(`https://api.lever.co/v0/postings/${board.slug}?mode=json`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!Array.isArray(data)) return [];
+
+      return data.map((job: any) => ({
+        externalId: `lev-${board.slug}-${job.id}`,
+        title: job.text || "Software Engineer",
+        company: board.company,
+        url: job.hostedUrl,
+        location: job.categories?.location || "Remote",
+        description: (job.descriptionPlain || job.text || "").slice(0, 300),
+        source: "lever" as const,
+        tier: board.tier,
+        salaryRange: board.defaultSalary,
+        tags: extractTags(job.descriptionPlain || "", job.text || ""),
+      }));
+    }
+  } catch (err) {
+    // If individual company fetch fails or times out, proceed gracefully
+  }
+  return [];
+}
+
+async function getLiveJobs(): Promise<LiveJobItem[]> {
+  const now = Date.now();
+  if (cachedJobs.length > 0 && now - lastFetchedTimestamp < CACHE_TTL_MS) {
+    return cachedJobs;
+  }
+
+  const results = await Promise.allSettled(TARGET_BOARDS.map((b) => fetchBoard(b)));
+  const allFetched: LiveJobItem[] = [];
+
+  for (const res of results) {
+    if (res.status === "fulfilled" && Array.isArray(res.value)) {
+      allFetched.push(...res.value);
+    }
+  }
+
+  if (allFetched.length > 0) {
+    cachedJobs = allFetched;
+    lastFetchedTimestamp = now;
+  }
+
+  return cachedJobs;
+}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const keyword = (searchParams.get("keyword") || "").toLowerCase().trim();
   const location = (searchParams.get("location") || "").toLowerCase().trim();
   const tier = searchParams.get("tier");
+  const forceRefresh = searchParams.get("refresh") === "true";
 
-  let results = DISCOVERY_DATABASE;
+  if (forceRefresh) {
+    lastFetchedTimestamp = 0;
+  }
+
+  const allJobs = await getLiveJobs();
+  let results = allJobs;
 
   if (keyword) {
     results = results.filter(
@@ -274,7 +231,7 @@ export async function GET(request: Request) {
     (a, b) => (tierOrder[a.tier || "C"] ?? 3) - (tierOrder[b.tier || "C"] ?? 3)
   );
 
-  const formattedResults = results.map((job) => {
+  const formattedResults = results.slice(0, 100).map((job) => {
     const chance = calculateSelectionChance(
       {
         jobTitle: job.title,
@@ -289,14 +246,18 @@ export async function GET(request: Request) {
       ...job,
       matchScore: chance.overallPercentage,
       selectionChance: chance,
+      verifiedLive: true,
     };
   });
 
   return NextResponse.json({
+    success: true,
     data: formattedResults,
     meta: {
       fetchedAt: new Date().toISOString(),
-      total: formattedResults.length,
+      totalVerified: allJobs.length,
+      returnedCount: formattedResults.length,
+      isLiveAts: true,
       tiers: {
         S: formattedResults.filter((r) => r.tier === "S").length,
         A: formattedResults.filter((r) => r.tier === "A").length,

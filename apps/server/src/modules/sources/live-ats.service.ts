@@ -1,4 +1,12 @@
 import type { SourceJob, SourceSearchInput } from "./source.types.js";
+import {
+    INDIAN_LOCATION_ALIASES,
+    canonicalizeLocation,
+    normalizeLocation,
+    getAllGreenhouseCompanies,
+    getAllAshbyCompanies,
+    getAllLeverCompanies,
+} from "./curated-companies.constants.js";
 
 interface GreenhouseJobRaw {
     id: number | string;
@@ -54,55 +62,46 @@ interface RemoteOkJobRaw {
     description?: string;
 }
 
-const GREENHOUSE_COMPANIES = [
-    "stripe",
-    "figma",
-    "airbnb",
-    "pinterest",
-    "cloudflare",
-    "github",
-    "databricks",
-    "doordash",
-    "instacart",
-    "automattic",
-    "discord",
-    "reddit",
-    "gitlab",
-    "elastic",
-    "mongodb",
-    "twilio",
-    "okta",
-    "hashicorp",
-];
-
-const ASHBY_COMPANIES = [
-    "openai",
-    "linear",
-    "ramp",
-    "retool",
-    "notion",
-    "vercel",
-    "cursor",
-    "supabase",
-    "sentry",
-    "resend",
-    "posthog",
-    "glean",
-    "monzo",
-];
-
-const LEVER_COMPANIES = [
-    "netflix",
-    "spotify",
-    "canva",
-    "palantir",
-    "twitch",
-    "atlassian",
-];
-
 class LiveAtsService {
     private cache = new Map<string, { timestamp: number; jobs: SourceJob[] }>();
     private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
+    private normalizeLocationForMatch(loc: string): string {
+        return normalizeLocation(loc);
+    }
+
+    public normalizeLocationQuery(loc: string): string {
+        return normalizeLocation(loc);
+    }
+
+    private isRemoteLocation(loc: string): boolean {
+        const lower = loc.toLowerCase();
+        return (
+            lower.includes("remote") ||
+            lower.includes("global") ||
+            lower.includes("anywhere") ||
+            lower.includes("worldwide") ||
+            lower.includes("wfh") ||
+            lower.includes("work from home")
+        );
+    }
+
+    private isIndiaLocation(loc: string): boolean {
+        const lower = loc.toLowerCase();
+        if (lower.includes("india")) return true;
+        const canonical = canonicalizeLocation(lower);
+        if (canonical) {
+            for (const indianHub of Object.keys(INDIAN_LOCATION_ALIASES)) {
+                if (canonical === indianHub) return true;
+            }
+        }
+        for (const aliases of Object.values(INDIAN_LOCATION_ALIASES)) {
+            for (const alias of aliases) {
+                if (lower.includes(alias.toLowerCase())) return true;
+            }
+        }
+        return false;
+    }
 
     private async fetchWithTimeout(url: string, timeoutMs = 4000): Promise<Response> {
         const controller = new AbortController();
@@ -121,8 +120,10 @@ class LiveAtsService {
     }
 
     async searchGreenhouse(input: SourceSearchInput): Promise<SourceJob[]> {
-        const requestedCompany = this.extractCompanyFromInput(input.keyword, GREENHOUSE_COMPANIES);
-        const companiesToQuery = requestedCompany ? [requestedCompany] : GREENHOUSE_COMPANIES.slice(0, 5);
+        const tier = input.companyTier ?? 'ALL';
+        const allCompanies = getAllGreenhouseCompanies(tier as 'MNC' | 'SEMI_MNC' | 'ALL');
+        const requestedCompany = this.extractCompanyFromInput(input.keyword, allCompanies);
+        const companiesToQuery = requestedCompany ? [requestedCompany] : allCompanies.slice(0, 5);
         const allJobs: SourceJob[] = [];
 
         await Promise.allSettled(
@@ -162,8 +163,10 @@ class LiveAtsService {
     }
 
     async searchAshby(input: SourceSearchInput): Promise<SourceJob[]> {
-        const requestedCompany = this.extractCompanyFromInput(input.keyword, ASHBY_COMPANIES);
-        const companiesToQuery = requestedCompany ? [requestedCompany] : ASHBY_COMPANIES.slice(0, 5);
+        const tier = input.companyTier ?? 'ALL';
+        const allCompanies = getAllAshbyCompanies(tier as 'MNC' | 'SEMI_MNC' | 'ALL');
+        const requestedCompany = this.extractCompanyFromInput(input.keyword, allCompanies);
+        const companiesToQuery = requestedCompany ? [requestedCompany] : allCompanies.slice(0, 5);
         const allJobs: SourceJob[] = [];
 
         await Promise.allSettled(
@@ -203,8 +206,10 @@ class LiveAtsService {
     }
 
     async searchLever(input: SourceSearchInput): Promise<SourceJob[]> {
-        const requestedCompany = this.extractCompanyFromInput(input.keyword, LEVER_COMPANIES);
-        const companiesToQuery = requestedCompany ? [requestedCompany] : LEVER_COMPANIES.slice(0, 4);
+        const tier = input.companyTier ?? 'ALL';
+        const allCompanies = getAllLeverCompanies(tier as 'MNC' | 'SEMI_MNC' | 'ALL');
+        const requestedCompany = this.extractCompanyFromInput(input.keyword, allCompanies);
+        const companiesToQuery = requestedCompany ? [requestedCompany] : allCompanies.slice(0, 4);
         const allJobs: SourceJob[] = [];
 
         await Promise.allSettled(
@@ -341,35 +346,69 @@ class LiveAtsService {
         const keyword = (input.keyword || "").toLowerCase().trim();
         const terms = keyword.split(/\s+/).filter((t) => t.length > 1);
         const remoteOnly = input.remote === true;
-        const requestedLoc = (input.location || "").toLowerCase().trim();
+        const requestedLocRaw = (input.location || "").trim();
+        const requestedLocLower = requestedLocRaw.toLowerCase();
+        const requestedLoc = requestedLocRaw ? this.normalizeLocationForMatch(requestedLocRaw) : "";
         const isUsRequested = requestedLoc === "us" || requestedLoc === "usa" || requestedLoc.includes("united states");
+        const isGlobalRemoteRequested = requestedLocLower === "global remote";
+        const isRemoteIndiaRequested = requestedLocLower === "remote india";
 
         return jobs.filter((job) => {
-            const loc = (job.location || "").toLowerCase();
+            const jobLocRaw = job.location || "";
+            const jobLocLower = jobLocRaw.toLowerCase();
+            const jobLoc = this.normalizeLocationForMatch(jobLocRaw);
 
-            if (remoteOnly && !loc.includes("remote") && !loc.includes("global") && !loc.includes("anywhere")) {
+            if (remoteOnly && !this.isRemoteLocation(jobLocRaw)) {
                 return false;
+            }
+
+            if (isGlobalRemoteRequested && !this.isRemoteLocation(jobLocRaw)) {
+                return false;
+            }
+
+            if (isRemoteIndiaRequested) {
+                if (!this.isRemoteLocation(jobLocRaw)) {
+                    return false;
+                }
+                if (!this.isIndiaLocation(jobLocRaw)) {
+                    const stripped = jobLocLower
+                        .replace(/remote|global|anywhere|worldwide|wfh|work from home|,|\/|-|\(|\)/g, " ")
+                        .trim();
+                    if (stripped.length > 0) {
+                        return false;
+                    }
+                }
             }
 
             if (isUsRequested) {
                 const isUsMatch =
-                    loc.includes("us") ||
-                    loc.includes("usa") ||
-                    loc.includes("united states") ||
-                    loc.includes("remote") ||
-                    loc.includes("global") ||
-                    loc.includes("anywhere");
+                    jobLocLower.includes("us") ||
+                    jobLocLower.includes("usa") ||
+                    jobLocLower.includes("united states") ||
+                    this.isRemoteLocation(jobLocRaw);
 
                 if (!isUsMatch) {
                     return false;
                 }
-            } else if (requestedLoc) {
-                // Career pages use both spellings; a Bengaluru search should not
-                // silently miss a locally listed "Bangalore" role.
-                const locationTerms = requestedLoc === "bengaluru" || requestedLoc === "bangalore"
-                    ? ["bengaluru", "bangalore"]
-                    : [requestedLoc];
-                if (!locationTerms.some((term) => loc.includes(term))) {
+            } else if (requestedLoc && !isGlobalRemoteRequested && !isRemoteIndiaRequested) {
+                let matched = false;
+
+                if (requestedLoc === jobLoc) {
+                    matched = true;
+                } else {
+                    const aliasesEntry = Object.entries(INDIAN_LOCATION_ALIASES).find(
+                        ([canonical]) => canonical === requestedLoc
+                    );
+                    if (aliasesEntry) {
+                        const [, aliases] = aliasesEntry;
+                        matched = aliases.some((alias) => jobLocLower.includes(alias.toLowerCase()));
+                    }
+                    if (!matched) {
+                        matched = jobLocLower.includes(requestedLoc);
+                    }
+                }
+
+                if (!matched) {
                     return false;
                 }
             }
@@ -410,4 +449,5 @@ class LiveAtsService {
     }
 }
 
+export { LiveAtsService };
 export default new LiveAtsService();

@@ -25,7 +25,8 @@ class DiscoverNode {
             }
 
             if (Array.isArray(context.skills)) {
-                candidateSkills.push(...context.skills);
+                const skillNames = context.skills.map((s: any) => typeof s === "string" ? s : s?.name || "").filter(Boolean);
+                candidateSkills.push(...skillNames);
             }
 
             // Extract technical keywords and title from resume text

@@ -25,13 +25,14 @@ export interface ResumeTailorInput {
 }
 
 export interface CoverLetterInput {
-    resumeText: string;
-
-    jobDescription: string;
-
-    company: string;
-
-    role: string;
+    resumeText?: string;
+    jobDescription?: string;
+    company?: string;
+    role?: string;
+    companyName?: string;
+    jobTitle?: string;
+    candidateName?: string;
+    candidateSkills?: string[];
 }
 
 export interface SelectorResult {
