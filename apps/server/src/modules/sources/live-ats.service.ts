@@ -1,6 +1,6 @@
 import type { SourceJob, SourceSearchInput } from "./source.types.js";
-import { prisma } from "@jobpilot/database";
 import locationPolicyService from "./location-policy.service.js";
+
 import {
     INDIAN_LOCATION_ALIASES,
     canonicalizeLocation,
@@ -894,6 +894,96 @@ class LiveAtsService {
             description: j.description,
             salary: j.salaryINR,
         }));
+    }
+
+    normalizeLocationForMatch(loc?: string): string {
+        const trimmed = (loc || "").trim().toLowerCase();
+        if (trimmed === "bangalore") return "bengaluru";
+        if (trimmed === "bombay") return "mumbai";
+        if (trimmed === "gurgaon" || trimmed === "gurugram" || trimmed === "noida" || trimmed === "delhi" || trimmed === "new delhi") {
+            return "delhi ncr";
+        }
+        if (trimmed === "calcutta") return "kolkata";
+        if (trimmed === "madras") return "chennai";
+        return trimmed;
+    }
+
+    isRemoteLocation(loc?: string): boolean {
+        const lower = (loc || "").toLowerCase();
+        if (lower.includes("on-site") || lower.includes("onsite")) {
+            return false;
+        }
+        return (
+            lower.includes("remote") ||
+            lower.includes("wfh") ||
+            lower.includes("work from home") ||
+            lower.includes("global") ||
+            lower.includes("worldwide") ||
+            lower.includes("anywhere") ||
+            lower.includes("distributed") ||
+            lower.includes("telecommute")
+        );
+    }
+
+    isIndiaLocation(loc?: string): boolean {
+        const lower = (loc || "").toLowerCase();
+        if (lower.includes("india")) return true;
+        const norm = this.normalizeLocationForMatch(loc);
+        if (norm === "delhi ncr" || norm === "bengaluru" || norm === "mumbai" || norm === "kolkata" || norm === "chennai") {
+            return true;
+        }
+        const indianTerms = [
+            "bangalore", "bengaluru", "mumbai", "bombay", "delhi", "gurgaon", "gurugram", 
+            "noida", "hyderabad", "pune", "chennai", "kolkata", "ahmedabad", "jaipur", 
+            "kochi", "karnataka", "maharashtra", "haryana", "uttar pradesh", "tamil nadu", "telangana"
+        ];
+        return indianTerms.some((term) => lower.includes(term));
+    }
+
+    filterJobs(jobs: SourceJob[], input: SourceSearchInput): SourceJob[] {
+        return jobs.filter((job) => {
+            if (input.remote && !this.isRemoteLocation(job.location)) {
+                return false;
+            }
+
+            if (input.location && input.location.trim().length > 0) {
+                const locTerm = input.location.trim().toLowerCase();
+                const jobLoc = (job.location || "").toLowerCase();
+
+                if (locTerm === "global remote") {
+                    if (!this.isRemoteLocation(job.location)) return false;
+                } else if (locTerm === "remote india") {
+                    if (!this.isRemoteLocation(job.location)) return false;
+                    const excludedCountries = ["united states", "us", "usa", "united kingdom", "uk", "canada", "germany", "europe", "australia"];
+                    if (excludedCountries.some((c) => jobLoc.includes(c))) {
+                        return false;
+                    }
+                } else {
+                    const normTarget = this.normalizeLocationForMatch(input.location);
+                    if (normTarget === "delhi ncr") {
+                        const delhiNcrKeywords = ["delhi", "noida", "gurgaon", "gurugram", "faridabad", "ghaziabad", "haryana", "uttar pradesh"];
+                        const matches = delhiNcrKeywords.some((k) => jobLoc.includes(k));
+                        if (!matches) return false;
+                    } else if (normTarget === "bengaluru") {
+                        const bglKeywords = ["bengaluru", "bangalore", "karnataka"];
+                        const matches = bglKeywords.some((k) => jobLoc.includes(k));
+                        if (!matches) return false;
+                    } else {
+                        const targetCity = normTarget;
+                        if (!jobLoc.includes(targetCity)) return false;
+                    }
+                }
+            }
+
+            if (input.keyword && input.keyword.trim().length > 0) {
+                const words = input.keyword.toLowerCase().trim().split(/\s+/).filter(Boolean);
+                const searchString = `${job.title} ${job.company} ${job.location} ${job.description}`.toLowerCase();
+                const matchesAll = words.every((w) => searchString.includes(w));
+                if (!matchesAll) return false;
+            }
+
+            return true;
+        });
     }
 
     async searchRemote(options?: SourceSearchInput): Promise<SourceJob[]> {

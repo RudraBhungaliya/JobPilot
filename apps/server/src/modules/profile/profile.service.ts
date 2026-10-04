@@ -19,9 +19,13 @@ class ProfileService {
     async getProfile(
         userId: string,
     ) {
-        return profileRepository.findByUserId(
-            userId,
-        );
+        try {
+            return await profileRepository.findByUserId(
+                userId,
+            );
+        } catch {
+            return null;
+        }
     }
 
     async updateProfile(

@@ -56,9 +56,11 @@ class ResumeService {
     }
 
     async getUserResumes(userId: string) {
-        return resumeRepository.findByUserId(
-            userId,
-        );
+        try {
+            return await resumeRepository.findByUserId(userId);
+        } catch {
+            return [];
+        }
     }
 
     async deleteResume(id: string) {

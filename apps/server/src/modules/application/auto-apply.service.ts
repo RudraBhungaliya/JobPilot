@@ -223,7 +223,7 @@ export class AutoApplyService {
 
         return {
             applicationId: application.id,
-            queueId: queueRecord.id,
+            queueId: queueRecord?.id || application.id,
             status: "QUEUED",
             job: {
                 id: job.id,
@@ -235,6 +235,7 @@ export class AutoApplyService {
             createdAt: application.createdAt,
         };
     }
+
 
     /**
      * Step 2: QueueWorker executes real ATS Auto-Apply lifecycle

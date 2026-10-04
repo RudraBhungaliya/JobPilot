@@ -54,14 +54,19 @@ class QueueWorker {
    * Race-safe markRunning: uses Prisma updateMany with WHERE status=QUEUED.
    */
   private async tryMarkRunningRaceSafe(jobId: string): Promise<any | null> {
-    const { prisma } = await import("@jobpilot/database");
-    const result = await (prisma as any).queueJob.updateMany({
-      where: { id: jobId, status: "QUEUED" },
-      data: { status: "RUNNING", attempts: { increment: 1 }, startedAt: new Date() },
-    });
-    if (result.count === 0) return null;
-    return queueService.getJob(jobId);
+    try {
+      const { prisma } = await import("@jobpilot/database");
+      const result = await prisma.queueJob.updateMany({
+        where: { id: jobId, status: "QUEUED" },
+        data: { status: "RUNNING", attempts: { increment: 1 }, startedAt: new Date() },
+      });
+      if (result.count === 0) return null;
+      return queueService.getJob(jobId);
+    } catch {
+      return queueService.getJob(jobId);
+    }
   }
+
 
   /**
    * Dispatch one job from QueueJob (agent runs) or ApplicationQueue
