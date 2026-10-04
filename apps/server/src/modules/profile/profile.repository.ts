@@ -42,11 +42,18 @@ class ProfileRepository {
         userId: string,
         data: UpdateProfileDTO,
     ) {
-        return prisma.profile.update({
+        return prisma.profile.upsert({
             where: {
                 userId,
             },
-            data,
+            create: {
+                ...data,
+                firstName: data.firstName || "Applicant",
+                lastName: data.lastName || "User",
+                phone: data.phone || "+91 9876543210",
+                userId,
+            },
+            update: data,
         });
     }
 
