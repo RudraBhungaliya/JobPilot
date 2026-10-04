@@ -130,6 +130,65 @@ class ApplicationController {
         });
     }
 
+    async autoApply(
+        req: Request,
+        res: Response,
+    ) {
+        try {
+            const { autoApplyService } = await import("./auto-apply.service.js");
+            const result = await autoApplyService.initiateAutoApply(
+                req.user.id,
+                req.body,
+            );
+
+            return res.status(202).json({
+                success: true,
+                message: "Application queued successfully for real-time auto-apply execution.",
+                data: result,
+            });
+        } catch (error: any) {
+            return res.status(400).json({
+                success: false,
+                message: error.message || "Failed to initiate auto-apply.",
+            });
+        }
+    }
+
+    async resolveCheckpoint(
+        req: Request,
+        res: Response,
+    ) {
+        try {
+            const id = Array.isArray(req.params.id)
+                ? req.params.id[0]
+                : req.params.id;
+
+            const existing = await applicationService.getApplication(id);
+            if (!existing || existing.userId !== req.user.id) {
+                return res.status(404).json({
+                    message: "Application not found.",
+                });
+            }
+
+            const { applicationQueueService } = await import("../queue/application-queue.service.js");
+            const updatedQueue = await applicationQueueService.resumeWaitingJob(
+                id,
+                req.body?.metadata,
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: "Verification checkpoint resolved. Application resumed.",
+                data: updatedQueue,
+            });
+        } catch (error: any) {
+            return res.status(400).json({
+                success: false,
+                message: error.message || "Failed to resolve checkpoint.",
+            });
+        }
+    }
+
     async delete(
         req: Request,
         res: Response,
