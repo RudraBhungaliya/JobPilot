@@ -20,11 +20,13 @@ export function errorMiddleware(
     if(err instanceof AppError){
         res.status(err.statusCode).json({
             success : false,
+            message : err.message,
             error : {
                 code : err.code,
                 message : err.message,
             },
         });
+        return;
     }
 
     console.error(err);

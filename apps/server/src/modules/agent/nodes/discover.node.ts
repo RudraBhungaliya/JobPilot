@@ -1,17 +1,15 @@
 import crypto from "crypto";
 import searchTool from "../tools/search.tool.js";
 import candidateTool from "../candidate/candidate.tool.js";
+import applicationRepository from "../../application/application.repository.js";
 
-import type {
-    AgentStateType,
-    AgentStateUpdate,
-} from "../graph/state.js";
+import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
 
 class DiscoverNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        const queries: string[] = [state.query];
+        const queries: string[] = state.query ? [state.query] : [];
         let remoteOnly = false;
         const candidateSkills: string[] = [];
 
@@ -27,34 +25,45 @@ class DiscoverNode {
             }
 
             if (Array.isArray(context.skills)) {
-                candidateSkills.push(...context.skills);
+                const skillNames = context.skills.map((s: any) => typeof s === "string" ? s : s?.name || "").filter(Boolean);
+                candidateSkills.push(...skillNames);
             }
 
-            // Extract technical keywords from resume text
+            // Extract technical keywords and title from resume text
             if (context.resumeText) {
-                const text = context.resumeText.toLowerCase();
-                const techKeywords = [
-                    "react", "typescript", "javascript", "node", "python", "go",
-                    "golang", "rust", "java", "c++", "docker", "kubernetes", "aws",
-                    "graphql", "sql", "postgresql", "mongodb", "next.js", "tailwind",
-                ];
-                for (const kw of techKeywords) {
-                    if (text.includes(kw) && !candidateSkills.includes(kw)) {
+                const resumeParser = (await import("../../resume/resume.parser.js")).default;
+                const keywords = resumeParser.extractKeywords(context.resumeText);
+                for (const kw of keywords) {
+                    if (!candidateSkills.includes(kw)) {
                         candidateSkills.push(kw);
                     }
                 }
             }
 
-            // Formulate targeted queries from resume skills
-            if (candidateSkills.length > 0) {
-                const topSkill = candidateSkills[0];
-                const combined = `${topSkill} ${state.query}`.trim();
-                if (!queries.includes(combined)) {
+            // If base query was empty or generic, use currentTitle or top skill
+            if (queries.length === 0) {
+                if (context.currentTitle) {
+                    queries.push(context.currentTitle);
+                } else if (candidateSkills.length > 0) {
+                    queries.push(`${candidateSkills[0]} developer`);
+                } else {
+                    queries.push("software engineer");
+                }
+            }
+
+            // Formulate targeted queries from top resume skills
+            const topSkills = candidateSkills.slice(0, 3);
+            for (const skill of topSkills) {
+                const combined = state.query ? `${skill} ${state.query}`.trim() : `${skill} developer`;
+                if (!queries.includes(combined) && queries.length < 3) {
                     queries.push(combined);
                 }
             }
         } catch {
             // Gracefully proceed with base query
+            if (queries.length === 0) {
+                queries.push(state.query || "software engineer");
+            }
         }
 
         // 2. Perform live search across queries
@@ -68,7 +77,7 @@ class DiscoverNode {
         );
 
         const seenUrls = new Set<string>();
-        const jobs = [];
+        const allJobs = [];
 
         for (const res of searchResults) {
             if (res.status !== "fulfilled") continue;
@@ -76,7 +85,7 @@ class DiscoverNode {
                 if (!rawJob.url || seenUrls.has(rawJob.url)) continue;
                 seenUrls.add(rawJob.url);
 
-                jobs.push({
+                allJobs.push({
                     id: crypto
                         .createHash("sha256")
                         .update(rawJob.url)
@@ -85,9 +94,29 @@ class DiscoverNode {
                     title: rawJob.title,
                     company: rawJob.company,
                     url: rawJob.url,
+                    description: rawJob.description,
+                    location: rawJob.location,
                 });
             }
         }
+
+        // 3. Filter out jobs the user already has a SUBMITTED application for
+        const filtered = await Promise.all(
+            allJobs.map(async (job) => {
+                const existing = await applicationRepository.findByUserAndJob(
+                    state.userId,
+                    job.id,
+                );
+
+                if (existing && existing.status === "SUBMITTED") {
+                    return null;
+                }
+
+                return job;
+            }),
+        );
+
+        const jobs = filtered.filter((j): j is NonNullable<typeof j> => j !== null);
 
         return {
             jobs,
@@ -95,7 +124,7 @@ class DiscoverNode {
             evaluated: false,
             history: [
                 ...state.history,
-                `Discovered ${jobs.length} live job openings across startups & MNCs for: ${queries.join(" | ")}`,
+                `Discovered ${jobs.length} live job openings across startups & MNCs for: ${queries.join(" | ")} (${allJobs.length - jobs.length} already applied, skipped).`,
             ],
         };
     }

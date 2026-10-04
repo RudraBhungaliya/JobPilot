@@ -1,11 +1,6 @@
-import {
-    randomUUID,
-} from "node:crypto";
+import { randomUUID } from "node:crypto";
 
-import {
-    agentGraph,
-} from "./graph/graph.js";
-
+import { agentGraph } from "./graph/graph.js";
 import agentRepository from "./agent.repository.js";
 import resumeService from "../resume/resume.service.js";
 import auditService from "../audit/audit.service.js";
@@ -163,9 +158,7 @@ class AgentService {
             };
         } catch (error) {
             const message =
-                error instanceof Error
-                    ? error.message
-                    : "Agent execution failed.";
+                error instanceof Error ? error.message : "Agent execution failed.";
 
             await agentRepository.updateRun(threadId, {
                 status: "FAILED",
@@ -185,31 +178,16 @@ class AgentService {
                 agentRunId: run.id,
             });
 
-            return {
-                threadId,
-                status: "FAILED",
-                history: [],
-                errors: [message],
-            };
+            return { threadId, status: "FAILED", history: [], errors: [message] };
         }
     }
 
-    async getRun(
-        userId: string,
-        threadId: string,
-    ) {
-        return agentRepository.getRun(
-            userId,
-            threadId,
-        );
+    async getRun(userId: string, threadId: string) {
+        return agentRepository.getRun(userId, threadId);
     }
 
-    async getRuns(
-        userId: string,
-    ) {
-        return agentRepository.getRuns(
-            userId,
-        );
+    async getRuns(userId: string) {
+        return agentRepository.getRuns(userId);
     }
 
     async findActiveRun(userId: string) {

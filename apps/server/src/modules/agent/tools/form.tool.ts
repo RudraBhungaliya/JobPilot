@@ -1,6 +1,8 @@
 import type { Page } from "playwright";
 
 import candidateTool from "../candidate/candidate.tool.js";
+import candidateService from "../candidate/candidate.service.js";
+import formQuestionAIService from "../../ai/form-question-ai.service.js";
 
 export interface FormField {
     selector: string;
@@ -72,6 +74,12 @@ class FormTool {
     ): Promise<FormFillResult[]> {
         const results: FormFillResult[] = [];
 
+        const profileContext = await candidateService.buildContext(
+            userId,
+            resumeId,
+        );
+        const resumeText = profileContext.resumeText || undefined;
+
         for (const field of fields) {
             if (
                 field.type === "hidden" ||
@@ -81,13 +89,41 @@ class FormTool {
                 continue;
             }
 
-            const answer =
+            let answer =
                 await candidateTool.answer(
                     userId,
                     field.name,
                     field.label,
                     resumeId,
                 );
+
+            if (
+                !answer.value &&
+                answer.source === "UNKNOWN"
+            ) {
+                const aiAnswer =
+                    await formQuestionAIService.answer({
+                        userId,
+                        profileContext,
+                        resumeText,
+                        question:
+                            field.label ||
+                            field.name,
+                        fieldLabel: field.label,
+                        fieldType: field.type,
+                    });
+
+                if (
+                    aiAnswer.grounded &&
+                    aiAnswer.value
+                ) {
+                    answer = {
+                        value: aiAnswer.value,
+                        source: "RESUME",
+                        confidence: "MEDIUM",
+                    };
+                }
+            }
 
             if (!answer.value) {
                 results.push({
@@ -97,7 +133,7 @@ class FormTool {
                     value: "",
                     filled: false,
                     reason:
-                        "No verified candidate value available.",
+                        "Neither profile mapper nor grounded AI could provide an answer.",
                 });
 
                 continue;

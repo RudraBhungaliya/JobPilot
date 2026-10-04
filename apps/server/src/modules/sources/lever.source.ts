@@ -7,10 +7,12 @@ import type {
     SourceJob,
 } from "./source.types.js";
 
+import liveAtsService from "./live-ats.service.js";
+
 class LeverSource implements JobSource {
     readonly name = "lever";
 
-    private readonly leverJobs: SourceJob[] = [
+    private readonly fallbackLeverJobs: SourceJob[] = [
         {
             externalId: "lever-netflix-stream",
             title: "Senior Software Engineer, Streaming Video Pipeline",
@@ -43,11 +45,16 @@ class LeverSource implements JobSource {
     async search(
         options: SearchOptions,
     ): Promise<SourceJob[]> {
-        const keyword = options.keyword.toLowerCase().trim();
+        const liveJobs = await liveAtsService.searchLever(options);
+        if (liveJobs.length > 0) {
+            return liveJobs;
+        }
+
+        const keyword = (options.keyword || "").toLowerCase().trim();
         const terms = keyword.split(/\s+/).filter(Boolean);
         const remoteOnly = options.remote === true;
 
-        return this.leverJobs.filter((job) => {
+        return this.fallbackLeverJobs.filter((job) => {
             if (remoteOnly && !job.location?.toLowerCase().includes("remote")) {
                 return false;
             }

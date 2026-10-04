@@ -7,6 +7,8 @@ import type {
     SourceJob,
 } from "./source.types.js";
 
+import liveAtsService from "./live-ats.service.js";
+
 class IndeedSource
     implements JobSource {
     readonly name = "indeed";
@@ -14,8 +16,7 @@ class IndeedSource
     async search(
         options: SearchOptions,
     ): Promise<SourceJob[]> {
-
-        return [];
+        return liveAtsService.searchGeneral(options, "indeed");
     }
 }
 

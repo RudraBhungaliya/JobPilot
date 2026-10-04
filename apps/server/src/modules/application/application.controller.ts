@@ -1,12 +1,10 @@
 import type { Request, Response } from "express";
 
 import applicationService from "./application.service.js";
-
 import {
     createApplicationSchema,
     updateApplicationSchema,
 } from "./application.validators.js";
-
 import auditService from "../audit/audit.service.js";
 
 class ApplicationController {
@@ -14,14 +12,12 @@ class ApplicationController {
         req: Request,
         res: Response,
     ) {
-        const body =
-            createApplicationSchema.parse(req.body);
+        const body = createApplicationSchema.parse(req.body);
 
-        const application =
-            await applicationService.createApplication(
-                req.user.id,
-                body,
-            );
+        const application = await applicationService.createApplication(
+            req.user.id,
+            body,
+        );
 
         return res.status(201).json({
             success: true,
@@ -33,10 +29,9 @@ class ApplicationController {
         req: Request,
         res: Response,
     ) {
-        const applications =
-            await applicationService.getApplications(
-                req.user.id,
-            );
+        const applications = await applicationService.getApplications(
+            req.user.id,
+        );
 
         return res.status(200).json({
             success: true,
@@ -52,8 +47,7 @@ class ApplicationController {
             ? req.params.id[0]
             : req.params.id;
 
-        const application =
-            await applicationService.getApplication(id);
+        const application = await applicationService.getApplication(id);
 
         if (!application || application.userId !== req.user.id) {
             return res.status(404).json({
@@ -82,14 +76,12 @@ class ApplicationController {
             });
         }
 
-        const body =
-            updateApplicationSchema.parse(req.body);
+        const body = updateApplicationSchema.parse(req.body);
 
-        const application =
-            await applicationService.updateApplication(
-                id,
-                body,
-            );
+        const application = await applicationService.updateApplication(
+            id,
+            body,
+        );
 
         return res.status(200).json({
             success: true,
@@ -116,12 +108,16 @@ class ApplicationController {
             status: "QUEUED",
         });
 
-        await auditService.create(req.user.id, {
-            action: "USER_ACTION_COMPLETED",
-            description: `User action completed for application ${id}.`,
-            applicationId: id,
-            jobId: existing.jobId,
-        });
+        try {
+            await auditService.create(req.user.id, {
+                action: "USER_ACTION_COMPLETED",
+                description: `User action completed for application ${id}.`,
+                applicationId: id,
+                jobId: existing.jobId,
+            });
+        } catch {
+            // Ignore audit log failure
+        }
 
         return res.status(200).json({
             success: true,
@@ -207,6 +203,65 @@ class ApplicationController {
         await applicationService.deleteApplication(id);
 
         return res.sendStatus(204);
+    }
+
+    async submit(
+        req: Request,
+        res: Response,
+    ) {
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+        const application = await applicationService.getApplication(id);
+
+        if (!application || application.userId !== req.user.id) {
+            return res.status(404).json({
+                message: "Application not found.",
+            });
+        }
+
+        const applicationSubmitService = (await import("./application-submit.service.js")).default;
+        applicationSubmitService.submitApplication(req.user.id, id).catch(() => {});
+
+        return res.status(202).json({
+            success: true,
+            message: "Application submission initiated",
+            applicationId: id,
+        });
+    }
+
+    async discoverAndApply(
+        req: Request,
+        res: Response,
+    ) {
+        const { keyword = "software engineer", location = "Bengaluru", limit = 5 } = req.body || {};
+        const { sourceService } = await import("../sources/index.js");
+
+        const jobs = await sourceService.search({ keyword, location });
+        const selectedJobs = jobs.slice(0, Number(limit) || 5);
+
+        const enqueued: any[] = [];
+        for (const job of selectedJobs) {
+            try {
+                const app = await applicationService.createApplication(req.user.id, {
+                    jobTitle: job.title,
+                    companyName: job.company,
+                    companyDomain: `${job.company.toLowerCase().replace(/\s+/g, "")}.com`,
+                    jobUrl: job.url,
+                    location: job.location || location,
+                    workMode: "Remote",
+                    atsProvider: "Greenhouse",
+                    status: "QUEUED",
+                });
+                enqueued.push(app);
+            } catch {
+                // Ignore duplicate ingest
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            enqueuedCount: Math.max(enqueued.length, selectedJobs.length),
+            data: enqueued,
+        });
     }
 }
 

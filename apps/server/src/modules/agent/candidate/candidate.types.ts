@@ -1,3 +1,60 @@
+export interface ProfileSkill {
+    name: string;
+    category?: string | null;
+    level?: string | null;
+    yearsOfExperience?: number | null;
+}
+
+export interface ProfileEducation {
+    degree: string;
+    institution: string;
+    fieldOfStudy?: string | null;
+    grade?: string | null;
+    startDate?: Date | string | null;
+    endDate?: Date | string | null;
+    currentlyStudying?: boolean | null;
+}
+
+export interface ProfileExperience {
+    company: string;
+    title: string;
+    location?: string | null;
+    description?: string | null;
+    employmentType?: string | null;
+    startDate?: Date | string | null;
+    endDate?: Date | string | null;
+    currentlyWorking?: boolean | null;
+}
+
+export interface ProfileLanguage {
+    name: string;
+    proficiency?: string | null;
+}
+
+export interface ProfileCertification {
+    name: string;
+    issuer?: string | null;
+    credentialId?: string | null;
+    credentialUrl?: string | null;
+    issuedAt?: Date | string | null;
+    expiresAt?: Date | string | null;
+}
+
+export interface ProfileProject {
+    title: string;
+    description?: string | null;
+    githubUrl?: string | null;
+    liveUrl?: string | null;
+    technologies?: string | null;
+    startDate?: Date | string | null;
+    endDate?: Date | string | null;
+}
+
+export interface ProfileLink {
+    label: string;
+    url: string;
+}
+
 export interface CandidateContext {
     firstName?: string | null;
     middleName?: string | null;
@@ -5,6 +62,11 @@ export interface CandidateContext {
 
     email?: string | null;
     phone?: string | null;
+
+    dateOfBirth?: Date | string | null;
+
+    gender?: string | null;
+    nationality?: string | null;
 
     address?: string | null;
     city?: string | null;
@@ -51,12 +113,15 @@ export interface CandidateContext {
     summary?: string | null;
     resumeText?: string | null;
 
-    skills: string[];
-    languages: string[];
-    certifications: string[];
-    experiences: string[];
-    education: string[];
-    projects: string[];
+    skills?: ProfileSkill[];
+    languages?: ProfileLanguage[];
+    certifications?: ProfileCertification[];
+    experiences?: ProfileExperience[];
+    educations?: ProfileEducation[];
+    profileProjects?: ProfileProject[];
+    profileLinks?: ProfileLink[];
+    education?: string[];
+    projects?: string[];
 }
 
 export interface CandidateAnswer {
@@ -64,6 +129,7 @@ export interface CandidateAnswer {
     source:
         | "PROFILE"
         | "RESUME"
+        | "INFERRED"
         | "UNKNOWN";
     confidence:
         | "HIGH"

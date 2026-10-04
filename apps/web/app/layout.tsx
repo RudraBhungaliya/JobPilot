@@ -1,20 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "JobPilot - AI Job Search & Auto-Apply Engine",
-  description: "Real-time ATS job search, intelligent resume tailoring, and autonomous auto-apply engine.",
+  description: "Autonomous real-time ATS job matching and auto-apply platform.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -23,11 +15,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className="h-full bg-[#f8fafc] text-slate-900">
+      <body className="min-h-full flex flex-col bg-[#f8fafc] text-slate-900 antialiased selection:bg-emerald-600/30 selection:text-emerald-950">
+        {children}
+      </body>
     </html>
   );
 }

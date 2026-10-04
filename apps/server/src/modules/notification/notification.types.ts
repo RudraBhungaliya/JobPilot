@@ -4,6 +4,7 @@ export type NotificationType =
     | "APPLICATION_STATUS"
     | "AGENT_COMPLETED"
     | "AGENT_FAILED"
+    | "HUMAN_ACTION_REQUIRED"
     | "SYSTEM";
 
 export interface CreateNotificationInput {

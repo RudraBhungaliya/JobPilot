@@ -107,9 +107,15 @@ class QueueController {
         res.status(202).json({ job });
     }
 
-    async getJob(req: Request, res: Response): Promise<void> {
-        const id = Array.isArray(req.params.id) ? req.params.id[0] : String(req.params.id);
-        const job = queueService.getJob(id);
+    async getJob(
+        req: Request,
+        res: Response,
+    ): Promise<void> {
+        const id = Array.isArray(req.params.id)
+            ? req.params.id[0]
+            : String(req.params.id);
+
+        const job = await queueService.getJob(id);
 
         if (!job) {
             res.status(404).json({ message: "Queue job not found." });
@@ -124,9 +130,17 @@ class QueueController {
         res.status(200).json({ job });
     }
 
-    async getPendingJobs(req: Request, res: Response): Promise<void> {
-        const jobs = queueService.getPendingJobs().filter((job) => job.userId === req.user.id);
-        res.status(200).json({ jobs });
+    async getPendingJobs(
+        req: Request,
+        res: Response,
+    ): Promise<void> {
+        const jobs = (await queueService.getPendingJobs()).filter(
+            (job) => job.userId === req.user.id,
+        );
+
+        res.status(200).json({
+            jobs,
+        });
     }
 }
 

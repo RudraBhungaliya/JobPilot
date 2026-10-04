@@ -52,7 +52,7 @@ class AgentController {
         const threadId = randomUUID();
         await agentRepository.createRun(userId, threadId, query.trim());
 
-        const job = queueService.enqueueAgentRun({
+        const job = await queueService.enqueueAgentRun({
             runId: threadId,
             userId,
             query: query.trim(),
@@ -89,11 +89,11 @@ class AgentController {
             agentRunId: run.id,
         });
 
-        let job = queueService.getJobByRunId(threadId);
+        let job = await queueService.getJobByRunId(threadId);
         if (job) {
-            queueService.resumeJob(job.id);
+            await queueService.resumeJob(job.id);
         } else {
-            job = queueService.enqueueAgentRun({
+            job = await queueService.enqueueAgentRun({
                 runId: threadId,
                 userId,
                 query: run.query,

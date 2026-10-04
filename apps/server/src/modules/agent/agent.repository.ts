@@ -1,18 +1,9 @@
-import { prisma } from "@jobpilot/database";
+import { prisma, Prisma } from "@jobpilot/database";
 
 class AgentRepository {
-    async createRun(
-        userId: string,
-        threadId: string,
-        query: string,
-    ) {
+    async createRun(userId: string, threadId: string, query: string) {
         return prisma.agentRun.create({
-            data: {
-                userId,
-                threadId,
-                query,
-                status: "RUNNING",
-            },
+            data: { userId, threadId, query, status: "RUNNING" },
         });
     }
 
@@ -24,29 +15,26 @@ class AgentRepository {
                 | "COMPLETED"
                 | "FAILED"
                 | "WAITING_FOR_USER";
-
             history?: string[];
-
             errors?: string[];
+            stateSnapshot?: object | typeof Prisma.JsonNull;
         },
     ) {
         return prisma.agentRun.update({
-            where: {
-                threadId,
-            },
+            where: { threadId },
             data,
         });
     }
 
-    async getRun(
-        userId: string,
-        threadId: string,
-    ) {
+    async getRun(userId: string, threadId: string) {
         return prisma.agentRun.findFirst({
-            where: {
-                userId,
-                threadId,
-            },
+            where: { userId, threadId },
+        });
+    }
+
+    async getRunByThreadId(threadId: string) {
+        return prisma.agentRun.findUnique({
+            where: { threadId },
         });
     }
 
@@ -61,16 +49,10 @@ class AgentRepository {
         });
     }
 
-    async getRuns(
-        userId: string,
-    ) {
+    async getRuns(userId: string) {
         return prisma.agentRun.findMany({
-            where: {
-                userId,
-            },
-            orderBy: {
-                createdAt: "desc",
-            },
+            where: { userId },
+            orderBy: { createdAt: "desc" },
         });
     }
 }

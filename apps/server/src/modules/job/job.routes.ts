@@ -5,15 +5,20 @@ import jobLiveController from "./job.live.controller.js";
 
 const router = Router();
 
-// Realtime live Indian & Global job feed with Dollar ($) salaries
+// Realtime live job feed
 router.get("/live", (req, res, next) => {
-    // Optional auth middleware
     const authHeader = req.headers.authorization;
     if (authHeader) {
         return authMiddlewares(req, res, () => jobLiveController.getLiveOpenings(req, res));
     }
     return jobLiveController.getLiveOpenings(req, res);
 });
+
+// Discovery reads public company career boards
+router.get(
+    "/discover",
+    jobController.discover.bind(jobController)
+);
 
 router.post("/", authMiddlewares, jobController.create.bind(jobController));
 router.get("/", authMiddlewares, jobController.getAll.bind(jobController));

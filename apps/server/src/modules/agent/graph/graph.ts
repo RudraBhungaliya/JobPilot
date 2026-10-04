@@ -14,12 +14,13 @@ import applyNode from "../nodes/apply.node.js";
 import verifyNode from "../nodes/verify.node.js";
 import persistNode from "../nodes/persist.node.js";
 import retryNode from "../nodes/retry.node.js";
+import waitForUserNode from "../nodes/wait-for-user.node.js";
 
 import { AgentState } from "./state.js";
 
 const workflow = new StateGraph(
     AgentState,
-)   
+)
     .addNode(
         "planner",
         async (state) =>
@@ -70,11 +71,16 @@ const workflow = new StateGraph(
         async (state) =>
             retryNode.execute(state),
     )
+    .addNode(
+        "waitForUser",
+        async (state) =>
+            waitForUserNode.execute(state),
+    )
 
     .addEdge(
-            START,
-            "planner",
-        )
+        START,
+        "planner",
+    )
 
     .addConditionalEdges(
         "planner",
@@ -89,7 +95,7 @@ const workflow = new StateGraph(
             VERIFY: "verify",
             PERSIST: "persist",
             RETRY: "retry",
-            WAITING_FOR_USER: END,
+            WAITING_FOR_USER: "waitForUser",
             END: END,
         },
     )
@@ -106,6 +112,11 @@ const workflow = new StateGraph(
 
     .addEdge(
         "fetch",
+        "planner",
+    )
+
+    .addEdge(
+        "evaluate",
         "planner",
     )
 
@@ -137,6 +148,11 @@ const workflow = new StateGraph(
     .addEdge(
         "retry",
         "planner",
+    )
+
+    .addEdge(
+        "waitForUser",
+        END,
     );
 
 

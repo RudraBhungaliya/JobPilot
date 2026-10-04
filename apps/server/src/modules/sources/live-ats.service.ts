@@ -1,6 +1,14 @@
 import type { SourceJob, SourceSearchInput } from "./source.types.js";
 import { prisma } from "@jobpilot/database";
 import locationPolicyService from "./location-policy.service.js";
+import {
+    INDIAN_LOCATION_ALIASES,
+    canonicalizeLocation,
+    normalizeLocation,
+    getAllGreenhouseCompanies,
+    getAllAshbyCompanies,
+    getAllLeverCompanies,
+} from "./curated-companies.constants.js";
 
 export type JobCategoryType =
     | "TIER_1_MNC"
@@ -27,14 +35,13 @@ export interface LiveIndianJobOpening {
     workMode: "Remote" | "Hybrid" | "Onsite";
     isRemote: boolean;
     remoteScope?: string;
-    // Distinct URL Fields
     sourceUrl: string;
     atsUrl: string;
     officialCompanyUrl: string;
     applyUrl: string;
     canonicalUrl: string;
     sourceType: "GREENHOUSE" | "ASHBY" | "LEVER" | "WORKDAY" | "DIRECT";
-    url: string; // backwards compatibility alias to canonicalUrl
+    url: string;
     source: "greenhouse" | "ashby" | "lever" | "workday" | "remote";
     atsProvider: string;
     salaryINR: string;
@@ -578,12 +585,15 @@ const VERIFIED_INDIAN_TIER_OPENINGS: LiveIndianJobOpening[] = [
     },
 ];
 
-
 class LiveAtsService {
     private cache = new Map<string, { timestamp: number; jobs: LiveIndianJobOpening[] }>();
     private readonly CACHE_TTL_MS = 3 * 60 * 1000; // 3 min live cache
 
-    private async fetchWithTimeout(url: string, timeoutMs = 3500): Promise<Response> {
+    public normalizeLocationQuery(loc: string): string {
+        return normalizeLocation(loc);
+    }
+
+    private async fetchWithTimeout(url: string, timeoutMs = 4000): Promise<Response> {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
@@ -618,6 +628,9 @@ class LiveAtsService {
         }
     }
 
+    /**
+     * Fetch real-time openings directly from live ATS APIs and return filtered list.
+     */
     async getRealtimeIndianOpenings(filters?: {
         category?: string;
         department?: string;
@@ -626,26 +639,19 @@ class LiveAtsService {
         minSalaryLPA?: number;
         remoteOnly?: boolean;
     }): Promise<LiveIndianJobOpening[]> {
-        const cacheKey = "realtime:live:openings:all";
-        let liveJobs = this.getFromCache(cacheKey);
-
-        if (!liveJobs || liveJobs.length === 0) {
-            liveJobs = await this.aggregateRealLiveOpenings();
-            if (liveJobs.length > 0) {
-                this.setInCache(cacheKey, liveJobs);
-            }
+        const cacheKey = JSON.stringify(filters || {});
+        const cached = this.getFromCache(cacheKey);
+        if (cached) {
+            return cached;
         }
 
-        return this.filterIndianJobs(liveJobs, filters);
-    }
-
-    private async aggregateRealLiveOpenings(): Promise<LiveIndianJobOpening[]> {
         const liveCrawledJobs: LiveIndianJobOpening[] = [];
 
         // 1. Fetch Real Greenhouse Boards
-        const greenhouseTasks = LIVE_TIER_1_MNC_BOARDS.filter((b) => b.provider === "greenhouse").map(async (company) => {
+        const ghBoards = [...LIVE_TIER_1_MNC_BOARDS.filter((b) => b.provider === "greenhouse"), ...LIVE_REMOTE_BOARDS.filter((b) => b.provider === "greenhouse")];
+        const greenhouseTasks = ghBoards.map(async (company) => {
             try {
-                const sourceUrl = `https://boards-api.greenhouse.io/v1/boards/${company.board}/jobs`;
+                const sourceUrl = `https://boards-api.greenhouse.io/v1/boards/${company.board}/jobs?content=true`;
                 const res = await this.fetchWithTimeout(sourceUrl);
                 if (!res.ok) return;
                 const data = (await res.json()) as { jobs?: GreenhouseJobRaw[] };
@@ -656,12 +662,13 @@ class LiveAtsService {
                     const locInfo = locationPolicyService.evaluateLocation(rawLoc, raw.title, company.city);
                     if (!locInfo.isIndiaCompatible) continue;
 
-                    const atsUrl = raw.id ? `https://job-boards.greenhouse.io/${company.board}/jobs/${raw.id}` : raw.absolute_url;
-                    const canonicalUrl = raw.absolute_url || atsUrl;
-                    const applyUrl = `${canonicalUrl}#app`;
+                    const atsUrl = raw.absolute_url;
+                    if (!atsUrl) continue;
+                    const applyUrl = `${atsUrl}#app`;
+                    const canonicalUrl = atsUrl;
                     const salary = this.calculateSalaryLPA(raw.title, company.category, company.baseLPA);
                     const exp = this.estimateExperience(raw.title);
-                    const dept = (raw.departments && raw.departments[0]?.name) || "Engineering";
+                    const dept = raw.departments && raw.departments.length > 0 ? raw.departments[0].name : "Engineering";
 
                     liveCrawledJobs.push({
                         id: `gh-${company.board}-${raw.id}`,
@@ -831,19 +838,90 @@ class LiveAtsService {
         // Merge live crawled jobs with curated verified tiered Indian openings
         const mergedMap = new Map<string, LiveIndianJobOpening>();
 
-        // Put verified tier openings first
         for (const job of VERIFIED_INDIAN_TIER_OPENINGS) {
             mergedMap.set(job.id, job);
         }
 
-        // Add live crawled postings
         for (const job of liveCrawledJobs) {
             if (!mergedMap.has(job.id)) {
                 mergedMap.set(job.id, job);
             }
         }
 
-        return Array.from(mergedMap.values());
+        const fullList = Array.from(mergedMap.values());
+        const filtered = this.filterIndianJobs(fullList, filters);
+        this.setInCache(cacheKey, filtered);
+        return filtered;
+    }
+
+    async searchAshby(options?: SourceSearchInput): Promise<SourceJob[]> {
+        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location });
+        return jobs.filter((j) => j.source === "ashby").map((j) => ({
+            externalId: j.id,
+            title: j.title,
+            company: j.company,
+            location: j.location,
+            url: j.canonicalUrl,
+            source: "ashby",
+            description: j.description,
+            salary: j.salaryINR,
+        }));
+    }
+
+    async searchGreenhouse(options?: SourceSearchInput): Promise<SourceJob[]> {
+        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location });
+        return jobs.filter((j) => j.source === "greenhouse").map((j) => ({
+            externalId: j.id,
+            title: j.title,
+            company: j.company,
+            location: j.location,
+            url: j.canonicalUrl,
+            source: "greenhouse",
+            description: j.description,
+            salary: j.salaryINR,
+        }));
+    }
+
+    async searchLever(options?: SourceSearchInput): Promise<SourceJob[]> {
+        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location });
+        return jobs.filter((j) => j.source === "lever").map((j) => ({
+            externalId: j.id,
+            title: j.title,
+            company: j.company,
+            location: j.location,
+            url: j.canonicalUrl,
+            source: "lever",
+            description: j.description,
+            salary: j.salaryINR,
+        }));
+    }
+
+    async searchRemote(options?: SourceSearchInput): Promise<SourceJob[]> {
+        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location, remoteOnly: true });
+        return jobs.map((j) => ({
+            externalId: j.id,
+            title: j.title,
+            company: j.company,
+            location: j.location,
+            url: j.canonicalUrl,
+            source: "remote",
+            description: j.description,
+            salary: j.salaryINR,
+        }));
+    }
+
+    async searchGeneral(options?: SourceSearchInput, sourceName: string = "general"): Promise<SourceJob[]> {
+        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location });
+        return jobs.map((j) => ({
+            externalId: j.id,
+            title: j.title,
+            company: j.company,
+            location: j.location,
+            url: j.canonicalUrl,
+            source: sourceName,
+            description: j.description,
+            salary: j.salaryINR,
+        }));
     }
 
     private calculateSalaryLPA(
@@ -913,62 +991,6 @@ class LiveAtsService {
             min: finalMin,
             max: finalMax,
         };
-    }
-
-    async searchAshby(options?: SourceSearchInput): Promise<SourceJob[]> {
-        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location });
-        return jobs.filter((j) => j.source === "ashby").map((j) => ({
-            externalId: j.id,
-            title: j.title,
-            company: j.company,
-            location: j.location,
-            url: j.canonicalUrl,
-            source: "ashby",
-            description: j.description,
-            salary: j.salaryINR,
-        }));
-    }
-
-    async searchGreenhouse(options?: SourceSearchInput): Promise<SourceJob[]> {
-        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location });
-        return jobs.filter((j) => j.source === "greenhouse").map((j) => ({
-            externalId: j.id,
-            title: j.title,
-            company: j.company,
-            location: j.location,
-            url: j.canonicalUrl,
-            source: "greenhouse",
-            description: j.description,
-            salary: j.salaryINR,
-        }));
-    }
-
-    async searchRemote(options?: SourceSearchInput): Promise<SourceJob[]> {
-        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location, remoteOnly: true });
-        return jobs.map((j) => ({
-            externalId: j.id,
-            title: j.title,
-            company: j.company,
-            location: j.location,
-            url: j.canonicalUrl,
-            source: "remote",
-            description: j.description,
-            salary: j.salaryINR,
-        }));
-    }
-
-    async searchGeneral(options?: SourceSearchInput, sourceName: string = "general"): Promise<SourceJob[]> {
-        const jobs = await this.getRealtimeIndianOpenings({ keyword: options?.keyword, city: options?.location });
-        return jobs.map((j) => ({
-            externalId: j.id,
-            title: j.title,
-            company: j.company,
-            location: j.location,
-            url: j.canonicalUrl,
-            source: sourceName,
-            description: j.description,
-            salary: j.salaryINR,
-        }));
     }
 
     private estimateExperience(title: string): "Junior (1-3 yrs)" | "Mid-Senior (3-6 yrs)" | "Staff / Lead (6+ yrs)" {
@@ -1108,5 +1130,5 @@ class LiveAtsService {
 }
 
 export const liveAtsService = new LiveAtsService();
+export { LiveAtsService };
 export default liveAtsService;
-
