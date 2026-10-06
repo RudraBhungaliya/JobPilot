@@ -89,7 +89,22 @@ export class ApplicationStateMachine {
             }),
         ]);
 
-        // 2. Dispatch real email notification if human intervention is required
+        // 2. Realtime SSE event emission to connected web clients
+        try {
+            const { default: eventEmitter } = await import("../../core/events/event.emitter.js");
+            eventEmitter.emit({
+                type: "application.status_changed",
+                userId: application.userId,
+                applicationId: req.applicationId,
+                status: req.newStatus,
+                jobId: application.jobId,
+                timestamp: new Date().toISOString(),
+            });
+        } catch {
+            // Non-blocking realtime event failure
+        }
+
+        // 3. Dispatch real email notification if human intervention is required
         if (req.newStatus === "WAITING_FOR_USER" || req.newStatus === "VERIFICATION_PENDING") {
             const candidateEmail = application.user.profile?.email || application.user.email;
             const candidateName = application.user.profile?.firstName

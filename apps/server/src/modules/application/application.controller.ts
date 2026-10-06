@@ -263,6 +263,76 @@ class ApplicationController {
             data: enqueued,
         });
     }
+
+    async syncJobs(req: Request, res: Response) {
+        try {
+            const { pipelineSyncService } = await import("./pipeline-sync.service.js");
+            const { jobId, loopId, resumeId, autoApply, priority, jobs } = req.body || {};
+
+            if (Array.isArray(jobs) && jobs.length > 0) {
+                const results = [];
+                for (const item of jobs) {
+                    const result = await pipelineSyncService.syncJobToApplication({
+                        userId: req.user.id,
+                        jobId: item.jobId,
+                        loopId: item.loopId || loopId,
+                        resumeId: item.resumeId || resumeId,
+                        autoApply: item.autoApply ?? autoApply,
+                        priority: item.priority ?? priority,
+                    });
+                    results.push(result);
+                }
+                return res.status(200).json({
+                    success: true,
+                    count: results.length,
+                    data: results,
+                });
+            }
+
+            if (!jobId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "jobId or array of jobs is required.",
+                });
+            }
+
+            const result = await pipelineSyncService.syncJobToApplication({
+                userId: req.user.id,
+                jobId,
+                loopId,
+                resumeId,
+                autoApply: autoApply ?? false,
+                priority: priority ?? 0,
+            });
+
+            return res.status(200).json({
+                success: true,
+                data: result,
+            });
+        } catch (err: any) {
+            return res.status(400).json({
+                success: false,
+                message: err.message || "Failed to sync jobs into application pipeline.",
+            });
+        }
+    }
+
+    async getPipelineStats(req: Request, res: Response) {
+        try {
+            const { pipelineSyncService } = await import("./pipeline-sync.service.js");
+            const loopId = req.query.loopId as string | undefined;
+            const stats = await pipelineSyncService.getPipelineStats(req.user.id, loopId);
+            return res.status(200).json({
+                success: true,
+                data: stats,
+            });
+        } catch (err: any) {
+            return res.status(400).json({
+                success: false,
+                message: err.message || "Failed to get pipeline stats.",
+            });
+        }
+    }
 }
 
 export default new ApplicationController();

@@ -190,7 +190,18 @@ export class LoopService {
     const { jobMatchingService } = await import("../matching/job-matching.service.js");
     return jobMatchingService.matchAndRankLoopJobs(loopId, userId, { persistApplications: false });
   }
+
+  async syncLoopPipeline(userId: string, loopId: string, options: { forceQueue?: boolean } = {}) {
+    const { pipelineSyncService } = await import("../application/pipeline-sync.service.js");
+    return pipelineSyncService.syncLoop(loopId, userId, options);
+  }
+
+  async getLoopPipelineStats(userId: string, loopId: string) {
+    const { pipelineSyncService } = await import("../application/pipeline-sync.service.js");
+    return pipelineSyncService.getPipelineStats(userId, loopId);
+  }
 }
 
 export default new LoopService();
+
 

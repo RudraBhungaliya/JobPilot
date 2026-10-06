@@ -184,6 +184,42 @@ export class LoopController {
       });
     }
   };
+
+  syncPipeline = async (req: Request, res: Response) => {
+    try {
+      const userId = await this.getUserId(req);
+      const loopId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const forceQueue = req.body?.forceQueue === true;
+      const result = await loopService.syncLoopPipeline(userId, loopId, { forceQueue });
+      return res.json({
+        success: true,
+        data: result,
+        message: result.message,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Failed to sync loop pipeline.",
+      });
+    }
+  };
+
+  getPipelineStats = async (req: Request, res: Response) => {
+    try {
+      const userId = await this.getUserId(req);
+      const loopId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const stats = await loopService.getLoopPipelineStats(userId, loopId);
+      return res.json({
+        success: true,
+        data: stats,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Failed to get loop pipeline stats.",
+      });
+    }
+  };
 }
 
 export default new LoopController();

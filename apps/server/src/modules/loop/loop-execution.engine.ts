@@ -20,6 +20,7 @@ export interface RunLoopResponse {
   discoveredCount: number;
   newlyPersistedCount: number;
   dispatchedCount: number;
+  pipelineSync?: any;
   jobs: Array<SourceJob & {
     matchScore?: number;
     matchedSkills?: string[];
@@ -44,7 +45,11 @@ export class LoopExecutionEngine {
    * - Sets status to ERROR if a fatal failure occurs.
    * - Does NOT trigger Auto-Apply or Recruiter Outreach.
    */
-  async executeLoop(loopId: string, userId?: string): Promise<RunLoopResponse> {
+  async executeLoop(
+    loopId: string,
+    userId?: string,
+    options?: { syncPipeline?: boolean }
+  ): Promise<RunLoopResponse> {
     const loop = await prisma.jobSearchLoop.findFirst({
       where: userId ? { id: loopId, userId } : { id: loopId },
       include: { resume: true },
@@ -254,12 +259,27 @@ export class LoopExecutionEngine {
         nextRunAt,
       });
 
+      // 9. Pipeline sync: connect discovered/matched jobs -> Application + Queue system (optional)
+      let pipelineSyncSummary = undefined;
+      if (options?.syncPipeline) {
+        try {
+          const { pipelineSyncService } = await import("../application/pipeline-sync.service.js");
+          pipelineSyncSummary = await pipelineSyncService.syncLoop(loop.id, loop.userId);
+        } catch (syncErr) {
+          logger.warn("LoopExecutionEngine: pipeline sync error", {
+            loopId: loop.id,
+            error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+          });
+        }
+      }
+
       return {
         success: true,
         loop: updatedLoop,
         discoveredCount: candidateJobs.length,
         newlyPersistedCount,
-        dispatchedCount: 0, // Auto-apply is explicitly not triggered in this phase
+        dispatchedCount: pipelineSyncSummary?.newlyQueuedCount || 0,
+        pipelineSync: pipelineSyncSummary,
         jobs: rankedCandidateJobs.slice(0, 20).map((r) => ({
           externalId: r.job.externalId || "",
           title: r.job.title,

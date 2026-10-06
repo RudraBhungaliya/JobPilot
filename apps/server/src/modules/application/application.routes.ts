@@ -24,6 +24,20 @@ router.post(
 );
 
 router.post(
+    "/sync",
+    applicationController.syncJobs.bind(
+        applicationController,
+    ),
+);
+
+router.get(
+    "/pipeline/stats",
+    applicationController.getPipelineStats.bind(
+        applicationController,
+    ),
+);
+
+router.post(
     "/:id/resolve-checkpoint",
     applicationController.resolveCheckpoint.bind(
         applicationController,

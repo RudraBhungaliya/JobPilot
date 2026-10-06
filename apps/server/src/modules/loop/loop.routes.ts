@@ -13,6 +13,8 @@ router.delete("/:id", loopController.delete);
 router.post("/:id/run", loopController.run);
 router.post("/:id/match", loopController.matchJobs);
 router.get("/:id/matches", loopController.getMatches);
+router.post("/:id/sync", loopController.syncPipeline);
+router.get("/:id/pipeline", loopController.getPipelineStats);
 
 export default router;
 
