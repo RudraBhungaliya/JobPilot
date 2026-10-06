@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "node --experimental-vm-modules --enable-source-maps node_modules/.bin/tsx --test 'src/__tests__/**/*.test.ts'",
+    "test": "tsx --test 'src/__tests__/**/*.test.ts'",
     "install:browsers": "playwright install chromium"
   },
   "dependencies": {
@@ -15,6 +15,7 @@
     "@langchain/core": "^1.2.5",
     "@langchain/langgraph": "^1.4.9",
     "@prisma/client": "^7.9.1",
+    "@types/nodemailer": "^8.0.2",
     "bcrypt": "^6.0.0",
     "bottleneck": "^2.19.5",
     "compression": "^1.8.1",
@@ -26,6 +27,7 @@
     "jsonwebtoken": "^9.0.3",
     "mammoth": "^1.12.2",
     "multer": "^2.2.0",
+    "nodemailer": "^10.0.13",
     "openai": "^7.9.0",
     "pdf-parse": "^2.4.5",
     "pino": "^10.3.1",

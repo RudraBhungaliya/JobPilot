@@ -19,21 +19,26 @@ class SchedulerService {
   private activeCrons = new Map<string, NodeJS.Timeout>();
 
   async schedule(batchSize: number): Promise<ScheduledApp[]> {
-    const rows = await (prisma as any).application.findMany({
-      where: {
-        status: { in: ["QUEUED", "PENDING"] },
-      },
-      take: Math.max(1, batchSize | 0),
-      orderBy: [{ createdAt: "asc" }],
-      select: {
-        id: true,
-        userId: true,
-        jobId: true,
-        companyKey: true,
-      },
-    });
-    return rows as ScheduledApp[];
+    try {
+      const rows = await prisma.application.findMany({
+        where: {
+          status: { in: ["QUEUED", "PENDING"] },
+        },
+        take: Math.max(1, batchSize | 0),
+        orderBy: [{ createdAt: "asc" }],
+        select: {
+          id: true,
+          userId: true,
+          jobId: true,
+          companyKey: true,
+        },
+      });
+      return rows as ScheduledApp[];
+    } catch {
+      return [];
+    }
   }
+
 
   /**
    * Registers a cron schedule.

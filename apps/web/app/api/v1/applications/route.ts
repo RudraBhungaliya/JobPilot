@@ -5,10 +5,32 @@ import { INITIAL_APPLICATIONS, Application, inferCompanyTier } from "@/lib/mock-
 let memoryApplications: Application[] = [...INITIAL_APPLICATIONS];
 
 export async function GET() {
-  return NextResponse.json({
-    success: true,
-    data: memoryApplications,
-  });
+  try {
+    // Try forwarding to backend server first
+    try {
+      const backendRes = await fetch("http://127.0.0.1:8000/api/v1/applications", {
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(3000),
+      });
+
+      if (backendRes.ok) {
+        const json = await backendRes.json();
+        return NextResponse.json(json);
+      }
+    } catch {
+      // Fallback to memory store
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: memoryApplications,
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { success: false, message: err.message },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(request: Request) {
