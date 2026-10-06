@@ -4,9 +4,12 @@ import ApplicationStateMachine from "./application-state-machine.js";
 import applicationQueueService from "../queue/application-queue.service.js";
 import locationPolicyService from "../sources/location-policy.service.js";
 import atsRateLimiter from "../queue/ats-rate-limiter.js";
-import { agentService } from "../agent/index.js";
 import auditService from "../audit/audit.service.js";
 import notificationService from "../notification/notification.service.js";
+import humanActionService from "../human-action/human-action.service.js";
+import applyAdapterRegistry from "./adapters/apply-adapter.registry.js";
+import candidateService from "../agent/candidate/candidate.service.js";
+import type { CandidateContext } from "../agent/candidate/candidate.types.js";
 
 export interface AutoApplyRequestInput {
     jobId?: string;
@@ -238,28 +241,161 @@ export class AutoApplyService {
 
 
     /**
+     * Resolve ATS provider name for rate limiting and adapter dispatch
+     */
+    detectAtsProvider(url: string, explicitProvider?: string): string {
+        if (explicitProvider) {
+            const p = explicitProvider.toLowerCase();
+            if (["greenhouse", "lever", "ashby", "workday"].includes(p)) return p;
+        }
+        const lower = url.toLowerCase();
+        if (lower.includes("greenhouse.io") || lower.includes("boards.greenhouse.io") || lower.includes("job-boards.greenhouse.io") || lower.includes("gh_jid")) {
+            return "greenhouse";
+        }
+        if (lower.includes("jobs.lever.co") || lower.includes("lever.co")) {
+            return "lever";
+        }
+        if (lower.includes("ashbyhq.com") || lower.includes("jobs.ashbyhq.com")) {
+            return "ashby";
+        }
+        if (lower.includes("myworkdayjobs.com") || lower.includes("workday.com")) {
+            return "workday";
+        }
+        return "default";
+    }
+
+    /**
      * Step 2: QueueWorker executes real ATS Auto-Apply lifecycle
      */
     async execute(queueJob: any): Promise<boolean> {
-        const app = queueJob.application;
-        const jobOpening = app.job;
-        const companyName = jobOpening.company.name;
-        const atsProvider = jobOpening.url.includes("greenhouse")
-            ? "greenhouse"
-            : jobOpening.url.includes("ashby")
-            ? "ashby"
-            : jobOpening.url.includes("lever")
-            ? "lever"
-            : jobOpening.url.includes("workday")
-            ? "workday"
-            : "direct";
-
-        console.log(`[AutoApplyService] 🚀 Executing Application #${app.id} (${jobOpening.title} at ${companyName})`);
+        const queueJobId = queueJob.id;
+        console.log(`[AutoApplyService] 🚀 Processing ApplicationQueue #${queueJobId}`);
 
         try {
-            // STEP 1: TAILORING (Gemini LLM Provider: Grounded, Factual, No Fabrication)
+            // 1. Fetch the full Application record with all relations
+            const fullApp = await prisma.application.findUnique({
+                where: { id: queueJob.applicationId },
+                include: {
+                    job: { include: { company: true } },
+                    resume: true,
+                    user: {
+                        include: {
+                            profile: {
+                                include: {
+                                    educations: true,
+                                    experiences: true,
+                                    skills: true,
+                                    languages: true,
+                                    certifications: true,
+                                    profileProjects: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+            if (!fullApp || !fullApp.job) {
+                console.warn(`[AutoApplyService] Application #${queueJob.applicationId} or associated Job not found.`);
+                await applicationQueueService.markFailed(queueJobId, "Application or Job opening not found", false);
+                return false;
+            }
+
+            const jobOpening = fullApp.job;
+            const companyName = jobOpening.company?.name || "Company";
+            const jobUrl = jobOpening.url;
+
+            if (!jobUrl || !jobUrl.startsWith("http")) {
+                await applicationQueueService.markFailed(queueJobId, "Job has no valid application URL", false);
+                return false;
+            }
+
+            // 2. Duplicate prevention & prior submission check
+            if (["APPLIED", "SUBMITTED", "INTERVIEW", "ACCEPTED"].includes(fullApp.status)) {
+                console.log(`[AutoApplyService] Application #${fullApp.id} is already ${fullApp.status}.`);
+                await applicationQueueService.markCompleted(queueJobId, {
+                    status: fullApp.status,
+                    reason: "Application already submitted",
+                });
+                return true;
+            }
+
+            const existingSubmittedApp = await prisma.application.findFirst({
+                where: {
+                    userId: queueJob.userId,
+                    jobId: jobOpening.id,
+                    id: { not: fullApp.id },
+                    status: { in: ["APPLIED", "SUBMITTED", "INTERVIEW", "ACCEPTED"] },
+                },
+            });
+
+            if (existingSubmittedApp) {
+                console.log(`[AutoApplyService] Duplicate application prevented for user ${queueJob.userId} and job ${jobOpening.id}.`);
+                await ApplicationStateMachine.transition({
+                    applicationId: fullApp.id,
+                    newStatus: "FAILED",
+                    reason: `Duplicate application prevented: already applied to this opening in application #${existingSubmittedApp.id}`,
+                    actor: "QUEUE_WORKER",
+                });
+                await applicationQueueService.markFailed(queueJobId, "Duplicate application detected for this opening", false);
+                return false;
+            }
+
+            // 3. Candidate profile & resume validation (Missing Fields HITL)
+            let profile = fullApp.user?.profile;
+            if (!profile && fullApp.profileId) {
+                profile = await prisma.profile.findUnique({
+                    where: { id: fullApp.profileId },
+                    include: {
+                        educations: true,
+                        experiences: true,
+                        skills: true,
+                        languages: true,
+                        certifications: true,
+                        profileProjects: true,
+                    },
+                });
+            }
+
+            const missingCritical: string[] = [];
+            if (!profile?.firstName?.trim()) missingCritical.push("First Name");
+            if (!profile?.lastName?.trim()) missingCritical.push("Last Name");
+            if (!profile?.email?.trim()) missingCritical.push("Email Address");
+            if (!profile?.phone?.trim()) missingCritical.push("Phone Number");
+            if (!profile?.educations || profile.educations.length === 0) missingCritical.push("Education History");
+            if (!profile?.experiences || profile.experiences.length === 0) missingCritical.push("Work Experience");
+            if (!fullApp.resume) missingCritical.push("Resume Document");
+
+            if (missingCritical.length > 0) {
+                console.log(`[AutoApplyService] Missing critical profile fields for App #${fullApp.id}: ${missingCritical.join(", ")}`);
+                const questions = missingCritical.map((label) => ({
+                    selector: `missing-field-${label.toLowerCase().replace(/\s+/g, "-")}`,
+                    label,
+                    type: label === "Resume Document" ? "file" : "text",
+                    required: true,
+                    hint: `Please provide your ${label.toLowerCase()} to complete the application.`,
+                }));
+
+                await humanActionService.createAction({
+                    userId: queueJob.userId,
+                    applicationId: fullApp.id,
+                    questions,
+                });
+
+                await applicationQueueService.markWaitingForUser(
+                    queueJobId,
+                    `Missing candidate profile data: ${missingCritical.join(", ")}`,
+                    { missingFields: missingCritical }
+                );
+                return false;
+            }
+
+            // 4. Determine ATS Provider
+            const atsProvider = this.detectAtsProvider(jobUrl, jobOpening.atsProvider);
+
+            // 5. STEP 1: TAILORING
             await ApplicationStateMachine.transition({
-                applicationId: app.id,
+                applicationId: fullApp.id,
                 newStatus: "TAILORING",
                 reason: "Aligning candidate profile parameters and tailoring responses via Gemini engine.",
                 actor: "QUEUE_WORKER",
@@ -269,123 +405,226 @@ export class AutoApplyService {
             const tailoredResult = await tailoringService.tailorForJob({
                 userId: queueJob.userId,
                 jobId: jobOpening.id,
-                resumeId: app.resumeId,
+                resumeId: fullApp.resumeId,
                 jobTitle: jobOpening.title,
                 companyName,
-                jobDescription: jobOpening.title,
+                jobDescription: jobOpening.description || jobOpening.title,
+            }).catch((tailorErr) => {
+                console.warn("[AutoApplyService] Tailoring step notice:", tailorErr.message);
+                return { confidence: "MEDIUM" as const };
             });
 
-            // STEP 2: Rate limit pacing before accessing ATS
+            // 6. Rate Limit Pacing
+            console.log(`[AutoApplyService] Waiting for rate limiter slot on provider: ${atsProvider}`);
             await atsRateLimiter.waitForSlot(atsProvider);
 
-            // STEP 3: READY_TO_SUBMIT
+            // 7. STEP 2: READY_TO_SUBMIT
             await ApplicationStateMachine.transition({
-                applicationId: app.id,
+                applicationId: fullApp.id,
                 newStatus: "READY_TO_SUBMIT",
                 reason: "Application payload synthesized and verified. Ready for official ATS submission.",
-                metadata: { confidence: tailoredResult.confidence },
+                metadata: { confidence: tailoredResult.confidence, atsProvider },
                 actor: "QUEUE_WORKER",
             });
 
-            // STEP 4: SUBMITTING
+            // 8. STEP 3: SUBMITTING
             await ApplicationStateMachine.transition({
-                applicationId: app.id,
+                applicationId: fullApp.id,
                 newStatus: "SUBMITTING",
-                reason: `Connecting to ${companyName} ATS endpoint (${jobOpening.url}).`,
+                reason: `Connecting to ${companyName} ATS endpoint (${jobUrl}).`,
                 actor: "QUEUE_WORKER",
             });
 
-            // STEP 5: Run Playwright ATS Adapter Execution
+            // Build rich candidate context for apply adapters
+            const candidateContext = (await candidateService
+                .buildContext(queueJob.userId, fullApp.resumeId)
+                .catch(() => null)) as CandidateContext | null;
+
+            // 9. Path A: Try Official API Apply Adapter First
+            const adapterInput = {
+                jobUrl,
+                userId: queueJob.userId,
+                applicationId: fullApp.id,
+                profile: candidateContext,
+                resume: fullApp.resume,
+                atsProvider,
+                job: {
+                    id: jobOpening.id,
+                    description: jobOpening.description || jobOpening.title,
+                    title: jobOpening.title,
+                },
+            };
+
+            const apiResult = await applyAdapterRegistry.tryApiApply(adapterInput);
+            if (apiResult.success === true) {
+                console.log(`[AutoApplyService] ✅ Official API apply succeeded for #${fullApp.id}`);
+                await applicationQueueService.markCompleted(queueJobId, {
+                    atsProvider,
+                    jobUrl,
+                    confirmationId: apiResult.confirmationId,
+                    completedAt: new Date().toISOString(),
+                    method: "API",
+                });
+
+                await auditService.create(queueJob.userId, {
+                    action: "APPLICATION_SUBMITTED",
+                    description: `Application submitted via official ${atsProvider} API for ${jobOpening.title} at ${companyName}`,
+                    applicationId: fullApp.id,
+                    jobId: jobOpening.id,
+                });
+
+                await notificationService.create(queueJob.userId, {
+                    type: "APPLICATION_SUBMITTED",
+                    title: "Application Submitted Successfully",
+                    message: `Your application for ${jobOpening.title} at ${companyName} was submitted and verified via ${atsProvider}.`,
+                    applicationId: fullApp.id,
+                });
+
+                return true;
+            }
+
+            // 10. Path B: Real Playwright ATS Browser Adapter
+            console.log(`[AutoApplyService] Running Playwright ATS Adapter for ${atsProvider} on ${jobUrl}`);
             const { applyService } = await import("../browser/apply.service.js");
             let adapterResult = null;
+
             try {
                 adapterResult = await applyService.applyWithAdapter({
                     userId: queueJob.userId,
                     jobId: jobOpening.id,
                     jobTitle: jobOpening.title,
                     companyName,
-                    url: jobOpening.url,
-                    resumeId: app.resumeId,
-                    candidateProfile: app.user?.profile,
+                    url: jobUrl,
+                    resumeId: fullApp.resumeId,
+                    resumeFilePath: fullApp.resume?.fileUrl,
+                    candidateProfile: candidateContext || profile,
                 });
             } catch (adapterErr: any) {
-                console.warn("[AutoApplyService] Adapter run encountered error, falling back to agent workflow:", adapterErr.message);
+                console.warn("[AutoApplyService] Playwright adapter run encountered error:", adapterErr.message);
+                adapterResult = {
+                    success: false,
+                    status: "FAILED" as const,
+                    failureReason: adapterErr.message,
+                };
             }
 
-            // If adapter requested human verification checkpoint
-            if (adapterResult?.status === "WAITING_FOR_USER") {
+            // A. Security Challenge / CAPTCHA / 2FA / Verification Checkpoint (HITL)
+            if (adapterResult.status === "WAITING_FOR_USER" || adapterResult.requiresHumanVerification) {
+                const reason = adapterResult.failureReason || `${adapterResult.verificationType || "Security verification"} challenge required.`;
+                console.log(`[AutoApplyService] ⚠️ HITL required for App #${fullApp.id}: ${reason}`);
+
+                await humanActionService.createAction({
+                    userId: queueJob.userId,
+                    applicationId: fullApp.id,
+                    questions: [{
+                        selector: "security-challenge",
+                        label: reason,
+                        type: "verification",
+                        required: true,
+                        hint: "Please complete the CAPTCHA or verification challenge on the careers portal.",
+                    }],
+                });
+
                 await applicationQueueService.markWaitingForUser(
-                    queueJob.id,
-                    adapterResult.failureReason || "Interactive ATS verification / CAPTCHA clearance required.",
-                    { checkpointUrl: jobOpening.url, atsProvider, type: adapterResult.verificationType }
+                    queueJobId,
+                    reason,
+                    {
+                        checkpointUrl: jobUrl,
+                        atsProvider,
+                        type: adapterResult.verificationType,
+                        metadata: adapterResult.metadata,
+                    }
                 );
                 return false;
             }
 
-            if (adapterResult?.success || adapterResult?.status === "SUBMITTED") {
-                await applicationQueueService.markCompleted(queueJob.id, {
+            // B. Already applied detected on portal
+            if (adapterResult.failureReason && /already applied|previously applied|application already exists/i.test(adapterResult.failureReason)) {
+                console.log(`[AutoApplyService] Candidate already applied on portal for App #${fullApp.id}`);
+                await applicationQueueService.markCompleted(queueJobId, {
                     atsProvider,
-                    jobUrl: jobOpening.url,
+                    jobUrl,
+                    completedAt: new Date().toISOString(),
+                    alreadyApplied: true,
+                });
+
+                await notificationService.create(queueJob.userId, {
+                    type: "APPLICATION_STATUS",
+                    title: "Application Already on File",
+                    message: `Employer already has your application on file for ${jobOpening.title} at ${companyName}.`,
+                    applicationId: fullApp.id,
+                });
+                return true;
+            }
+
+            // C. Real External Confirmation Verified
+            if (adapterResult.success === true && adapterResult.status === "SUBMITTED") {
+                console.log(`[AutoApplyService] ✅ Real external confirmation verified for App #${fullApp.id}`);
+                await applicationQueueService.markCompleted(queueJobId, {
+                    atsProvider,
+                    jobUrl,
                     confirmationId: adapterResult.confirmationId,
                     completedAt: new Date().toISOString(),
+                    metadata: adapterResult.metadata,
+                    method: "PLAYWRIGHT",
+                });
+
+                await auditService.create(queueJob.userId, {
+                    action: "APPLICATION_SUBMITTED",
+                    description: `Application submitted and verified via Playwright for ${jobOpening.title} at ${companyName}`,
+                    applicationId: fullApp.id,
+                    jobId: jobOpening.id,
                 });
 
                 await notificationService.create(queueJob.userId, {
-                    type: "APPLICATION_STATUS",
+                    type: "APPLICATION_SUBMITTED",
                     title: "Application Submitted Successfully",
                     message: `Your application for ${jobOpening.title} at ${companyName} was submitted and verified.`,
-                    applicationId: app.id,
+                    applicationId: fullApp.id,
                 });
 
                 return true;
             }
 
-            // Fallback: Agent Service execution
-            const result = await agentService.run({
-                userId: queueJob.userId,
-                query: `Apply for ${jobOpening.title} at ${companyName}`,
-                resumeId: app.resumeId,
-            });
-
-            // Check if human intervention checkpoint was triggered
-            if (result.status === "WAITING_FOR_USER") {
-                await applicationQueueService.markWaitingForUser(
-                    queueJob.id,
-                    "Interactive ATS verification / CAPTCHA clearance required.",
-                    { checkpointUrl: jobOpening.url, atsProvider }
-                );
-                return false;
-            }
-
-            if (result.status === "COMPLETED") {
-                await applicationQueueService.markCompleted(queueJob.id, {
-                    atsProvider,
-                    jobUrl: jobOpening.url,
-                    completedAt: new Date().toISOString(),
-                });
-
-                await notificationService.create(queueJob.userId, {
-                    type: "APPLICATION_STATUS",
-                    title: "Application Submitted Successfully",
-                    message: `Your application for ${jobOpening.title} at ${companyName} was submitted and verified.`,
-                    applicationId: app.id,
-                });
-
-                return true;
-            }
-
-            // If error occurred during agent execution
-            const errorMsg = result.errors?.join("; ") || adapterResult?.failureReason || "Submission encountered an ATS error.";
+            // D. Submission Failed - Handle retries and backoff
+            const failureReason = adapterResult.failureReason || "Submission could not be verified on external portal.";
             const isTransient =
-                !errorMsg.toLowerCase().includes("closed") &&
-                !errorMsg.toLowerCase().includes("not accepting") &&
-                !errorMsg.toLowerCase().includes("expired");
+                !failureReason.toLowerCase().includes("closed") &&
+                !failureReason.toLowerCase().includes("not accepting") &&
+                !failureReason.toLowerCase().includes("expired") &&
+                !failureReason.toLowerCase().includes("no longer available") &&
+                !failureReason.toLowerCase().includes("not found");
 
-            await applicationQueueService.markFailed(queueJob.id, errorMsg, isTransient);
+            const attempts = queueJob.attempts ?? 1;
+            const maxAttempts = queueJob.maxAttempts ?? 3;
+            const hasRetriesLeft = attempts < maxAttempts;
+
+            console.warn(`[AutoApplyService] ❌ Submission failed for App #${fullApp.id}: ${failureReason} (attempt ${attempts}/${maxAttempts})`);
+
+            if (!hasRetriesLeft) {
+                await ApplicationStateMachine.transition({
+                    applicationId: fullApp.id,
+                    newStatus: "FAILED",
+                    reason: `Submission failed after ${maxAttempts} attempts: ${failureReason}`,
+                    actor: "QUEUE_WORKER",
+                });
+            }
+
+            await applicationQueueService.markFailed(queueJobId, failureReason, isTransient && hasRetriesLeft);
+
+            if (!hasRetriesLeft) {
+                await notificationService.create(queueJob.userId, {
+                    type: "APPLICATION_FAILED",
+                    title: "Application Submission Failed",
+                    message: `Could not submit to ${companyName} for ${jobOpening.title} after ${maxAttempts} attempts: ${failureReason}`,
+                    applicationId: fullApp.id,
+                });
+            }
+
             return false;
         } catch (err: any) {
-            console.error(`[AutoApplyService] Exception processing application ${app.id}:`, err);
-            await applicationQueueService.markFailed(queueJob.id, err.message || "Unexpected execution failure", true);
+            console.error(`[AutoApplyService] Unexpected exception executing queueJob #${queueJobId}:`, err);
+            await applicationQueueService.markFailed(queueJobId, err.message || "Unexpected execution failure", true);
             return false;
         }
     }

@@ -40,13 +40,13 @@ export class LeverAdapter extends BaseATSAdapter {
             include: { profile: true },
         });
 
-        const profile = user?.profile;
+        const profile = context.candidateProfile || user?.profile;
         const candidateData = {
-            name: profile ? `${profile.firstName} ${profile.lastName}`.trim() : "Candidate Applicant",
-            email: user?.email || "candidate@jobpilot.ai",
+            name: profile ? (`${profile.firstName || ""} ${profile.lastName || ""}`.trim() || profile.name || "Candidate Applicant") : "Candidate Applicant",
+            email: context.candidateProfile?.email || profile?.email || user?.email || "candidate@jobpilot.ai",
             phone: profile?.phone || "+91 9876543210",
             currentCompany: profile?.currentCompany || "Technology Solutions",
-            location: profile?.city ? `${profile.city}, India` : "Bengaluru, India",
+            location: profile?.city ? `${profile.city}, India` : (profile?.location || "Bengaluru, India"),
             linkedin: profile?.linkedin || "https://linkedin.com/in/candidate",
             github: profile?.github || "https://github.com/candidate",
             portfolio: profile?.portfolio || "",
@@ -135,22 +135,29 @@ export class LeverAdapter extends BaseATSAdapter {
             };
         }
 
-        const isSuccess = await page.evaluate(() => {
-            const text = document.body.innerText.toLowerCase();
-            return (
-                text.includes("thank you") ||
-                text.includes("application submitted") ||
-                text.includes("we've received your application") ||
-                window.location.href.includes("thanks") ||
-                window.location.href.includes("confirmation")
+        const { default: submissionVerificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+        const verification = await submissionVerificationTool.verify(page);
+
+        if (verification.verified) {
+            const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
+            const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
+            const confId = confirmationMatch ? confirmationMatch[1] : (
+                verification.confirmationUrl ? `REF-${Buffer.from(verification.confirmationUrl).toString("base64url").slice(0, 12)}` : undefined
             );
-        });
+
+            return {
+                success: true,
+                status: "SUBMITTED",
+                confirmationId: confId,
+                metadata: { ats: "Lever", timestamp: new Date().toISOString(), reason: verification.reason },
+            };
+        }
 
         return {
-            success: true,
-            status: "SUBMITTED",
-            confirmationId: `LEVER-${Date.now().toString(36).toUpperCase()}`,
-            metadata: { ats: "Lever", verified: isSuccess },
+            success: false,
+            status: "FAILED",
+            failureReason: verification.reason || "Lever submission could not be verified on external portal.",
+            metadata: { ats: "Lever", url: page.url() },
         };
     }
 }

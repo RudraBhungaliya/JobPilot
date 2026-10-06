@@ -55,10 +55,27 @@ export class WorkdayAdapter extends BaseATSAdapter {
             };
         }
 
+        const { default: submissionVerificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+        const verification = await submissionVerificationTool.verify(page);
+        if (verification.verified) {
+            const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
+            const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
+            const confId = confirmationMatch ? confirmationMatch[1] : (
+                verification.confirmationUrl ? `REF-${Buffer.from(verification.confirmationUrl).toString("base64url").slice(0, 12)}` : undefined
+            );
+
+            return {
+                success: true,
+                status: "SUBMITTED",
+                confirmationId: confId,
+                metadata: { ats: "Workday", reason: verification.reason },
+            };
+        }
+
         return {
-            success: true,
-            status: "SUBMITTED",
-            confirmationId: `WD-${Date.now().toString(36).toUpperCase()}`,
+            success: false,
+            status: "FAILED",
+            failureReason: verification.reason || "Workday application submission could not be verified on external portal.",
             metadata: { ats: "Workday" },
         };
     }

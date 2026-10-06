@@ -152,6 +152,13 @@ class HumanActionService {
             { status: "QUEUED" },
         );
 
+        try {
+            const { default: applicationQueueService } = await import("../queue/application-queue.service.js");
+            await applicationQueueService.resumeWaitingJob(humanAction.applicationId, answers);
+        } catch {
+            // applicationQueue record might not exist or be active
+        }
+
         await auditRepository.create({
             userId,
             action: "USER_ACTION_COMPLETED",

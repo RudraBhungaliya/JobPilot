@@ -14,6 +14,7 @@ class ApplyService {
             return await adapter.execute(page, context);
         } finally {
             await page.close().catch(() => null);
+            await browser.close().catch(() => null);
         }
     }
 }

@@ -8,6 +8,7 @@ const DEFAULT_CONFIGS: Record<string, RateLimitConfig> = {
     greenhouse: { maxPerMinute: 10, maxPerHour: 60, delayBetweenRequestsMs: 3000 },
     ashby: { maxPerMinute: 8, maxPerHour: 50, delayBetweenRequestsMs: 4000 },
     lever: { maxPerMinute: 10, maxPerHour: 60, delayBetweenRequestsMs: 3000 },
+    workday: { maxPerMinute: 6, maxPerHour: 40, delayBetweenRequestsMs: 4000 },
     default: { maxPerMinute: 5, maxPerHour: 30, delayBetweenRequestsMs: 5000 },
 };
 

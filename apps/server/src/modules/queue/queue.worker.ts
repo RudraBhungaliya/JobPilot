@@ -73,12 +73,16 @@ class QueueWorker {
    */
   private async dispatchOne(): Promise<boolean> {
     if (this.stopping) return false;
+    if (this.activeWorkers.size >= this.concurrency) return false;
 
     // 1. Check ApplicationQueue first (direct ATS submissions)
     try {
       const appQueueJob = await applicationQueueService.claimNext(this.workerId);
       if (appQueueJob) {
-        void autoApplyService.execute(appQueueJob);
+        this.activeWorkers.add(appQueueJob.id);
+        this.runAppQueueWorker(appQueueJob).finally(() => {
+          this.activeWorkers.delete(appQueueJob.id);
+        });
         return true;
       }
     } catch {
@@ -86,8 +90,6 @@ class QueueWorker {
     }
 
     // 2. Check general Agent Queue
-    if (this.activeWorkers.size >= this.concurrency) return false;
-
     const jobs = await queueService.getPendingJobs();
     if (jobs.length === 0) return false;
 
@@ -102,6 +104,20 @@ class QueueWorker {
       return true;
     }
     return false;
+  }
+
+  private async runAppQueueWorker(appQueueJob: any): Promise<void> {
+    try {
+      await autoApplyService.execute(appQueueJob);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Auto-apply execution failed.";
+      logger.error({ err, jobId: appQueueJob.id }, "Error executing ApplicationQueue job");
+      try {
+        await applicationQueueService.markFailed(appQueueJob.id, message, true);
+      } catch {
+        // Ignore DB update error
+      }
+    }
   }
 
   private async runWorker(jobId: string, runningJob: any): Promise<void> {

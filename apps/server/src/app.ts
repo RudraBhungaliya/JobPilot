@@ -22,9 +22,11 @@ import eventsRouter from "./modules/events/events.routes.js";
 import crawlerRoutes from "./modules/crawler/crawler.routes.js";
 import sourceBootstrap from "./modules/sources/source.bootstrap.js";
 import domAdapterBootstrap from "./modules/browser/dom-adapter.bootstrap.js";
+import applyBootstrap from "./modules/application/adapters/apply.bootstrap.js";
 
 sourceBootstrap.initialize();
 domAdapterBootstrap.initialize();
+applyBootstrap.initialize();
 
 if (process.env.NODE_ENV !== "test") {
     loopExecutionEngine.startScheduler();
