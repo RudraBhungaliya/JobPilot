@@ -81,6 +81,28 @@ export class GreenhouseDomAdapter implements DomAtsAdapter {
         }
       }
 
+      // Check for CAPTCHA or Turnstile challenges
+      const captchaPresent = await page.evaluate(() => {
+        const selectors = [
+          'iframe[src*="recaptcha"]',
+          'iframe[src*="turnstile"]',
+          'iframe[src*="challenges.cloudflare"]',
+          'iframe[src*="hcaptcha"]',
+          '.g-recaptcha',
+          '.cf-turnstile',
+          '#cf-challenge-running'
+        ];
+        return selectors.some((s) => !!document.querySelector(s));
+      }).catch(() => false);
+
+      if (captchaPresent) {
+        return {
+          success: false,
+          requiresBrowserFallback: false,
+          reason: "CAPTCHA or Cloudflare Turnstile challenge detected; requires user interaction.",
+        };
+      }
+
       if (input.resumeBuffer) {
         const fileInput = page.locator('input[type="file"]').first();
         if (await fileInput.isVisible().catch(() => false)) {
@@ -97,14 +119,18 @@ export class GreenhouseDomAdapter implements DomAtsAdapter {
       const nextBtn = page.getByRole("button", { name: /submit|apply|next|continue|review/i }).first();
       if (await nextBtn.isVisible().catch(() => false)) {
         await nextBtn.click().catch(() => {});
-        await page.waitForLoadState("domcontentloaded").catch(() => page.waitForTimeout(1500));
+        await page.waitForLoadState("domcontentloaded").catch(() => page.waitForTimeout(2000));
         try {
           const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
-          if (/thank you|application submitted|confirmation|success/i.test(bodyText)) {
+          if (/thank you|application submitted|application received|we have received your application|confirmation/i.test(bodyText)) {
+            // Extract genuine confirmation reference if present
+            const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
+            const confirmationId = confirmationMatch ? confirmationMatch[1] : undefined;
+
             return {
               success: true,
               requiresBrowserFallback: false,
-              confirmationId: `gh-dom-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+              confirmationId,
             };
           }
         } catch {}
@@ -115,15 +141,21 @@ export class GreenhouseDomAdapter implements DomAtsAdapter {
 
     try {
       const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
-      if (/thank you|application submitted|application received|confirmation/i.test(bodyText)) {
-        return { success: true, requiresBrowserFallback: false, confirmationId: `gh-dom-${Date.now()}` };
+      if (/thank you|application submitted|application received|we have received your application|confirmation/i.test(bodyText)) {
+        const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
+        const confirmationId = confirmationMatch ? confirmationMatch[1] : undefined;
+        return { success: true, requiresBrowserFallback: false, confirmationId };
       }
       if (/already applied|you have already applied/i.test(bodyText)) {
-        return { success: false, requiresBrowserFallback: false, reason: "already applied" };
+        return { success: false, requiresBrowserFallback: false, reason: "Already applied to this opening." };
       }
     } catch {}
 
-    return { success: false, requiresBrowserFallback: true, reason: `GH DOM apply completed ${this.lastFillCount} fills but final step not confirmed` };
+    return { 
+      success: false, 
+      requiresBrowserFallback: true, 
+      reason: `Greenhouse application form filled (${this.lastFillCount} fields mapped), awaiting user review or unverified final confirmation.` 
+    };
   }
 
   private async extractLabelText(page: Page, el: any): Promise<string> {

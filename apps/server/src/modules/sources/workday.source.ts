@@ -56,34 +56,6 @@ class WorkdaySource implements JobSource {
         }
     }
 
-    private buildFallbackJobs(
-        tenants: typeof WORKDAY_TENANTS,
-    ): SourceJob[] {
-        const stubJobs: SourceJob[] = [];
-        const fallbackTenants = tenants.slice(0, 3);
-        const roleTemplates = [
-            { title: "Senior Software Engineer", desc: "Full-stack engineering role building scalable systems." },
-            { title: "Software Engineer II", desc: "Product engineering role with focus on backend services." },
-            { title: "Staff Software Engineer", desc: "Leadership role driving technical initiatives and architecture." },
-        ];
-
-        for (let i = 0; i < fallbackTenants.length; i++) {
-            const tenant = fallbackTenants[i];
-            const role = roleTemplates[i % roleTemplates.length];
-            const idPrefix = tenant.tenant || tenant.slug;
-            stubJobs.push({
-                externalId: `wd-${idPrefix}-fallback-${i}`,
-                title: role.title,
-                company: tenant.company,
-                url: `https://${idPrefix}.myworkdayjobs.com/${tenant.board || "external"}`,
-                location: "Bengaluru, India",
-                description: `${role.title} at ${tenant.company}. ${role.desc}`,
-                source: "workday",
-            });
-        }
-        return stubJobs;
-    }
-
     async search(
         options: SearchOptions,
     ): Promise<SourceJob[]> {
@@ -165,10 +137,6 @@ class WorkdaySource implements JobSource {
                 }
             }),
         );
-
-        if (allJobs.length === 0) {
-            return this.buildFallbackJobs(tenants);
-        }
 
         return allJobs;
     }

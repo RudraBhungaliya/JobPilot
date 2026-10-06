@@ -5,8 +5,13 @@ import jobController from "./job.controller.js";
 
 const router = Router();
 
-// Discovery reads public company career boards and does not expose user data.
-// Keep it unauthenticated so the web client can show a real, fresh feed before sign-in.
+// Discovery and live ATS read public company career boards.
+// Keep them unauthenticated so the web client can show real-time feeds without sign-in block.
+router.get(
+    "/live",
+    jobController.liveJobs.bind(jobController)
+);
+
 router.get(
     "/discover",
     jobController.discover.bind(jobController)

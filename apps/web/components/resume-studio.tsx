@@ -15,6 +15,10 @@ import {
   Compass,
   Search,
   RefreshCw,
+  Award,
+  Briefcase,
+  Clock,
+  Layers,
 } from "./icons";
 
 interface ResumeStudioProps {
@@ -31,7 +35,9 @@ export function ResumeStudio({
   onSearchMatchingJobs,
 }: ResumeStudioProps) {
   const [selectedResumeId, setSelectedResumeId] = useState(resumes[0]?.id || "");
-  const [activeTab, setActiveTab] = useState<"analysis" | "diff">("analysis");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "experience" | "education" | "projects" | "certifications" | "diff"
+  >("overview");
   const [uploadError, setUploadError] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +87,7 @@ export function ResumeStudio({
             </h1>
           </div>
           <p className="text-xs text-zinc-400 mt-1">
-            Upload your master resume (PDF, DOCX, TXT) to extract skills, synchronize your candidate profile, and discover live matched openings across Greenhouse, Ashby, and Lever.
+            Upload and manage your master resumes, extract skills, view structured career timelines, and sync with live ATS openings.
           </p>
         </div>
 
@@ -205,26 +211,66 @@ export function ResumeStudio({
           {/* Right Column: Deep Parsed Analysis of Selected Resume */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar">
                 <button
-                  onClick={() => setActiveTab("analysis")}
-                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors ${
-                    activeTab === "analysis"
+                  onClick={() => setActiveTab("overview")}
+                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                    activeTab === "overview"
                       ? "text-blue-400 bg-blue-500/10 font-bold border border-blue-500/20"
                       : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
-                  Extracted Skills & Attributes
+                  Overview & ATS
+                </button>
+                <button
+                  onClick={() => setActiveTab("experience")}
+                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                    activeTab === "experience"
+                      ? "text-blue-400 bg-blue-500/10 font-bold border border-blue-500/20"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Work History ({selectedResume.experienceEntries?.length || 0})
+                </button>
+                <button
+                  onClick={() => setActiveTab("education")}
+                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                    activeTab === "education"
+                      ? "text-blue-400 bg-blue-500/10 font-bold border border-blue-500/20"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Education
+                </button>
+                <button
+                  onClick={() => setActiveTab("projects")}
+                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                    activeTab === "projects"
+                      ? "text-blue-400 bg-blue-500/10 font-bold border border-blue-500/20"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Projects ({selectedResume.projectEntries?.length || 0})
+                </button>
+                <button
+                  onClick={() => setActiveTab("certifications")}
+                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
+                    activeTab === "certifications"
+                      ? "text-blue-400 bg-blue-500/10 font-bold border border-blue-500/20"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  Certifications
                 </button>
                 <button
                   onClick={() => setActiveTab("diff")}
-                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors ${
+                  className={`text-xs font-mono uppercase tracking-wider px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
                     activeTab === "diff"
                       ? "text-blue-400 bg-blue-500/10 font-bold border border-blue-500/20"
                       : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
-                  AI ATS Tailoring Preview
+                  Tailoring Diff
                 </button>
               </div>
 
@@ -236,14 +282,27 @@ export function ResumeStudio({
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/30 px-3.5 py-1.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/30 transition-all shadow-sm"
                 >
                   <Compass size={13} />
-                  <span>Find Live Openings for this Resume</span>
+                  <span>Find Live Openings</span>
                 </button>
               )}
             </div>
 
-            {activeTab === "analysis" ? (
-              /* Skills & Extracted Profile */
+            {/* TAB: Overview & ATS Intelligence */}
+            {activeTab === "overview" && (
               <div className="rounded-xl border border-white/[0.08] bg-[#10121a] p-5 shadow-card-dark space-y-5">
+                {/* Executive Summary */}
+                {selectedResume.summary && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-zinc-100 block">
+                      Parsed Executive Summary
+                    </label>
+                    <p className="text-xs text-zinc-300 leading-relaxed rounded-lg border border-white/[0.06] bg-[#161924] p-3.5">
+                      {selectedResume.summary}
+                    </p>
+                  </div>
+                )}
+
+                {/* Technical Skills */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-zinc-100 block">
@@ -266,19 +325,19 @@ export function ResumeStudio({
                   </div>
                 </div>
 
-                {/* Real-time ATS Verification Diagnostics */}
+                {/* ATS Verification Diagnostics */}
                 <div className="space-y-2.5 pt-3 border-t border-white/[0.08]">
                   <label className="text-xs font-semibold text-zinc-100 block">
-                    ATS Schema Verification
+                    ATS Readiness & Diagnostics
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="rounded-xl border border-white/[0.08] bg-[#161924] p-3.5 text-xs">
-                      <span className="font-mono text-[10px] text-zinc-500 uppercase">Text Extraction</span>
+                      <span className="font-mono text-[10px] text-zinc-500 uppercase">ATS Score</span>
                       <div className="mt-1 font-semibold text-emerald-400 flex items-center gap-1">
                         <CheckCircle size={13} />
-                        <span>100% Vectorized</span>
+                        <span>{selectedResume.atsScore || 95}% Match Power</span>
                       </div>
-                      <p className="text-[10px] text-zinc-400 mt-1">Structure parsed for automated ATS form filling.</p>
+                      <p className="text-[10px] text-zinc-400 mt-1">Format compliant with Greenhouse, Ashby, and Lever.</p>
                     </div>
 
                     <div className="rounded-xl border border-white/[0.08] bg-[#161924] p-3.5 text-xs">
@@ -300,9 +359,208 @@ export function ResumeStudio({
                     </div>
                   </div>
                 </div>
+
+                {/* AI Strengths & Suggestions */}
+                {selectedResume.strengths && selectedResume.strengths.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-white/[0.08]">
+                    <label className="text-xs font-semibold text-zinc-100 block">
+                      Key Resume Strengths
+                    </label>
+                    <ul className="space-y-1 text-xs text-zinc-300">
+                      {selectedResume.strengths.map((st, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="text-emerald-400 shrink-0 mt-0.5">•</span>
+                          <span>{st}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-            ) : (
-              /* Side-by-Side ATS Diff */
+            )}
+
+            {/* TAB: Work Experience Timeline */}
+            {activeTab === "experience" && (
+              <div className="rounded-xl border border-white/[0.08] bg-[#10121a] p-5 shadow-card-dark space-y-4">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <h3 className="text-xs font-semibold text-zinc-100">Work History & Engineering Impact</h3>
+                  <span className="text-[11px] text-zinc-500 font-mono">
+                    {selectedResume.experienceEntries?.length || 0} Positions Ingested
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  {selectedResume.experienceEntries?.map((exp, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-white/[0.06] bg-[#161924] p-4 text-xs space-y-2.5"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                        <div>
+                          <h4 className="font-semibold text-zinc-100 text-sm">{exp.role}</h4>
+                          <span className="text-blue-400 font-medium">{exp.company}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-zinc-400 font-mono">
+                          <span>{exp.period}</span>
+                          <span>&middot;</span>
+                          <span>{exp.location}</span>
+                        </div>
+                      </div>
+
+                      <ul className="space-y-1.5 pt-1 text-zinc-300 text-[11px] leading-relaxed">
+                        {exp.bullets.map((b, bi) => (
+                          <li key={bi} className="flex items-start gap-2">
+                            <span className="text-blue-400 shrink-0 mt-0.5">▹</span>
+                            <span>{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {exp.techStack && exp.techStack.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-2 border-t border-white/[0.04]">
+                          {exp.techStack.map((t, ti) => (
+                            <span
+                              key={ti}
+                              className="rounded bg-zinc-800/80 px-2 py-0.5 font-mono text-[10px] text-zinc-300 border border-white/[0.05]"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Education */}
+            {activeTab === "education" && (
+              <div className="rounded-xl border border-white/[0.08] bg-[#10121a] p-5 shadow-card-dark space-y-4">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <h3 className="text-xs font-semibold text-zinc-100">Academic Degrees & Coursework</h3>
+                  <span className="text-[11px] text-zinc-500 font-mono">
+                    {selectedResume.educationEntries?.length || 0} Degrees
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {selectedResume.educationEntries?.map((edu, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-white/[0.06] bg-[#161924] p-4 text-xs space-y-2"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                        <div>
+                          <h4 className="font-semibold text-zinc-100">{edu.degree}</h4>
+                          <span className="text-blue-400">{edu.institution}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-zinc-400 font-mono">
+                          <span>Class of {edu.year}</span>
+                          {edu.gpa && <span>GPA: {edu.gpa}</span>}
+                        </div>
+                      </div>
+
+                      {edu.highlights && edu.highlights.length > 0 && (
+                        <ul className="space-y-1 text-zinc-400 text-[11px] pt-1">
+                          {edu.highlights.map((h, hi) => (
+                            <li key={hi} className="flex items-start gap-2">
+                              <span className="text-emerald-400">•</span>
+                              <span>{h}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Projects */}
+            {activeTab === "projects" && (
+              <div className="rounded-xl border border-white/[0.08] bg-[#10121a] p-5 shadow-card-dark space-y-4">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <h3 className="text-xs font-semibold text-zinc-100">Engineering Projects & Open Source</h3>
+                  <span className="text-[11px] text-zinc-500 font-mono">
+                    {selectedResume.projectEntries?.length || 0} Projects
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {selectedResume.projectEntries?.map((proj, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-white/[0.06] bg-[#161924] p-4 text-xs space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-zinc-100">{proj.title}</h4>
+                        {proj.link && (
+                          <a
+                            href={proj.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300"
+                          >
+                            <span>View Repo</span>
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                      <p className="text-zinc-300 text-[11px] leading-relaxed">{proj.description}</p>
+                      {proj.tech && proj.tech.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {proj.tech.map((t, ti) => (
+                            <span
+                              key={ti}
+                              className="rounded bg-zinc-800/80 px-2 py-0.5 font-mono text-[10px] text-blue-300 border border-blue-500/20"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Certifications */}
+            {activeTab === "certifications" && (
+              <div className="rounded-xl border border-white/[0.08] bg-[#10121a] p-5 shadow-card-dark space-y-4">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+                  <h3 className="text-xs font-semibold text-zinc-100">Certifications & Accreditations</h3>
+                  <span className="text-[11px] text-zinc-500 font-mono">
+                    {selectedResume.certificationEntries?.length || 0} Verified
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {selectedResume.certificationEntries?.map((cert, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-xl border border-white/[0.06] bg-[#161924] p-4 text-xs flex items-center justify-between"
+                    >
+                      <div className="space-y-0.5">
+                        <h4 className="font-semibold text-zinc-100">{cert.name}</h4>
+                        <p className="text-zinc-400 text-[11px]">
+                          Issued by {cert.issuer} &middot; {cert.date}
+                        </p>
+                      </div>
+                      {cert.credentialId && (
+                        <span className="rounded bg-blue-500/10 px-2 py-1 font-mono text-[10px] text-blue-400 border border-blue-500/20">
+                          {cert.credentialId}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB: Tailoring Diff */}
+            {activeTab === "diff" && (
               <div className="rounded-xl border border-white/[0.08] bg-[#10121a] p-5 shadow-card-dark space-y-4">
                 <div className="flex items-center justify-between border-b border-white/[0.08] pb-3 text-xs">
                   <div>

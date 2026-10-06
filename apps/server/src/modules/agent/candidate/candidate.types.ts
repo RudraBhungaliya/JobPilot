@@ -59,16 +59,25 @@ export interface CandidateContext {
     firstName?: string | null;
     middleName?: string | null;
     lastName?: string | null;
+    preferredName?: string | null;
+    pronouns?: string | null;
 
     email?: string | null;
     phone?: string | null;
+    phoneCountryCode?: string | null;
+    secondaryPhone?: string | null;
 
     dateOfBirth?: Date | string | null;
 
     gender?: string | null;
+    race?: string | null;
+    ethnicity?: string | null;
+    veteranStatus?: string | null;
+    disabilityStatus?: string | null;
     nationality?: string | null;
 
     address?: string | null;
+    addressLine2?: string | null;
     city?: string | null;
     state?: string | null;
     country?: string | null;
@@ -81,13 +90,20 @@ export interface CandidateContext {
 
     expectedSalary?: number | null;
     currentSalary?: number | null;
+    salaryCurrency?: string | null;
 
     noticePeriod?: number | null;
+    availableStartDate?: string | null;
 
     github?: string | null;
     linkedin?: string | null;
     portfolio?: string | null;
     website?: string | null;
+    twitter?: string | null;
+    stackoverflow?: string | null;
+    kaggle?: string | null;
+    dribbble?: string | null;
+    behance?: string | null;
 
     leetcode?: string | null;
     codeforces?: string | null;
@@ -100,8 +116,12 @@ export interface CandidateContext {
     remoteOnly?: boolean | null;
 
     sponsorshipRequired?: boolean | null;
-
+    workAuthorization?: string | null;
     visaStatus?: string | null;
+
+    is18OrOlder?: boolean | null;
+    previousEmployee?: boolean | null;
+    nonCompeteAgreement?: boolean | null;
 
     governmentEmployee?: boolean | null;
     militaryService?: boolean | null;

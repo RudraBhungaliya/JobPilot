@@ -1,75 +1,54 @@
 import { NextResponse } from "next/server";
-import { INITIAL_APPLICATIONS, Application, inferCompanyTier } from "@/lib/mock-data";
 
-// In-memory persistent state across requests in dev server
-let memoryApplications: Application[] = [...INITIAL_APPLICATIONS];
+const BACKEND_API_URL = process.env.JOBPILOT_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    data: memoryApplications,
-  });
+export async function GET(request: Request) {
+  try {
+    const authHeader = request.headers.get("authorization") || "";
+    const res = await fetch(`${BACKEND_API_URL}/api/v1/applications`, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        ...(authHeader ? { "Authorization": authHeader } : {}),
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return NextResponse.json({ success: false, data: [] }, { status: res.status });
+    }
+
+    const data = await res.json();
+    return NextResponse.json(data);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, data: [], message: err.message }, { status: 502 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const companyName = body.companyName || body.company?.name || "Target Company";
-    const companyDomain = body.companyDomain || body.company?.domain || "company.com";
-    const tier = body.companyTier || body.company?.tier || inferCompanyTier(companyName, companyDomain);
+    const authHeader = request.headers.get("authorization") || "";
 
-    const newApplication: Application = {
-      id: `app-${Date.now()}`,
-      jobTitle: body.jobTitle || "Software Engineer",
-      company: {
-        id: `c-${Date.now()}`,
-        name: companyName,
-        domain: companyDomain,
-        logoText: companyName.slice(0, 2).toUpperCase(),
-        location: body.location || "San Francisco, CA / Remote",
-        stage: body.company?.stage || "Growth",
-        verifiedAts: body.atsProvider || "Greenhouse",
-        tier: tier,
+    const res = await fetch(`${BACKEND_API_URL}/api/v1/applications`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        ...(authHeader ? { "Authorization": authHeader } : {}),
       },
-      jobUrl: body.jobUrl || "https://boards.greenhouse.io",
-      location: body.location || "San Francisco, CA / Remote",
-      workMode: body.workMode || "Remote",
-      salaryRange: body.salaryRange || "$180,000 - $240,000",
-      status: body.status || "SAVED",
-      matchScore: body.matchScore || 92,
-      atsProvider: body.atsProvider || "Greenhouse",
-      resumeVersionUsed: body.resumeVersionUsed || "Staff_Distributed_Systems_2026.pdf",
-      lastUpdated: "Just now",
-      humanActions: [],
-      questions: [],
-      tailoringNotes: {
-        highlightedSkills: ["Distributed Systems", "TypeScript", "Go", "PostgreSQL"],
-        customExecutiveSummary: "Ingested via JobPilot ATS Pipeline.",
-        gapAnalysis: [],
-      },
-      telemetryLogs: [
-        {
-          timestamp: new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
-          level: "INFO",
-          step: "APPLICATION_INGESTED",
-          detail: `Added to ${body.status || "SAVED"} queue for automated pipeline tracking.`,
-        },
-      ],
-    };
-
-    memoryApplications = [newApplication, ...memoryApplications];
-
-    return NextResponse.json({
-      success: true,
-      data: newApplication,
+      body: JSON.stringify(body),
     });
+
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     return NextResponse.json(
       {
         success: false,
         message: err.message || "Failed to create application",
       },
-      { status: 400 }
+      { status: 502 }
     );
   }
 }

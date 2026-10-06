@@ -56,6 +56,56 @@ class HumanActionService {
             agentRunId: input.agentRunId,
         });
 
+        // Trigger email notification to candidate via email provider
+        try {
+            const { prisma } = await import("@jobpilot/database");
+            const appRecord = await prisma.application.findUnique({
+                where: { id: input.applicationId },
+                include: {
+                    job: { include: { company: true } },
+                    user: { include: { profile: true } },
+                },
+            });
+
+            const candidateEmail = appRecord?.user?.profile?.email || appRecord?.user?.email;
+            const jobTitle = appRecord?.job?.title || "Target Role";
+            const companyName = appRecord?.job?.company?.name || "Target Company";
+
+            if (candidateEmail) {
+                const subject = `[JobPilot Interruption Alert] Human Step / Approval needed for ${jobTitle} at ${companyName}`;
+                const questionSummary = input.questions.map((q) => `• ${q.label || q.selector}`).join("\n");
+                const htmlContent = `
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1e293b;">
+                        <h2 style="color: #0f172a; margin-bottom: 8px;">JobPilot Automation Interruption</h2>
+                        <p style="font-size: 15px; color: #475569;">
+                            Your automated application for <strong>${jobTitle}</strong> at <strong>${companyName}</strong> has encountered a step requiring your interaction or approval before final submission.
+                        </p>
+                        <div style="background-color: #f1f5f9; border-left: 4px solid #3b82f6; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
+                            <h4 style="margin: 0 0 8px 0; color: #1e293b;">Required Action:</h4>
+                            <ul style="margin: 0; padding-left: 20px; color: #334155;">
+                                ${input.questions.map((q) => `<li>${q.label || q.selector}</li>`).join("")}
+                            </ul>
+                        </div>
+                        <p style="font-size: 14px; color: #64748b;">
+                            Please clear this human test step or approve the application submission in your JobPilot dashboard.
+                        </p>
+                        <a href="http://localhost:3000" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500; margin-top: 10px;">
+                            Open JobPilot Dashboard
+                        </a>
+                    </div>
+                `;
+
+                await notificationService.sendEmailNotification(
+                    candidateEmail,
+                    subject,
+                    htmlContent,
+                    `JobPilot Interruption Alert: Human step required for ${jobTitle} at ${companyName}.\nPending items:\n${questionSummary}\nPlease visit your dashboard to clear this step.`
+                );
+            }
+        } catch (mailErr) {
+            console.error("Failed to send HITL email notification:", mailErr);
+        }
+
         return humanAction;
     }
 

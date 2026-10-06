@@ -1,27 +1,36 @@
 import { NextResponse } from "next/server";
-import { INITIAL_APPLICATIONS, Application } from "@/lib/mock-data";
 
-// Shared state with list route
-let memoryApplications: Application[] = [...INITIAL_APPLICATIONS];
+const BACKEND_API_URL = process.env.JOBPILOT_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const app = memoryApplications.find((a) => a.id === id);
+  const authHeader = request.headers.get("authorization") || "";
 
-  if (!app) {
-    return NextResponse.json(
-      { success: false, message: "Application not found" },
-      { status: 404 }
-    );
+  try {
+    const res = await fetch(`${BACKEND_API_URL}/api/v1/applications/${id}`, {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        ...(authHeader ? { "Authorization": authHeader } : {}),
+      },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return NextResponse.json(
+        { success: false, message: "Application not found" },
+        { status: res.status }
+      );
+    }
+
+    const data = await res.json();
+    return NextResponse.json(data);
+  } catch (err: any) {
+    return NextResponse.json({ success: false, message: err.message }, { status: 502 });
   }
-
-  return NextResponse.json({
-    success: true,
-    data: app,
-  });
 }
 
 export async function PATCH(
@@ -31,46 +40,24 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
+    const authHeader = request.headers.get("authorization") || "";
 
-    const existingIndex = memoryApplications.findIndex((a) => a.id === id);
-    if (existingIndex === -1) {
-      // If not in memory yet, create from fallback or return 404
-      return NextResponse.json(
-        { success: false, message: "Application not found" },
-        { status: 404 }
-      );
-    }
-
-    const current = memoryApplications[existingIndex];
-    const updated: Application = {
-      ...current,
-      ...body,
-      lastUpdated: "Just now",
-      telemetryLogs: [
-        ...(current.telemetryLogs || []),
-        ...(body.status && body.status !== current.status
-          ? [
-              {
-                timestamp: new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(new Date()),
-                level: "INFO" as const,
-                step: "STAGE_TRANSITION",
-                detail: `Status moved from ${current.status} to ${body.status}.`,
-              },
-            ]
-          : []),
-      ],
-    };
-
-    memoryApplications[existingIndex] = updated;
-
-    return NextResponse.json({
-      success: true,
-      data: updated,
+    const res = await fetch(`${BACKEND_API_URL}/api/v1/applications/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        ...(authHeader ? { "Authorization": authHeader } : {}),
+      },
+      body: JSON.stringify(body),
     });
+
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, message: err.message || "Failed to update application" },
-      { status: 400 }
+      { status: 502 }
     );
   }
 }
@@ -80,10 +67,21 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  memoryApplications = memoryApplications.filter((a) => a.id !== id);
+  const authHeader = request.headers.get("authorization") || "";
 
-  return NextResponse.json({
-    success: true,
-    message: "Application deleted",
-  });
+  try {
+    const res = await fetch(`${BACKEND_API_URL}/api/v1/applications/${id}`, {
+      method: "DELETE",
+      headers: {
+        ...(authHeader ? { "Authorization": authHeader } : {}),
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Application deleted",
+    }, { status: res.status });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, message: err.message }, { status: 502 });
+  }
 }

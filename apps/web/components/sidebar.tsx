@@ -18,7 +18,7 @@ import {
   Building,
 } from "./icons";
 
-export type NavTab = "pipeline" | "reviews" | "discovery" | "resumes" | "telemetry" | "profile";
+export type NavTab = "pipeline" | "loops" | "reviews" | "discovery" | "resumes" | "telemetry" | "profile";
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -50,6 +50,13 @@ export function Sidebar({
       icon: Kanban,
       badge: totalApplications > 0 ? `${totalApplications}` : null,
       badgeColor: "bg-zinc-800 text-zinc-400 border border-white/[0.05]",
+    },
+    {
+      id: "loops" as NavTab,
+      label: "Search loops & campaigns",
+      icon: Activity,
+      badge: "LoopCV",
+      badgeColor: "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 font-semibold",
     },
     {
       id: "reviews" as NavTab,

@@ -18,25 +18,59 @@ class CrawlerService {
     async crawl(
         dto: CrawlDTO,
     ): Promise<ParsedJob[]> {
+        const parsedJobs: ParsedJob[] = [];
+
+        // If a direct URL was provided to crawl
+        if (dto.url) {
+            try {
+                const { html, redirectedUrl } = await pageFetcherService.fetch(dto.url);
+                const platform = this.detect(redirectedUrl, html);
+
+                let parsedJob: ParsedJob | undefined;
+                if (html && html.trim()) {
+                    parsedJob = await parserService.parse({
+                        url: redirectedUrl,
+                        html,
+                        platform,
+                    });
+                }
+
+                if (!parsedJob || !parsedJob.title || parsedJob.title === "Unknown Title") {
+                    parsedJob = {
+                        title: "Software Engineer",
+                        company: "Company",
+                        location: "Remote / Onsite",
+                        description: "",
+                        url: redirectedUrl,
+                        platform,
+                    };
+                }
+
+                parsedJobs.push(parsedJob);
+                return normalizerService.normalize(parsedJobs);
+            } catch (err) {
+                console.error(`Failed to crawl direct URL ${dto.url}:`, err);
+                return [];
+            }
+        }
+
         const sourceJobs =
             await sourceService.search({
-                keyword: dto.keyword,
+                keyword: dto.keyword || "software engineer",
                 location: dto.location,
                 remote: dto.remote,
             });
-
-        const parsedJobs: ParsedJob[] = [];
 
         for (const sourceJob of sourceJobs) {
             try {
                 let parsedJob: ParsedJob | undefined;
 
                 try {
-                    const html = await pageFetcherService.fetch(sourceJob.url);
+                    const { html, redirectedUrl } = await pageFetcherService.fetch(sourceJob.url);
                     if (html && html.trim()) {
-                        const platform = this.detect(sourceJob.url);
+                        const platform = this.detect(redirectedUrl, html);
                         parsedJob = await parserService.parse({
-                            url: sourceJob.url,
+                            url: redirectedUrl,
                             html,
                             platform,
                         });
@@ -69,9 +103,11 @@ class CrawlerService {
 
     detect(
         url: string,
+        html?: string,
     ) {
         return detectorService.detect(
             url,
+            html,
         );
     }
 }

@@ -116,7 +116,7 @@ class CandidateMapper {
     }
 
     if (/sponsorship.?required|need.?visa|do.?you.?require.?sponsorship|work.?visa.?needed|h1b|h-1b|visa.?sponsor|require.?visa|need.?sponsorship|visa.?required/.test(key) && context.sponsorshipRequired != null) {
-      return { value: String(context.sponsorshipRequired), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.sponsorshipRequired ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/remote.?preference|work.?mode|work.?from.?office.*remote|work.?location.?preference|onsite.*hybrid.*remote|work.?arrangement|work.?setting|preferred.?work.?mode|where.?do.?you.?prefer.?to.?work|wfh|work.?from.?home/.test(key) && context.workMode) {
@@ -124,7 +124,7 @@ class CandidateMapper {
     }
 
     if (/remote.?only|only.?remote|100.?remote|fully.?remote/.test(key) && context.remoteOnly != null) {
-      return { value: String(context.remoteOnly), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.remoteOnly ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/employment.?type|job.?type|full.?time.*part.?time.*contract|type.?of.?employment|nature.?of.?employment|employment.?status|fulltime|part-time|contract.*type/.test(key) && context.employmentType) {
@@ -135,25 +135,25 @@ class CandidateMapper {
       if (context.country?.toLowerCase() === "india" || context.nationality?.toLowerCase() === "indian") {
         return { value: "Yes", source: "PROFILE", confidence: "MEDIUM" };
       }
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+      return { value: "Yes", source: "INFERRED", confidence: "LOW" };
     }
 
     if (/authorized.?to.?work.*(us|usa|united.?states|america)|are.?you.?authorized.*(us|usa|states)|work.?eligibility.*(us|usa)|eligible.?to.?work.*(us|usa)|can.?you.?work.*(us|usa|united.?states)/.test(key)) {
       if (context.visaStatus || context.country?.toLowerCase().includes("united") || context.country?.toLowerCase() === "usa" || context.country?.toLowerCase() === "us") {
         return { value: context.visaStatus || "Yes", source: "PROFILE", confidence: "MEDIUM" };
       }
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+      return { value: context.sponsorshipRequired === false ? "Yes" : "No", source: "INFERRED", confidence: "LOW" };
     }
 
     if (/work.?eligibility|eligibility.?to.?work|legal.?to.?work|authorized.?to.?work|eligible.?for.?employment|right.?to.?work/.test(key)) {
-      if (context.visaStatus || context.country || context.nationality) {
-        return { value: context.visaStatus || "Eligible", source: "PROFILE", confidence: "MEDIUM" };
+      if (context.workAuthorization || context.visaStatus || context.country || context.nationality) {
+        return { value: context.workAuthorization || context.visaStatus || "Yes", source: "PROFILE", confidence: "MEDIUM" };
       }
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+      return { value: "Yes", source: "INFERRED", confidence: "LOW" };
     }
 
     if (/rehire.?eligibility|eligible.?for.?rehire|will.?past.?employer.?rehire|re.?hire|rehireable/.test(key)) {
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+      return { value: "Yes", source: "INFERRED", confidence: "LOW" };
     }
 
     if (/visa.?status|immigration.?status|current.?visa|visa.?type|immigration|what.?is.?your.?visa|visa.?held/.test(key) && context.visaStatus) {
@@ -161,14 +161,17 @@ class CandidateMapper {
     }
 
     if (/willing.?to.?relocate|ready.?to.?relocate|open.?to.?move|open.?to.?relocate|relocation|can.?you.?relocate|are.?you.?willing.*move|ready.?to.?move.*cities/.test(key) && context.willingToRelocate != null) {
-      return { value: String(context.willingToRelocate), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.willingToRelocate ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/willing.?to.?travel|open.?to.?travel|travel.?required.?ok|are.?you.?willing.*travel|can.?you.?travel|travel.?availability|travelling.?allowed/.test(key) && context.willingToTravel != null) {
-      return { value: String(context.willingToTravel), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.willingToTravel ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/available.?start.?date|when.?can.?you.?join|joining.?date|date.?of.?availability|start.?date|available.?date|from.?when.?can.?you.?join|join.?date|availability.?date/.test(key)) {
+      if (context.availableStartDate) {
+        return { value: context.availableStartDate, source: "PROFILE", confidence: "HIGH" };
+      }
       if (context.noticePeriod != null) {
         if (context.noticePeriod === 0) {
           return { value: "Immediate", source: "PROFILE", confidence: "MEDIUM" };
@@ -178,27 +181,27 @@ class CandidateMapper {
     }
 
     if (/criminal.?record|convictions|felony|ever.?convicted|criminal.?history|have.?you.?been.?convicted|background.*record/.test(key) && context.criminalRecord != null) {
-      return { value: String(context.criminalRecord), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.criminalRecord ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/military.?service|served.?in.?military|veteran.?status.*military|armed.?forces|served.?military|military.?background/.test(key) && context.militaryService != null) {
-      return { value: String(context.militaryService), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.militaryService ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/\bveteran\b|are.?you.?a.?veteran|protected.?veteran|veteran.?status|us.?veteran|disabled.?veteran/.test(key) && context.veteran != null) {
-      return { value: String(context.veteran), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.veteran ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/disability|disabled|do.?you.?have.?a.?disability|handicap|differently.?abled|physical.?disability/.test(key) && context.disability != null) {
-      return { value: String(context.disability), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.disability ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/government.?employee|current.?govt.?employee|psu.?employee|govt.?job|government.?service|public.?sector.*employee|state.?government/.test(key) && context.governmentEmployee != null) {
-      return { value: String(context.governmentEmployee), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.governmentEmployee ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/security.?clearance|have.?clearance|government.?clearance|clearance.?level|security.?level|background.?clearance|do.?you.?have.?clearance/.test(key) && context.securityClearance != null) {
-      return { value: String(context.securityClearance), source: "PROFILE", confidence: "HIGH" };
+      return { value: context.securityClearance ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/\bleetcode\b|leetcode.?username|leetcode.?profile|leetcode.?handle|leetcode.?link/.test(key) && context.leetcode) {
@@ -358,12 +361,95 @@ class CandidateMapper {
       }
     }
 
-    if (/\bethnicity\b|\brace\b|ethnic.*origin|racial.*origin|demographic.*ethnic/i.test(key)) {
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+    if (/preferred.?name|nickname|called.?by/i.test(key) && context.preferredName) {
+      return { value: context.preferredName, source: "PROFILE", confidence: "HIGH" };
     }
 
-    if (/pronouns|gender.*pronoun|preferred.*pronoun/i.test(key)) {
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+    if (/pronouns|gender.*pronoun|preferred.*pronoun/i.test(key) && context.pronouns) {
+      return { value: context.pronouns, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/address.?line.?2|apt|suite|unit|building|floor/i.test(key) && context.addressLine2) {
+      return { value: context.addressLine2, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/country.?code|phone.?code|dialing.?code/i.test(key) && context.phoneCountryCode) {
+      return { value: context.phoneCountryCode, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/secondary.?phone|alternate.?phone|home.?phone/i.test(key) && context.secondaryPhone) {
+      return { value: context.secondaryPhone, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/twitter|twitter.?handle|x\.com|x.?handle/i.test(key) && context.twitter) {
+      return { value: context.twitter, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/stack.?overflow|stackoverflow/i.test(key) && context.stackoverflow) {
+      return { value: context.stackoverflow, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/kaggle|kaggle.?profile|kaggle.?url/i.test(key) && context.kaggle) {
+      return { value: context.kaggle, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/dribbble|dribbble.?profile/i.test(key) && context.dribbble) {
+      return { value: context.dribbble, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/behance|behance.?profile/i.test(key) && context.behance) {
+      return { value: context.behance, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/\b(race|ethnicity|ethnic.?origin|racial.?origin)\b/i.test(key)) {
+      if (context.race || context.ethnicity) {
+        return { value: context.race || context.ethnicity || "", source: "PROFILE", confidence: "HIGH" };
+      }
+    }
+
+    if (/\bveteran.?status|protected.?veteran.?status|military.?veteran.?status/i.test(key)) {
+      if (context.veteranStatus) {
+        return { value: context.veteranStatus, source: "PROFILE", confidence: "HIGH" };
+      }
+    }
+
+    if (/\bdisability.?status|voluntary.?disability|disability.?disclosure/i.test(key)) {
+      if (context.disabilityStatus) {
+        return { value: context.disabilityStatus, source: "PROFILE", confidence: "HIGH" };
+      }
+    }
+
+    if (/18.?years|at.?least.?18|age.?of.?majority|legal.?age|are.?you.?18/i.test(key)) {
+      if (context.is18OrOlder != null) {
+        return { value: context.is18OrOlder ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
+      }
+      return { value: "Yes", source: "INFERRED", confidence: "MEDIUM" };
+    }
+
+    if (/previously.?employed|worked.?for.*before|prior.?employee|ever.?worked.?at|former.?employee/i.test(key)) {
+      if (context.previousEmployee != null) {
+        return { value: context.previousEmployee ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
+      }
+      return { value: "No", source: "INFERRED", confidence: "MEDIUM" };
+    }
+
+    if (/non.?compete|restrictive.?covenant|non.?solicitation|confidentiality.?agreement/i.test(key)) {
+      if (context.nonCompeteAgreement != null) {
+        return { value: context.nonCompeteAgreement ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
+      }
+      return { value: "No", source: "INFERRED", confidence: "MEDIUM" };
+    }
+
+    if (/work.?auth|authorization.*status|legal.*authorization/i.test(key) && context.workAuthorization) {
+      return { value: context.workAuthorization, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/currency|salary.?currency|pay.?currency/i.test(key) && context.salaryCurrency) {
+      return { value: context.salaryCurrency, source: "PROFILE", confidence: "HIGH" };
+    }
+
+    if (/available.?start.?date|earliest.?start|start.?date.?available/i.test(key) && context.availableStartDate) {
+      return { value: context.availableStartDate, source: "PROFILE", confidence: "HIGH" };
     }
 
     if (/\bsalary\b.*\bhistory\b|previous.*salary|past.*compensation/i.test(key)) {
@@ -408,6 +494,9 @@ class CandidateMapper {
     }
 
     if (/\bdiversity\b|\bdei\b|equal.*opportunity|eeo|affirmative.*action.*voluntary/i.test(key)) {
+      if (context.race || context.gender || context.ethnicity) {
+        return { value: context.race || context.gender || "", source: "PROFILE", confidence: "HIGH" };
+      }
       return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 

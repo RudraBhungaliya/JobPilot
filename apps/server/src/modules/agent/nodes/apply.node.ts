@@ -89,14 +89,26 @@ class ApplyNode {
             attempts: attempt,
           });
 
-          await page.goto(job.url, {
-            waitUntil: "domcontentloaded",
-            timeout: Agent.PAGE_TIMEOUT_MS,
-          });
+          // Navigate and resolve any redirects or landing page "Apply" buttons
+          const { activePage, redirectedUrl } = await formTool.prepareAndNavigate(page, job.url);
 
           // Check for Human Verification (CAPTCHA, Turnstile, 2FA / OTP, etc.)
-          const humanVerification = await formTool.detectHumanVerification(page);
+          const humanVerification = await formTool.detectHumanVerification(activePage);
           if (humanVerification.detected) {
+            const { default: humanActionService } = await import("../../human-action/human-action.service.js");
+            await humanActionService.createAction({
+              userId: state.userId,
+              applicationId: application.id,
+              agentRunId: state.threadId,
+              questions: [{
+                selector: "human_verification_step",
+                label: `Human Verification Required: ${humanVerification.message || "Please complete security check / CAPTCHA on the application page"}`,
+                type: "human_test",
+                required: true,
+                hint: `Challenge type: ${humanVerification.type || "Challenge"}. Please complete the human test step in your browser and confirm approval to proceed.`,
+              }],
+            });
+
             const waitingApp = await applicationTool.updateApplication(
               application.id,
               {
@@ -113,28 +125,21 @@ class ApplyNode {
               metadata: { type: "HUMAN_VERIFICATION", verificationType: humanVerification.type },
             });
 
-            await notificationService.create(state.userId, {
-              type: "APPLICATION_STATUS",
-              title: `Human Verification Required: ${job.company}`,
-              message: `A security challenge (${humanVerification.type || "CAPTCHA"}) was detected for ${job.title} at ${job.company}. Please complete human verification to submit your application.`,
-              applicationId: application.id,
-            });
-
             applications.push(waitingApp);
             requiresUserAction = true;
-            await page.close();
+            await activePage.close();
             break;
           }
 
-          const fields = await formTool.detectFields(page);
+          const fields = await formTool.detectFields(activePage);
 
           if (fields.length === 0) {
-            throw new Error("No application form fields detected.");
+            throw new Error(`No application form fields detected after resolving redirects to ${redirectedUrl}.`);
           }
 
-          // 2. Form Fill
+          // 2. Form Fill with candidate profile data
           const fillResults = await formTool.fillFields(
-            page,
+            activePage,
             fields,
             state.userId,
             state.resume.id,
@@ -144,6 +149,20 @@ class ApplyNode {
           const outsiderMissing = formTool.detectOutsiderRequiredFields(fields, fillResults);
 
           if (outsiderMissing.length > 0) {
+            const { default: humanActionService } = await import("../../human-action/human-action.service.js");
+            await humanActionService.createAction({
+              userId: state.userId,
+              applicationId: application.id,
+              agentRunId: state.threadId,
+              questions: outsiderMissing.map((item) => ({
+                selector: item.field.selector,
+                label: item.field.label || item.field.name || item.field.selector,
+                type: item.field.type || "text",
+                required: item.field.required,
+                hint: item.reason,
+              })),
+            });
+
             const missingNames = outsiderMissing
               .map((item) => item.field.label || item.field.name || item.field.selector)
               .join(", ");
@@ -164,32 +183,70 @@ class ApplyNode {
               metadata: { type: "OUTSIDER_DATA_REQUIRED", missingFields: missingNames },
             });
 
-            await notificationService.create(state.userId, {
-              type: "APPLICATION_STATUS",
-              title: `Additional Information Needed: ${job.company}`,
-              message: `Application for ${job.title} requires information not found in your profile or resume: "${missingNames}". Please provide answers to proceed.`,
-              applicationId: application.id,
-            });
-
             applications.push(waitingApp);
             requiresUserAction = true;
-            await page.close();
+            await activePage.close();
             break;
           }
 
           // 3. Resume Upload
-          await resumeUploadTool.upload(page, {
+          await resumeUploadTool.upload(activePage, {
             fileUrl: state.resume.fileUrl || state.resume.path,
             originalName: state.resume.originalName || "resume.pdf",
           });
 
-          // 4. Submit
-          await formTool.submit(page);
+          // 4. Pre-submission Approval / Permission Step
+          const { default: humanActionRepository } = await import("../../human-action/human-action.repository.js");
+          const existingActions = await humanActionRepository.findByApplication(application.id, state.userId).catch(() => []);
+          const alreadyApproved = existingActions.some((a) => a.resolvedAt !== null);
+          const requireApproval = process.env.REQUIRE_SUBMISSION_APPROVAL !== "false";
 
-          // 5. Verify submission before marking SUBMITTED
-          const verification = await submissionVerificationTool.verify(page);
+          if (requireApproval && !alreadyApproved) {
+            const { default: humanActionService } = await import("../../human-action/human-action.service.js");
+            const filledCount = fillResults.filter((r) => r.filled).length;
 
-          // 6. Tailored artifacts: persist AI notes against this application
+            await humanActionService.createAction({
+              userId: state.userId,
+              applicationId: application.id,
+              agentRunId: state.threadId,
+              questions: [{
+                selector: "submission_approval",
+                label: `Review & Approval: Successfully autofilled ${filledCount} field(s) with your profile details for ${job.title} at ${job.company}. Approve final submission?`,
+                type: "approval",
+                required: true,
+                hint: "Confirm approval in JobPilot to allow the agent to finalize and submit this application.",
+              }],
+            });
+
+            const waitingApp = await applicationTool.updateApplication(
+              application.id,
+              {
+                status: "WAITING_FOR_USER",
+                failureReason: "Awaiting user approval before final submission.",
+              },
+            );
+
+            await auditService.create(state.userId, {
+              action: "USER_ACTION_REQUIRED",
+              description: `Submission approval required for ${job.title} at ${job.company}`,
+              applicationId: application.id,
+              jobId: job.id,
+              metadata: { type: "SUBMISSION_APPROVAL", filledFieldsCount: filledCount },
+            });
+
+            applications.push(waitingApp);
+            requiresUserAction = true;
+            await activePage.close();
+            break;
+          }
+
+          // 5. Submit
+          await formTool.submit(activePage);
+
+          // 6. Verify submission before marking SUBMITTED
+          const verification = await submissionVerificationTool.verify(activePage);
+
+          // 7. Tailored artifacts: persist AI notes against this application
           const tailoringNote = state.tailoringInstructions[index] ?? null;
 
           if (verification.verified) {

@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "node --experimental-vm-modules --enable-source-maps node_modules/.bin/tsx --test 'src/__tests__/**/*.test.ts'",
+    "test": "tsx --test src/__tests__/**/*.test.ts",
     "install:browsers": "playwright install chromium"
   },
   "dependencies": {

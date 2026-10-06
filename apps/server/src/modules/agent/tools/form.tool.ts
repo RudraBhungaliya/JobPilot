@@ -21,49 +21,113 @@ export interface FormFillResult {
 }
 
 class FormTool {
+    /**
+     * Navigates to the job URL, following redirects and clicking 'Apply' buttons if on a landing page.
+     */
+    async prepareAndNavigate(
+        page: Page,
+        targetUrl: string,
+    ): Promise<{ activePage: Page; redirectedUrl: string }> {
+        let activePage = page;
+
+        // Listen for popups in case "Apply" opens a new tab
+        const popupPromise = page.context().waitForEvent("page", { timeout: 3000 }).catch(() => null);
+
+        await activePage.goto(targetUrl, {
+            waitUntil: "domcontentloaded",
+            timeout: 35000,
+        });
+
+        // Give redirects a moment to settle
+        await activePage.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
+
+        const popup = await popupPromise;
+        if (popup) {
+            await popup.waitForLoadState("domcontentloaded").catch(() => {});
+            activePage = popup;
+        }
+
+        // Check if application form fields are already present
+        const currentInputs = await activePage.locator("input:not([type='hidden']), textarea, select").count();
+
+        // If no application inputs exist yet, we might be on a job details landing page with an 'Apply' button
+        if (currentInputs < 2) {
+            const applyButtons = activePage.locator(
+                'a:has-text("Apply Now"), button:has-text("Apply Now"), ' +
+                'a:has-text("Apply for this job"), button:has-text("Apply for this job"), ' +
+                'a:has-text("Easy Apply"), button:has-text("Easy Apply"), ' +
+                'a[href*="apply" i], button[data-automation-id*="apply" i], ' +
+                'a:has-text("Apply"), button:has-text("Apply")'
+            );
+
+            const count = await applyButtons.count();
+            if (count > 0) {
+                const firstApply = applyButtons.first();
+                const popupOnApply = activePage.context().waitForEvent("page", { timeout: 4000 }).catch(() => null);
+
+                try {
+                    await firstApply.click({ timeout: 5000 });
+                    await activePage.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+
+                    const applyPopup = await popupOnApply;
+                    if (applyPopup) {
+                        await applyPopup.waitForLoadState("domcontentloaded").catch(() => {});
+                        activePage = applyPopup;
+                    }
+                } catch {
+                    // Ignore click error and proceed with page as-is
+                }
+            }
+        }
+
+        return {
+            activePage,
+            redirectedUrl: activePage.url(),
+        };
+    }
+
     async detectFields(
         page: Page,
     ): Promise<FormField[]> {
-        return page
+        const fields = await page
             .locator("input, textarea, select")
             .evaluateAll((elements) =>
                 elements.map((element) => {
-                    const input =
-                        element as HTMLInputElement;
-
+                    const input = element as HTMLInputElement;
                     const id = input.id;
+                    const name = input.name || input.getAttribute("aria-label") || "";
+                    const type = input.type || input.tagName.toLowerCase();
 
-                    const label = id
-                        ? document.querySelector(
-                              `label[for="${CSS.escape(id)}"]`,
-                          )?.textContent ?? ""
-                        : "";
+                    let label = "";
+                    if (id) {
+                        const lbl = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+                        if (lbl) label = lbl.textContent || "";
+                    }
+                    if (!label && input.getAttribute("aria-label")) {
+                        label = input.getAttribute("aria-label") || "";
+                    }
+                    if (!label && input.getAttribute("placeholder")) {
+                        label = input.getAttribute("placeholder") || "";
+                    }
+                    if (!label && input.closest("label")) {
+                        label = input.closest("label")?.textContent || "";
+                    }
 
                     return {
                         selector: id
                             ? `#${CSS.escape(id)}`
-                            : input.name
-                              ? `${input.tagName.toLowerCase()}[name="${CSS.escape(input.name)}"]`
+                            : name
+                              ? `${input.tagName.toLowerCase()}[name="${CSS.escape(name)}"]`
                               : input.tagName.toLowerCase(),
-
-                        name:
-                            input.name ||
-                            input.getAttribute(
-                                "aria-label",
-                            ) ||
-                            "",
-
-                        type:
-                            input.type ||
-                            input.tagName.toLowerCase(),
-
-                        label: label.trim(),
-
-                        required:
-                            input.required,
+                        name,
+                        type,
+                        label: label.trim().replace(/\s+/g, " "),
+                        required: input.required || input.getAttribute("aria-required") === "true",
                     };
                 }),
             );
+
+        return fields;
     }
 
     async fillFields(
@@ -142,44 +206,93 @@ class FormTool {
             const locator =
                 page.locator(
                     field.selector,
-                );
+                ).first();
 
-            if (
-                field.type === "checkbox"
-            ) {
-                const value =
-                    answer.value.toLowerCase();
+            try {
+                if (
+                    field.type === "checkbox"
+                ) {
+                    const value = answer.value.toLowerCase();
+                    const checked =
+                        value === "true" ||
+                        value === "yes" ||
+                        value === "1" ||
+                        value === "on";
 
-                const checked =
-                    value === "true" ||
-                    value === "yes";
+                    await locator.setChecked(checked).catch(() => locator.click().catch(() => {}));
+                } else if (
+                    field.type === "radio"
+                ) {
+                    // Look for the specific radio matching this answer
+                    const radioVal = answer.value.toLowerCase();
+                    const groupRadios = page.locator(`input[type="radio"][name="${CSS.escape(field.name)}"]`);
+                    const radioCount = await groupRadios.count().catch(() => 0);
 
-                await locator.setChecked(
-                    checked,
-                );
-            } else if (
-                field.type === "radio"
-            ) {
-                await locator.check();
-            } else if (
-                field.type === "select"
-            ) {
-                await locator.selectOption({
-                    label: answer.value,
+                    let checkedOne = false;
+                    for (let r = 0; r < radioCount; r++) {
+                        const rEl = groupRadios.nth(r);
+                        const rVal = (await rEl.getAttribute("value") || "").toLowerCase();
+                        if (rVal === radioVal || (radioVal === "yes" && (rVal === "1" || rVal === "true")) || (radioVal === "no" && (rVal === "0" || rVal === "false"))) {
+                            await rEl.check().catch(() => rEl.click().catch(() => {}));
+                            checkedOne = true;
+                            break;
+                        }
+                    }
+
+                    if (!checkedOne) {
+                        await locator.check().catch(() => locator.click().catch(() => {}));
+                    }
+                } else if (
+                    field.type === "select"
+                ) {
+                    // Try by label, then value, then partial option text
+                    let selected = false;
+                    try {
+                        await locator.selectOption({ label: answer.value });
+                        selected = true;
+                    } catch {
+                        try {
+                            await locator.selectOption({ value: answer.value });
+                            selected = true;
+                        } catch {
+                            // Find option containing the answer string
+                            const options = await locator.locator("option").all();
+                            for (const opt of options) {
+                                const text = (await opt.innerText()).toLowerCase();
+                                if (text.includes(answer.value.toLowerCase())) {
+                                    const optVal = await opt.getAttribute("value");
+                                    if (optVal) {
+                                        await locator.selectOption({ value: optVal });
+                                        selected = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    await locator.fill(answer.value).catch(async () => {
+                        // Fallback type
+                        await locator.click().catch(() => {});
+                        await locator.pressSequentially(answer.value).catch(() => {});
+                    });
+                }
+
+                results.push({
+                    selector: field.selector,
+                    name: field.name,
+                    value: answer.value,
+                    filled: true,
                 });
-            } else {
-                await locator.fill(
-                    answer.value,
-                );
+            } catch (err: any) {
+                results.push({
+                    selector: field.selector,
+                    name: field.name,
+                    value: answer.value,
+                    filled: false,
+                    reason: err.message,
+                });
             }
-
-            results.push({
-                selector:
-                    field.selector,
-                name: field.name,
-                value: answer.value,
-                filled: true,
-            });
         }
 
         return results;

@@ -12,6 +12,41 @@ export interface Company {
   employeeCount?: string;
 }
 
+export interface JobSearchLoop {
+  id: string;
+  name: string;
+  status: "ACTIVE" | "PAUSED" | "COMPLETED" | "ERROR";
+  targetCountries: string[];
+  targetLocations: string[];
+  targetJobTitles: string[];
+  excludedCompanies: string[];
+  includedCompanies: string[];
+  remotePreference: string;
+  experienceLevel: string;
+  employmentTypes: string[];
+  minimumCompensation?: number;
+  maximumCompensation?: number;
+  targetTiers: string[];
+  autoApplyEnabled: boolean;
+  recruiterOutreachEnabled: boolean;
+  dailyApplicationLimit: number;
+  dailyDiscoveryLimit: number;
+  priorityStrategy: string;
+  appliedCount: number;
+  discoveredCount: number;
+  interviewCount: number;
+  lastRunAt?: string;
+  nextRunAt?: string;
+  resumeId?: string;
+  createdAt: string;
+  realtimeStats?: {
+    appliedCount: number;
+    inProgressCount: number;
+    waitingUserCount: number;
+    interviewCount: number;
+  };
+}
+
 export interface QuestionAnswer {
   id: string;
   label: string;
@@ -83,6 +118,37 @@ export interface Application {
   }[];
 }
 
+export interface ResumeExperienceEntry {
+  company: string;
+  role: string;
+  period: string;
+  location: string;
+  bullets: string[];
+  techStack: string[];
+}
+
+export interface ResumeEducationEntry {
+  institution: string;
+  degree: string;
+  year: string;
+  gpa?: string;
+  highlights?: string[];
+}
+
+export interface ResumeProjectEntry {
+  title: string;
+  link?: string;
+  description: string;
+  tech: string[];
+}
+
+export interface ResumeCertificationEntry {
+  name: string;
+  issuer: string;
+  date: string;
+  credentialId?: string;
+}
+
 export interface ResumeVersion {
   id: string;
   name: string;
@@ -92,6 +158,15 @@ export interface ResumeVersion {
   isDefault: boolean;
   topSkills: string[];
   matchRateAverage: number;
+  atsScore?: number;
+  summary?: string;
+  experienceEntries?: ResumeExperienceEntry[];
+  educationEntries?: ResumeEducationEntry[];
+  projectEntries?: ResumeProjectEntry[];
+  certificationEntries?: ResumeCertificationEntry[];
+  languages?: string[];
+  strengths?: string[];
+  tailoringSuggestions?: string[];
 }
 
 export interface SelectionChanceBreakdown {
@@ -130,20 +205,62 @@ export interface DiscoveredJob {
 }
 
 export interface CandidateProfile {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   fullName: string;
+  preferredName?: string;
+  pronouns?: string;
   title: string;
+  currentCompany?: string;
   email: string;
   phone: string;
+  phoneCountryCode?: string;
+  secondaryPhone?: string;
   location: string;
+  address?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zipCode?: string;
   linkedIn: string;
   github: string;
   portfolio: string;
+  website?: string;
+  twitter?: string;
+  leetcode?: string;
+  codeforces?: string;
+  kaggle?: string;
+  stackoverflow?: string;
+  dribbble?: string;
+  behance?: string;
   yearsOfExperience: number;
+  currentSalary?: number;
   desiredSalaryMin: number;
   desiredSalaryTarget: number;
-  workAuthorization: "US Citizen" | "Permanent Resident (Green Card)" | "Requires H-1B / Visa Transfer" | "Other";
+  salaryCurrency?: string;
+  noticePeriod?: number;
+  availableStartDate?: string;
+  workMode?: "Remote" | "Hybrid" | "On-site";
+  willingToRelocate?: boolean;
+  willingToTravel?: boolean;
+  workAuthorization: "India Citizen / Eligible" | "US Citizen" | "Permanent Resident (Green Card)" | "Requires H-1B / Visa Transfer" | "Requires UK/EU Sponsorship" | "Other";
+  sponsorshipRequired?: boolean;
+  visaStatus?: string;
+  is18OrOlder?: boolean;
+  previousEmployee?: boolean;
+  nonCompeteAgreement?: boolean;
   clearanceLevel: "None" | "Secret" | "Top Secret";
+  highestDegree?: string;
+  fieldOfStudy?: string;
+  institution?: string;
+  graduationYear?: string;
+  gpa?: string;
   skills?: string[];
+  languages?: string[];
+  certifications?: string[];
+  summary?: string;
   eeoPreferences: {
     gender: string;
     race: string;
@@ -444,38 +561,275 @@ export const INITIAL_RESUMES: ResumeVersion[] = [
     updatedAt: "Today, 11:20 AM",
     fileSize: "148 KB",
     isDefault: true,
-    topSkills: ["Distributed Systems", "TypeScript", "Go", "Kubernetes", "Kafka", "PostgreSQL", "AWS Core", "System Design"],
-    matchRateAverage: 94,
+    topSkills: [
+      "Distributed Systems",
+      "Go",
+      "Rust",
+      "TypeScript",
+      "Kubernetes",
+      "Kafka",
+      "PostgreSQL",
+      "AWS Core",
+      "gRPC",
+      "System Architecture",
+    ],
+    matchRateAverage: 96,
+    atsScore: 98,
+    summary:
+      "Staff Distributed Systems & Infrastructure Architect with 8+ years experience designing ultra-low latency transaction backends, Raft-based consensus engines, and event-driven data streaming pipelines processing 50k+ QPS with five-nines uptime.",
+    experienceEntries: [
+      {
+        company: "Nexus Cloud Architecture",
+        role: "Staff Infrastructure Engineer & Tech Lead",
+        period: "2022 – Present",
+        location: "San Francisco, CA / Hybrid",
+        bullets: [
+          "Architected real-time event routing fabric in Go and Kafka handling 4.2B events daily with p99 latency < 12ms.",
+          "Designed multi-region Postgres active-active replication layer using logical decoding and CRDT sync conflict resolution.",
+          "Led 14-engineer infrastructure guild across Kubernetes multi-cluster mesh, slashing cloud egress costs by 34% ($1.2M annual savings).",
+          "Engineered distributed rate limiting and anti-DDoS filter in Rust and eBPF deployed across 18 edge PoPs.",
+        ],
+        techStack: ["Go", "Rust", "Kafka", "PostgreSQL", "Kubernetes", "eBPF", "AWS", "gRPC"],
+      },
+      {
+        company: "Stripe Scale Engineering (Contract / Prior)",
+        role: "Senior Backend Platform Engineer",
+        period: "2019 – 2022",
+        location: "San Francisco, CA / Remote",
+        bullets: [
+          "Refactored ledger reconciliation service to support idempotent transaction dispatch under high network jitter.",
+          "Built zero-downtime database migration tooling adopted by 40+ product teams to safely migrate 500M+ rows.",
+          "Maintained 99.999% SLA for core settlement pipeline during peak Black Friday / Cyber Monday traffic surges.",
+        ],
+        techStack: ["Go", "TypeScript", "PostgreSQL", "Redis", "Docker", "Datadog", "Terraform"],
+      },
+      {
+        company: "Vanguard Tech Labs",
+        role: "Distributed Systems Software Engineer",
+        period: "2018 – 2019",
+        location: "San Francisco, CA",
+        bullets: [
+          "Implemented gRPC microservices and protobuf contracts for high-frequency order book gateway.",
+          "Automated CI/CD release canary pipelines on Kubernetes reducing deployment cycle time from 2 hours to 8 minutes.",
+        ],
+        techStack: ["Go", "Python", "Docker", "gRPC", "Prometheus", "Kubernetes"],
+      },
+    ],
+    educationEntries: [
+      {
+        institution: "Stanford University",
+        degree: "Master of Science in Computer Science (Distributed Systems)",
+        year: "2018",
+        gpa: "3.92 / 4.0",
+        highlights: ["Research in Fault-Tolerant Distributed Consensus", "Teaching Assistant for CS244B (Distributed Systems)"],
+      },
+      {
+        institution: "University of California, Berkeley",
+        degree: "Bachelor of Science in Electrical Engineering & Computer Science (EECS)",
+        year: "2016",
+        gpa: "3.88 / 4.0",
+        highlights: ["Dean's Honors List", "Upsilon Pi Epsilon Honor Society"],
+      },
+    ],
+    projectEntries: [
+      {
+        title: "Raft-KV Distributed Key-Value Store",
+        link: "https://github.com/alexrivera-eng/raft-kv",
+        description: "Pure Go implementation of the Raft consensus protocol with snapshotting, dynamic cluster membership, and linearizable reads.",
+        tech: ["Go", "Raft", "gRPC", "BoltDB"],
+      },
+      {
+        title: "Async-Queue Rust Edge Worker",
+        link: "https://github.com/alexrivera-eng/async-queue-rs",
+        description: "Lightweight Tokio-based transactional message broker with dead-letter queue routing and lock-free memory buffers.",
+        tech: ["Rust", "Tokio", "WebAssembly", "Docker"],
+      },
+    ],
+    certificationEntries: [
+      {
+        name: "AWS Certified Solutions Architect – Professional",
+        issuer: "Amazon Web Services",
+        date: "2024",
+        credentialId: "AWS-PSA-9912048",
+      },
+      {
+        name: "Certified Kubernetes Administrator (CKA)",
+        issuer: "Cloud Native Computing Foundation (CNCF)",
+        date: "2023",
+        credentialId: "CKA-281940",
+      },
+    ],
+    languages: ["English (Native)", "Spanish (Professional Working)"],
+    strengths: [
+      "Deep distributed systems intuition (CAP theorem, consensus, ledger idempotency)",
+      "High-scale concurrency mastery in Go, Rust, and TypeScript",
+      "Production cloud infrastructure optimization and cost engineering",
+    ],
+    tailoringSuggestions: [
+      "Highlight multi-region database failover metrics when applying to Big Tech (Stripe, Google, AWS).",
+      "Emphasize developer ergonomics and team mentoring experience for Staff/Principal roles.",
+    ],
   },
   {
     id: "res-02",
     name: "Senior_Fullstack_Platform_2026.pdf",
-    roleFocus: "Senior Full Stack Platform & Infrastructure",
+    roleFocus: "Senior Full Stack Platform & Product Infrastructure",
     updatedAt: "Yesterday",
     fileSize: "136 KB",
     isDefault: false,
-    topSkills: ["React / Next.js", "Node.js", "GraphQL", "TailwindCSS", "Postgres", "Docker", "CI/CD", "Performance"],
-    matchRateAverage: 88,
+    topSkills: [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Node.js",
+      "GraphQL",
+      "TailwindCSS",
+      "PostgreSQL",
+      "Prisma",
+      "Docker",
+      "WebSockets",
+    ],
+    matchRateAverage: 91,
+    atsScore: 94,
+    summary:
+      "Senior Full Stack & Platform Engineer with 7+ years expertise architecting high-performance React/Next.js web applications, GraphQL microservices, and collaborative real-time web engines.",
+    experienceEntries: [
+      {
+        company: "HyperCanvas Interactive",
+        role: "Senior Full Stack Platform Lead",
+        period: "2021 – Present",
+        location: "San Francisco, CA / Remote",
+        bullets: [
+          "Built collaborative canvas editor in Next.js, WebGL, and WebSockets serving 1.8M monthly active designers.",
+          "Reduced First Contentful Paint (FCP) by 58% and initial JS bundle by 140KB via dynamic code splitting and Turbopack.",
+          "Created design system library of 65+ accessible WCAG AA compliant headless components adopted across 6 company web apps.",
+        ],
+        techStack: ["Next.js", "React", "TypeScript", "TailwindCSS", "PostgreSQL", "Prisma", "WebSockets"],
+      },
+      {
+        company: "PixelForge Digital",
+        role: "Full Stack Engineer",
+        period: "2018 – 2021",
+        location: "Austin, TX",
+        bullets: [
+          "Developed high-traffic customer onboarding portal increasing conversion rate by 22% with optimistic UI updates.",
+          "Architected GraphQL federation gateway integrating 12 microservices with automated caching and schema stitching.",
+        ],
+        techStack: ["React", "Node.js", "GraphQL", "PostgreSQL", "Redis", "Docker"],
+      },
+    ],
+    educationEntries: [
+      {
+        institution: "University of California, Berkeley",
+        degree: "Bachelor of Science in EECS",
+        year: "2016",
+        gpa: "3.88 / 4.0",
+        highlights: ["Human-Computer Interaction (HCI) Specialization"],
+      },
+    ],
+    projectEntries: [
+      {
+        title: "FastTable Data Grid Engine",
+        link: "https://github.com/alexrivera-eng/fast-table",
+        description: "Zero-dependency virtualized data grid rendering 100,000+ rows at 60 FPS with full Excel-style inline editing.",
+        tech: ["TypeScript", "React", "Canvas API"],
+      },
+    ],
+    certificationEntries: [
+      {
+        name: "Meta Certified Front-End Developer",
+        issuer: "Meta",
+        date: "2023",
+        credentialId: "META-FE-48201",
+      },
+    ],
+    languages: ["English (Native)", "Spanish (Conversational)"],
+    strengths: [
+      "Ultra-responsive frontend UI architecture (Next.js App Router, React Server Components)",
+      "Real-time WebSocket & CRDT collaboration experience",
+      "Full stack TypeScript end-to-end type safety",
+    ],
+    tailoringSuggestions: [
+      "Include canvas rendering performance benchmarks when targeting Figma, Canva, or Miro.",
+      "Showcase GraphQL federation and state management depth for scaleups.",
+    ],
   },
 ];
 
 // --- Initial Seeded Candidate Profile ---
 export const INITIAL_CANDIDATE_PROFILE: CandidateProfile = {
+  firstName: "Alex",
+  middleName: "James",
+  lastName: "Rivera",
   fullName: "Alex Rivera",
+  preferredName: "Alex",
+  pronouns: "He / Him",
   title: "Staff Distributed Systems & Infrastructure Engineer",
+  currentCompany: "Nexus Cloud Architecture",
   email: "alex.rivera@eng-lead.io",
   phone: "+1 (415) 890-2134",
-  location: "San Francisco, CA (Open to Hybrid & Remote)",
+  phoneCountryCode: "+1",
+  secondaryPhone: "+1 (415) 890-2135",
+  location: "San Francisco, CA / Bengaluru (Open to Remote & Hybrid)",
+  address: "742 Market Street, Suite 500",
+  addressLine2: "Apt 4B",
+  city: "San Francisco",
+  state: "California",
+  country: "United States",
+  zipCode: "94103",
   linkedIn: "https://linkedin.com/in/alex-rivera-systems",
   github: "https://github.com/alexrivera-eng",
   portfolio: "https://alexrivera.dev",
+  website: "https://alexrivera.dev",
+  twitter: "https://x.com/alexrivera_eng",
+  leetcode: "https://leetcode.com/alexrivera",
+  codeforces: "https://codeforces.com/profile/alexrivera",
+  kaggle: "https://kaggle.com/alexrivera",
+  stackoverflow: "https://stackoverflow.com/users/alexrivera",
   yearsOfExperience: 8,
+  currentSalary: 210000,
   desiredSalaryMin: 220000,
   desiredSalaryTarget: 275000,
+  salaryCurrency: "USD",
+  noticePeriod: 15,
+  availableStartDate: "2026-11-01",
+  workMode: "Remote",
+  willingToRelocate: true,
+  willingToTravel: true,
   workAuthorization: "US Citizen",
+  sponsorshipRequired: false,
+  visaStatus: "Citizen",
+  is18OrOlder: true,
+  previousEmployee: false,
+  nonCompeteAgreement: false,
   clearanceLevel: "None",
+  highestDegree: "Master of Science in Computer Science",
+  fieldOfStudy: "Computer Science & Distributed Systems",
+  institution: "Stanford University",
+  graduationYear: "2018",
+  gpa: "3.92 / 4.0",
+  skills: [
+    "Distributed Systems",
+    "Go",
+    "Rust",
+    "TypeScript",
+    "PostgreSQL",
+    "Kafka",
+    "Kubernetes",
+    "Docker",
+    "Redis",
+    "gRPC",
+    "Next.js",
+    "System Architecture",
+  ],
+  languages: ["English (Native / Bilingual)", "Spanish (Professional Working)"],
+  certifications: [
+    "AWS Certified Solutions Architect - Professional",
+    "Certified Kubernetes Administrator (CKA)",
+  ],
+  summary: "Staff Engineer with 8+ years experience architecting high-throughput distributed transaction engines, real-time message streaming pipelines, and cloud-native infrastructure handling 50k+ QPS with five-nines reliability.",
   eeoPreferences: {
-    gender: "Decline to identify",
+    gender: "Male",
     race: "Decline to self-identify",
     veteranStatus: "I am not a protected veteran",
     disabilityStatus: "No, I do not have a disability",

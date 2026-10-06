@@ -17,10 +17,18 @@ import { agentRoutes } from "./modules/agent/index.js";
 import { notificationRouter } from "./modules/notification/index.js";
 import { auditRouter } from "./modules/audit/index.js";
 import { queueRoutes } from "./modules/queue/index.js";
+import { loopRoutes, loopExecutionEngine } from "./modules/loop/index.js";
 import eventsRouter from "./modules/events/events.routes.js";
+import crawlerRoutes from "./modules/crawler/crawler.routes.js";
 import sourceBootstrap from "./modules/sources/source.bootstrap.js";
+import domAdapterBootstrap from "./modules/browser/dom-adapter.bootstrap.js";
 
 sourceBootstrap.initialize();
+domAdapterBootstrap.initialize();
+
+if (process.env.NODE_ENV !== "test") {
+    loopExecutionEngine.startScheduler();
+}
 
 
 const app = express();
@@ -43,9 +51,11 @@ app.use("/api/v1/profiles", profileRoutes);
 app.use("/api/v1/applications", applicationRoutes);
 app.use("/api/v1/agent", agentRoutes);
 app.use("/api/v1/queue", queueRoutes);
+app.use("/api/v1/loops", loopRoutes);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/audit", auditRouter);
 app.use("/api/v1/events", eventsRouter);
+app.use("/api/v1/crawler", crawlerRoutes);
 
 
 app.get("/", (req, res) => {

@@ -14,9 +14,16 @@ declare global {
 }
 
 let devUserEnsured = false;
+let lastDevUserAttempt = 0;
+const DEV_USER_RETRY_INTERVAL_MS = 60000;
 
 async function ensureDevUser(userId = "usr_dev_candidate_default") {
     if (devUserEnsured) return;
+    const now = Date.now();
+    if (now - lastDevUserAttempt < DEV_USER_RETRY_INTERVAL_MS) {
+        return;
+    }
+    lastDevUserAttempt = now;
     try {
         await prisma.user.upsert({
             where: { id: userId },
@@ -30,7 +37,7 @@ async function ensureDevUser(userId = "usr_dev_candidate_default") {
         });
         devUserEnsured = true;
     } catch {
-        // In case DB is not yet running or during early bootstrap
+        // Database not reachable yet; retry after cooldown
     }
 }
 

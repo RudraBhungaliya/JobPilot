@@ -13,14 +13,15 @@ export class ResendEmailProvider implements IEmailProvider {
     constructor() {
         const apiKey = process.env.RESEND_API_KEY;
         this.defaultFrom =
+            process.env.RESEND_FROM_EMAIL ||
             process.env.EMAIL_FROM ||
             "JobPilot <notifications@resend.dev>";
 
-        if (apiKey) {
+        if (apiKey && apiKey !== "YOUR_RESEND_API_KEY" && apiKey.startsWith("re_")) {
             this.client = new Resend(apiKey);
         } else {
             console.warn(
-                "[ResendEmailProvider] RESEND_API_KEY is not configured. Email sending will run in mock/log mode.",
+                "[ResendEmailProvider] RESEND_API_KEY is not configured or using placeholder. Email sending will run in mock/log mode.",
             );
         }
     }

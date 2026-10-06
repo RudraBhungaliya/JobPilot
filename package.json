@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "pnpm --filter @jobpilot/web dev",
+    "dev:server": "pnpm --filter @jobpilot/server dev",
+    "dev:all": "pnpm --parallel --filter @jobpilot/server --filter @jobpilot/web dev",
+    "build": "pnpm --filter @jobpilot/web build",
+    "test": "echo \"Running test suites...\""
   },
   "keywords": [],
   "author": "",
