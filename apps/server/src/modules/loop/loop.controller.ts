@@ -106,7 +106,8 @@ export class LoopController {
     try {
       const userId = await this.getUserId(req);
       const loopId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-      const result = await loopService.runLoop(userId, loopId);
+      const syncPipeline = req.body?.syncPipeline !== false;
+      const result = await loopService.runLoop(userId, loopId, { syncPipeline });
       return res.json(result);
     } catch (err: any) {
       return res.status(400).json({

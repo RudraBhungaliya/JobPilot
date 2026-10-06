@@ -177,8 +177,8 @@ export class LoopService {
     return { success: true, message: "Loop deleted successfully." };
   }
 
-  async runLoop(userId: string, loopId: string) {
-    return loopExecutionEngine.executeLoop(loopId, userId);
+  async runLoop(userId: string, loopId: string, options: { syncPipeline?: boolean } = { syncPipeline: true }) {
+    return loopExecutionEngine.executeLoop(loopId, userId, options);
   }
 
   async matchLoopJobs(userId: string, loopId: string, options: { persistApplications?: boolean } = { persistApplications: true }) {

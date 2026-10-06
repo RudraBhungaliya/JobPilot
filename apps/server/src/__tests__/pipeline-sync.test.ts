@@ -370,6 +370,91 @@ test("Application Pipeline Sync Module Suite", async (suite) => {
     assert.equal(stats.dailyLimit, 15);
   });
 
+  await suite.test("7. syncJobToApplication transitions existing MATCHED and DISCOVERED applications consistently through SAVED to QUEUED", async () => {
+    mockTransitions.length = 0;
+    const testAppId = "app-matched-1";
+    mockApplications.set(`${userId}:job-1`, {
+      id: testAppId,
+      userId,
+      jobId: "job-1",
+      status: "MATCHED",
+      matchScore: 88,
+      createdAt: new Date(),
+    });
+
+    // 1. autoApply = false -> should transition MATCHED -> SAVED
+    const savedResult = await syncService.syncJobToApplication({
+      userId,
+      jobId: "job-1",
+      resumeId,
+      autoApply: false,
+    });
+
+    assert.equal(savedResult.status, "SAVED");
+    assert.equal(savedResult.created, false);
+    assert.equal(savedResult.queued, false);
+
+    const savedTransition = mockTransitions.find((t) => t.applicationId === testAppId);
+    assert.ok(savedTransition);
+    assert.equal(savedTransition.previousStatus, "MATCHED");
+    assert.equal(savedTransition.newStatus, "SAVED");
+
+    // 2. autoApply = true -> should transition SAVED -> QUEUED
+    mockTransitions.length = 0;
+    const queuedResult = await syncService.syncJobToApplication({
+      userId,
+      jobId: "job-1",
+      resumeId,
+      autoApply: true,
+      priority: 3,
+    });
+
+    assert.equal(queuedResult.status, "QUEUED");
+    assert.equal(queuedResult.created, false);
+    assert.equal(queuedResult.queued, true);
+
+    const queuedTransition = mockTransitions.find((t) => t.applicationId === testAppId);
+    assert.ok(queuedTransition);
+    assert.equal(queuedTransition.previousStatus, "SAVED");
+    assert.equal(queuedTransition.newStatus, "QUEUED");
+  });
+
+  await suite.test("8. Repeated syncLoop execution is strictly idempotent and does not re-increment appliedCount", async () => {
+    let appliedIncrements: number[] = [];
+    const fakeLoop = {
+      id: "loop-300",
+      userId,
+      name: "Loop-Campaign-1",
+      dailyApplicationLimit: 5,
+      autoApplyEnabled: true,
+      resumeId,
+      appliedCount: 0,
+      resume: { id: resumeId },
+    };
+
+    (prisma.jobSearchLoop as any).findFirst = async () => fakeLoop;
+    (prisma.jobSearchLoop as any).update = async ({ data }: any) => {
+      if (data?.appliedCount?.increment) {
+        appliedIncrements.push(data.appliedCount.increment);
+      }
+      return fakeLoop;
+    };
+
+    // First run queues eligible jobs
+    const firstSummary = await syncService.syncLoop("loop-300", userId);
+    assert.equal(firstSummary.success, true);
+
+    // Reset increment tracking for second run
+    appliedIncrements = [];
+
+    // Second run on the exact same loop state: all jobs are already processed and queued/saved
+    const secondSummary = await syncService.syncLoop("loop-300", userId);
+
+    assert.equal(secondSummary.success, true);
+    assert.equal(secondSummary.newlyQueuedCount, 0, "No new jobs should be queued on repeat run");
+    assert.equal(appliedIncrements.length, 0, "appliedCount must not be re-incremented on repeat run");
+  });
+
   // Restore Prisma and Event Emitter methods
   (prisma.job as any).findUnique = origFindUniqueJob;
   (prisma.job as any).findMany = origFindManyJob;

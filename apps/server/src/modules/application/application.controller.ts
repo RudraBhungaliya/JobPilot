@@ -289,10 +289,20 @@ class ApplicationController {
                 });
             }
 
+            if (loopId && !jobId && (!jobs || !Array.isArray(jobs) || jobs.length === 0)) {
+                const result = await pipelineSyncService.syncLoop(loopId, req.user.id, {
+                    forceQueue: autoApply === true,
+                });
+                return res.status(200).json({
+                    success: true,
+                    data: result,
+                });
+            }
+
             if (!jobId) {
                 return res.status(400).json({
                     success: false,
-                    message: "jobId or array of jobs is required.",
+                    message: "jobId, loopId, or array of jobs is required.",
                 });
             }
 

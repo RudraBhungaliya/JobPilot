@@ -84,13 +84,13 @@ export class PipelineSyncService {
           jobId,
           status: existingApp.status,
           created: false,
-          queued: existingApp.status === "QUEUED",
+          queued: false,
           matchScore: existingApp.matchScore ?? 75,
         };
       }
 
       if (input.autoApply) {
-        if (existingApp.status === "DISCOVERED") {
+        if (existingApp.status === "DISCOVERED" || existingApp.status === "MATCHED") {
           await ApplicationStateMachine.transition({
             applicationId: existingApp.id,
             newStatus: "SAVED",
@@ -112,6 +112,25 @@ export class PipelineSyncService {
           created: false,
           queued: true,
           queueId: queueRecord?.id,
+          matchScore: existingApp.matchScore ?? 75,
+        };
+      }
+
+      // If autoApply is false and existingApp is in DISCOVERED or MATCHED, transition to SAVED
+      if (existingApp.status === "DISCOVERED" || existingApp.status === "MATCHED") {
+        await ApplicationStateMachine.transition({
+          applicationId: existingApp.id,
+          newStatus: "SAVED",
+          reason: "Job bookmarked and saved in application pipeline",
+          actor: "SYSTEM",
+        });
+
+        return {
+          applicationId: existingApp.id,
+          jobId,
+          status: "SAVED",
+          created: false,
+          queued: false,
           matchScore: existingApp.matchScore ?? 75,
         };
       }
@@ -189,7 +208,7 @@ export class PipelineSyncService {
         status: "DISCOVERED",
         matchScore,
         scorecard,
-        companyKey: job.company.name.toLowerCase(),
+        companyKey: job.company?.name ? job.company.name.toLowerCase() : null,
       },
     });
 
@@ -314,7 +333,7 @@ export class PipelineSyncService {
         if (result.queued) {
           newlyQueuedCount++;
           remainingDailyQuota--;
-        } else {
+        } else if (result.status === "SAVED") {
           savedCount++;
         }
       } catch (jobErr) {
