@@ -30,6 +30,20 @@ class JobController {
                 });
             }
 
+            let candidateContext: any = null;
+            const currentUserId = (req as any).user?.id || (req.headers["x-user-id"] as string);
+            if (currentUserId) {
+                try {
+                    const { jobMatchingService } = await import("../matching/job-matching.service.js");
+                    candidateContext = await jobMatchingService.getRealCandidateContext(currentUserId);
+                } catch {
+                    // Ignore
+                }
+            }
+
+            const { jobMatchingService } = await import("../matching/job-matching.service.js");
+            const { default: matchingService } = await import("../agent/evaluation/matching.service.js");
+
             const now = new Date().toISOString();
             const mappedJobs = rawJobs.map((j, idx) => {
                 const isRemote = j.location?.toLowerCase().includes("remote") || j.location?.toLowerCase().includes("global") || j.location?.toLowerCase().includes("worldwide");
@@ -44,6 +58,32 @@ class JobController {
 
                 const categoryCode = isRemote ? "REMOTE" : "TIER_1_MNC";
                 const categoryLabel = isRemote ? "Remote AI / Tech" : "Tier 1 MNC";
+
+                let calculatedMatchScore = 75;
+                let matchedSkills: string[] = [];
+                let missingSkills: string[] = [];
+
+                if (candidateContext) {
+                    const sc = jobMatchingService.matchJob(candidateContext, {
+                        title: j.title,
+                        company: j.company,
+                        description: j.description || j.title,
+                        location: j.location || "Remote",
+                        workMode: isRemote ? "REMOTE" : "HYBRID",
+                        url: j.url,
+                    });
+                    calculatedMatchScore = sc.matchScore;
+                    matchedSkills = sc.matchedSkills;
+                    missingSkills = sc.missingSkills;
+                } else {
+                    const res = matchingService.matchSkills(
+                        keyword ? [keyword] : ["software", "engineer", "developer"],
+                        `${j.title} ${j.description || ""}`,
+                    );
+                    calculatedMatchScore = Math.max(35, res.score);
+                    matchedSkills = res.matchedSkills;
+                    missingSkills = res.missingSkills;
+                }
 
                 return {
                     id: j.externalId || `live-job-${idx}`,
@@ -68,12 +108,14 @@ class JobController {
                     salaryMinLPA: 28,
                     salaryMaxLPA: 50,
                     experienceLevel: "2-6 Years",
-                    tags: ["TypeScript", "Distributed Systems", "Cloud", "PostgreSQL", "Full-Stack"],
+                    tags: matchedSkills.length > 0 ? matchedSkills : ["TypeScript", "Distributed Systems", "Cloud", "PostgreSQL"],
                     description: j.description || j.title,
                     recruiterEmail: `careers@${j.company.toLowerCase().replace(/[^a-z0-9]/g, "")}.com`,
                     recruiterName: `${j.company} Talent Acquisition`,
                     atsUrl: j.url,
-                    matchScore: 92,
+                    matchScore: calculatedMatchScore,
+                    matchedSkills,
+                    missingSkills,
                 };
             });
 

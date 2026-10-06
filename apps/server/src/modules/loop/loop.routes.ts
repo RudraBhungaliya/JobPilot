@@ -11,5 +11,8 @@ router.get("/:id", loopController.getById);
 router.patch("/:id", loopController.update);
 router.delete("/:id", loopController.delete);
 router.post("/:id/run", loopController.run);
+router.post("/:id/match", loopController.matchJobs);
+router.get("/:id/matches", loopController.getMatches);
 
 export default router;
+

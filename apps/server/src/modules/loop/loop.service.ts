@@ -180,6 +180,17 @@ export class LoopService {
   async runLoop(userId: string, loopId: string) {
     return loopExecutionEngine.executeLoop(loopId, userId);
   }
+
+  async matchLoopJobs(userId: string, loopId: string, options: { persistApplications?: boolean } = { persistApplications: true }) {
+    const { jobMatchingService } = await import("../matching/job-matching.service.js");
+    return jobMatchingService.matchAndRankLoopJobs(loopId, userId, options);
+  }
+
+  async getLoopMatches(userId: string, loopId: string) {
+    const { jobMatchingService } = await import("../matching/job-matching.service.js");
+    return jobMatchingService.matchAndRankLoopJobs(loopId, userId, { persistApplications: false });
+  }
 }
 
 export default new LoopService();
+

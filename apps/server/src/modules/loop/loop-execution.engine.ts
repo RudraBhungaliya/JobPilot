@@ -1,6 +1,7 @@
 import { prisma } from "@jobpilot/database";
 import liveAtsService from "../sources/live-ats.service.js";
 import type { SourceJob } from "../sources/source.types.js";
+import jobMatchingService from "../matching/job-matching.service.js";
 import logger from "../../core/logger/logger.js";
 
 export interface LoopExecutionResult {
@@ -19,7 +20,13 @@ export interface RunLoopResponse {
   discoveredCount: number;
   newlyPersistedCount: number;
   dispatchedCount: number;
-  jobs: SourceJob[];
+  jobs: Array<SourceJob & {
+    matchScore?: number;
+    matchedSkills?: string[];
+    missingSkills?: string[];
+    companyTier?: string;
+    rank?: number;
+  }>;
   message?: string;
 }
 
@@ -109,14 +116,48 @@ export class LoopExecutionEngine {
         return true;
       });
 
-      // 6. Deduplicate against PostgreSQL database and persist real jobs
+      // 6. Connect newly discovered real jobs to candidate's actual profile/resume
+      const candidateContext = await jobMatchingService.getRealCandidateContext(loop.userId, loop.resumeId);
+
+      const loopCriteria = {
+        targetJobTitles: loop.targetJobTitles,
+        targetLocations: loop.targetLocations,
+        targetCountries: loop.targetCountries,
+        remotePreference: loop.remotePreference,
+        experienceLevel: loop.experienceLevel,
+        employmentTypes: loop.employmentTypes,
+        minimumCompensation: loop.minimumCompensation,
+        maximumCompensation: loop.maximumCompensation,
+        targetTiers: loop.targetTiers,
+        priorityStrategy: loop.priorityStrategy,
+      };
+
+      // Match and rank candidate jobs against candidate profile and loop criteria
+      const rankedCandidateJobs = jobMatchingService.matchAndRankJobs(
+        candidateContext,
+        candidateJobs.map((j) => ({
+          externalId: j.externalId,
+          source: j.source,
+          title: j.title,
+          company: j.company,
+          description: j.description,
+          location: j.location || "Remote",
+          url: j.url,
+        })),
+        loopCriteria,
+      );
+
+      // Deduplicate against PostgreSQL database and persist real jobs
       const discoveryLimit = loop.dailyDiscoveryLimit || 50;
       let newlyPersistedCount = 0;
 
-      for (const job of candidateJobs) {
+      for (const rankedItem of rankedCandidateJobs) {
         if (newlyPersistedCount >= discoveryLimit) {
           break;
         }
+
+        const job = rankedItem.job;
+        const scorecard = rankedItem.scorecard;
 
         if (!job.url || !job.title || !job.company) {
           continue;
@@ -154,12 +195,13 @@ export class LoopExecutionEngine {
               domain: `${companySlug || "company"}.com`,
               location: job.location || "Remote",
               verifiedAts: job.source,
+              tier: scorecard.companyTier,
               userId: loop.userId,
             },
           });
         }
 
-        // Persist the real Job record
+        // Persist the real Job record with real match score and scorecard
         const isRemoteJob = (job.location || "").toLowerCase().includes("remote") ||
           (job.location || "").toLowerCase().includes("wfh");
 
@@ -172,7 +214,13 @@ export class LoopExecutionEngine {
             description: job.description || null,
             workMode: isRemoteJob ? "REMOTE" : "HYBRID",
             status: "SAVED",
-            tags: [loop.name],
+            tags: [
+              loop.name,
+              `score:${scorecard.matchScore}`,
+              `tier:${scorecard.companyTier}`,
+              `rank:${rankedItem.rank}`,
+            ],
+            notes: JSON.stringify(scorecard),
             companyId: company.id,
             userId: loop.userId,
           },
@@ -212,8 +260,21 @@ export class LoopExecutionEngine {
         discoveredCount: candidateJobs.length,
         newlyPersistedCount,
         dispatchedCount: 0, // Auto-apply is explicitly not triggered in this phase
-        jobs: candidateJobs.slice(0, 20),
-        message: `Discovered ${candidateJobs.length} live openings (${newlyPersistedCount} new jobs saved).`,
+        jobs: rankedCandidateJobs.slice(0, 20).map((r) => ({
+          externalId: r.job.externalId || "",
+          title: r.job.title,
+          company: r.job.company,
+          url: r.job.url || "",
+          location: r.job.location || "Remote",
+          description: r.job.description || "",
+          source: r.job.source || "ats",
+          matchScore: r.scorecard.matchScore,
+          matchedSkills: r.scorecard.matchedSkills,
+          missingSkills: r.scorecard.missingSkills,
+          companyTier: r.scorecard.companyTier,
+          rank: r.rank,
+        })),
+        message: `Discovered and ranked ${candidateJobs.length} live openings (${newlyPersistedCount} new jobs saved).`,
       };
     } catch (err: any) {
       // Safe error handling: log error and update loop status to ERROR

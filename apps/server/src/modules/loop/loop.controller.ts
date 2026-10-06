@@ -146,6 +146,45 @@ export class LoopController {
       });
     }
   };
+
+  matchJobs = async (req: Request, res: Response) => {
+    try {
+      const userId = await this.getUserId(req);
+      const loopId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const persistApplications = req.body?.persistApplications !== false;
+      const matches = await loopService.matchLoopJobs(userId, loopId, { persistApplications });
+      return res.json({
+        success: true,
+        data: matches,
+        count: matches.length,
+        message: `Matched and ranked ${matches.length} jobs for loop.`,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Failed to match loop jobs.",
+      });
+    }
+  };
+
+  getMatches = async (req: Request, res: Response) => {
+    try {
+      const userId = await this.getUserId(req);
+      const loopId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const matches = await loopService.getLoopMatches(userId, loopId);
+      return res.json({
+        success: true,
+        data: matches,
+        count: matches.length,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Failed to fetch loop matches.",
+      });
+    }
+  };
 }
 
 export default new LoopController();
+
