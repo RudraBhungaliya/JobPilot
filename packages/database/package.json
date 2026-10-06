@@ -5,6 +5,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "generate": "prisma generate"
+  },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.9.1",

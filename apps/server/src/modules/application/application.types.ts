@@ -1,17 +1,5 @@
-export type ApplicationStatus =
-    | "SAVED"
-    | "TAILORING"
-    | "PENDING"
-    | "MATCHED"
-    | "WAITING_FOR_USER"
-    | "QUEUED"
-    | "RUNNING"
-    | "SUBMITTED"
-    | "INTERVIEW"
-    | "OFFER"
-    | "REJECTED"
-    | "FAILED"
-    | "SKIPPED";
+import type { ApplicationStatus } from "@jobpilot/database";
+export type { ApplicationStatus };
 
 export type CompanyTier = "S" | "A" | "B" | "C";
 

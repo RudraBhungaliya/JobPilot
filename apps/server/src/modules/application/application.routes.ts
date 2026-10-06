@@ -16,6 +16,20 @@ router.post(
     ),
 );
 
+router.post(
+    "/auto-apply",
+    applicationController.autoApply.bind(
+        applicationController,
+    ),
+);
+
+router.post(
+    "/:id/resolve-checkpoint",
+    applicationController.resolveCheckpoint.bind(
+        applicationController,
+    ),
+);
+
 router.get(
     "/",
     applicationController.getAll.bind(

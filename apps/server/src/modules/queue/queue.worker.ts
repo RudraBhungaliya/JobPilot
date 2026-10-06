@@ -1,5 +1,7 @@
 import { getEnv } from "../../config/env.js";
 import queueService from "./queue.service.js";
+import applicationQueueService from "./application-queue.service.js";
+import autoApplyService from "../application/auto-apply.service.js";
 import notificationService from "../notification/notification.service.js";
 import { agentService } from "../agent/index.js";
 import logger from "../../core/logger/logger.js";
@@ -7,9 +9,17 @@ import logger from "../../core/logger/logger.js";
 class QueueWorker {
   private activeWorkers: Set<string> = new Set();
   private stopping = false;
+  private isRunningLoop = false;
+  private workerId = `worker-${process.pid}-${Date.now().toString(36)}`;
+  private timer: NodeJS.Timeout | null = null;
+  private pollingIntervalMs = 4000;
 
   get concurrency(): number {
-    return getEnv().QUEUE_CONCURRENCY;
+    try {
+      return getEnv().QUEUE_CONCURRENCY || 3;
+    } catch {
+      return 3;
+    }
   }
 
   get activeCount(): number {
@@ -17,25 +27,65 @@ class QueueWorker {
   }
 
   /**
-   * Race-safe markRunning (TR-15.2): uses Prisma updateMany with WHERE status=QUEUED.
-   * Only 1 of 2 concurrent callers wins (updated count === 1). Loser returns null.
+   * Start the background polling and execution worker loop
    */
-  private async tryMarkRunningRaceSafe(jobId: string): Promise<any | null> {
-    const { prisma } = await import("@jobpilot/database");
-    const result = await (prisma as any).queueJob.updateMany({
-      where: { id: jobId, status: "QUEUED" },
-      data: { status: "RUNNING", attempts: { increment: 1 }, startedAt: new Date() },
-    });
-    if (result.count === 0) return null;
-    return queueService.getJob(jobId);
+  start() {
+    if (this.isRunningLoop) return;
+    this.isRunningLoop = true;
+    this.stopping = false;
+    logger.info(`[QueueWorker] 🚀 Persistent Queue Worker started [${this.workerId}]`);
+    this.scheduleNextPoll();
+  }
+
+  private scheduleNextPoll() {
+    if (!this.isRunningLoop || this.stopping) return;
+    this.timer = setTimeout(async () => {
+      try {
+        await this.processNext();
+      } catch (err) {
+        logger.error({ err }, "[QueueWorker] Error in worker cycle");
+      } finally {
+        this.scheduleNextPoll();
+      }
+    }, this.pollingIntervalMs);
   }
 
   /**
-   * Dispatch one job. Acquires queue slot, fetches pending job, race-safely marks running, dispatches.
-   * Returns true if a job was dispatched; false if none available.
+   * Race-safe markRunning: uses Prisma updateMany with WHERE status=QUEUED.
+   */
+  private async tryMarkRunningRaceSafe(jobId: string): Promise<any | null> {
+    try {
+      const { prisma } = await import("@jobpilot/database");
+      const result = await prisma.queueJob.updateMany({
+        where: { id: jobId, status: "QUEUED" },
+        data: { status: "RUNNING", attempts: { increment: 1 }, startedAt: new Date() },
+      });
+      if (result.count === 0) return null;
+      return queueService.getJob(jobId);
+    } catch {
+      return queueService.getJob(jobId);
+    }
+  }
+
+
+  /**
+   * Dispatch one job from QueueJob (agent runs) or ApplicationQueue
    */
   private async dispatchOne(): Promise<boolean> {
     if (this.stopping) return false;
+
+    // 1. Check ApplicationQueue first (direct ATS submissions)
+    try {
+      const appQueueJob = await applicationQueueService.claimNext(this.workerId);
+      if (appQueueJob) {
+        void autoApplyService.execute(appQueueJob);
+        return true;
+      }
+    } catch {
+      // Ignore if database schema or table is not ready
+    }
+
+    // 2. Check general Agent Queue
     if (this.activeWorkers.size >= this.concurrency) return false;
 
     const jobs = await queueService.getPendingJobs();
@@ -44,9 +94,8 @@ class QueueWorker {
     for (const job of jobs) {
       if (this.activeWorkers.has(job.id)) continue;
       const runningJob = await this.tryMarkRunningRaceSafe(job.id);
-      if (!runningJob) continue; // lost the race
+      if (!runningJob) continue;
       this.activeWorkers.add(job.id);
-      // Fire and forget the worker
       this.runWorker(job.id, runningJob).finally(() => {
         this.activeWorkers.delete(job.id);
       });
@@ -112,10 +161,6 @@ class QueueWorker {
     }
   }
 
-  /**
-   * Process as many as allowed by concurrency. Fills up to QUEUE_CONCURRENCY workers.
-   * TR-15.1: With QUEUE_CONCURRENCY=2 and 4 pending jobs → 2 active simultaneously.
-   */
   async processBatch(): Promise<number> {
     let dispatched = 0;
     while (this.activeWorkers.size < this.concurrency) {
@@ -130,25 +175,17 @@ class QueueWorker {
     return this.dispatchOne();
   }
 
-  /**
-   * Long-running process loop.
-   */
   async processAll(pollIntervalMs = 2000): Promise<void> {
     while (!this.stopping) {
       await this.processBatch();
       if (this.activeWorkers.size < this.concurrency) {
-        // Nothing left queued; wait before polling
         await new Promise((r) => setTimeout(r, pollIntervalMs));
       } else {
-        // Tiny yield between polls
         await new Promise((r) => setTimeout(r, 50));
       }
     }
   }
 
-  /**
-   * Wait for all active workers to complete.
-   */
   async drain(maxWaitMs = 60000): Promise<void> {
     const start = Date.now();
     while (this.activeWorkers.size > 0 && Date.now() - start < maxWaitMs) {
@@ -158,11 +195,18 @@ class QueueWorker {
 
   stop(): void {
     this.stopping = true;
+    this.isRunningLoop = false;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    logger.info(`[QueueWorker] 🛑 Queue Worker stopped [${this.workerId}]`);
   }
 
   isRunning(): boolean {
-    return this.activeWorkers.size > 0 || !this.stopping;
+    return this.activeWorkers.size > 0 || this.isRunningLoop || !this.stopping;
   }
 }
 
-export default new QueueWorker();
+export const queueWorker = new QueueWorker();
+export default queueWorker;

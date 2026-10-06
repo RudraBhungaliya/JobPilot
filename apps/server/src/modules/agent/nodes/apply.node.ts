@@ -6,6 +6,8 @@ import submissionVerificationTool from "../tools/submission-verification.tool.js
 import atsService from "../../ats/ats.service.js";
 import auditService from "../../audit/audit.service.js";
 import notificationService from "../../notification/notification.service.js";
+import emailService from "../../notification/email.service.js";
+import { prisma } from "@jobpilot/database";
 import applicationService from "../../application/application.service.js";
 
 import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
@@ -45,6 +47,22 @@ class ApplyNode {
           "Application execution skipped: no tailoring instructions.",
         ],
       };
+    }
+
+    // Retrieve user and candidate profile for contact/email
+    let candidateEmail = "applicant@jobpilot.ai";
+    let candidateName = "Candidate";
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: state.userId },
+        include: { profile: true },
+      });
+      if (user?.email) candidateEmail = user.email;
+      if (user?.profile?.firstName) {
+        candidateName = `${user.profile.firstName} ${user.profile.lastName || ""}`.trim();
+      }
+    } catch {
+      // Ignore user lookup error
     }
 
     // 1. ATS Compatibility Analysis
@@ -125,6 +143,23 @@ class ApplyNode {
               metadata: { type: "HUMAN_VERIFICATION", verificationType: humanVerification.type },
             });
 
+            await notificationService.create(state.userId, {
+              type: "APPLICATION_STATUS",
+              title: `Human Verification Required: ${job.company}`,
+              message: `A security challenge (${humanVerification.type || "CAPTCHA"}) was detected for ${job.title} at ${job.company}. Please complete human verification to submit your application.`,
+              applicationId: application.id,
+            });
+
+            // DISPATCH EMAIL ALERT TO USER
+            await emailService.sendHumanInterventionAlert({
+              to: candidateEmail,
+              candidateName,
+              jobTitle: job.title,
+              companyName: job.company,
+              actionUrl: job.url,
+              reason: humanVerification.message || "Security challenge (CAPTCHA / Cloudflare Turnstile) detected.",
+              verificationType: humanVerification.type || "CAPTCHA / Security Checkpoint",
+            });
             applications.push(waitingApp);
             requiresUserAction = true;
             await activePage.close();
@@ -183,6 +218,23 @@ class ApplyNode {
               metadata: { type: "OUTSIDER_DATA_REQUIRED", missingFields: missingNames },
             });
 
+            await notificationService.create(state.userId, {
+              type: "APPLICATION_STATUS",
+              title: `Additional Information Needed: ${job.company}`,
+              message: `Application for ${job.title} requires information not found in your profile: "${missingNames}". Please provide answers to proceed.`,
+              applicationId: application.id,
+            });
+
+            // DISPATCH EMAIL ALERT TO USER
+            await emailService.sendHumanInterventionAlert({
+              to: candidateEmail,
+              candidateName,
+              jobTitle: job.title,
+              companyName: job.company,
+              actionUrl: job.url,
+              reason: `The employer asks custom questions not yet in your profile: ${missingNames}`,
+              verificationType: "Missing Required Profile Data",
+            });
             applications.push(waitingApp);
             requiresUserAction = true;
             await activePage.close();
@@ -274,6 +326,15 @@ class ApplyNode {
               title: "Application Submitted Successfully",
               message: `Your application for ${job.title} at ${job.company} was submitted.`,
               applicationId: application.id,
+            });
+
+            await emailService.sendApplicationStatusAlert({
+              to: candidateEmail,
+              candidateName,
+              jobTitle: job.title,
+              companyName: job.company,
+              status: "SUBMITTED",
+              details: "Direct auto-pilot submission verified on employer ATS.",
             });
 
             applications.push(submittedApp);

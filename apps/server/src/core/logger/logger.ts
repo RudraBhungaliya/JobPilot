@@ -99,24 +99,44 @@ export type LogLevel = "debug" | "info" | "warn" | "error";
 class Logger {
   private inner: PinoLogger = loggerInstance;
 
-  debug(message: string, meta?: unknown): void {
-    if (meta === undefined) this.inner.debug(message);
-    else this.inner.debug(meta as object, message);
+  debug(messageOrMeta: string | Record<string, unknown> | unknown, metaOrMessage?: unknown): void {
+    if (typeof messageOrMeta === "string") {
+      if (metaOrMessage === undefined) this.inner.debug(messageOrMeta);
+      else this.inner.debug(metaOrMessage as object, messageOrMeta);
+    } else {
+      const msg = typeof metaOrMessage === "string" ? metaOrMessage : "";
+      this.inner.debug(messageOrMeta as object, msg);
+    }
   }
 
-  info(message: string, meta?: unknown): void {
-    if (meta === undefined) this.inner.info(message);
-    else this.inner.info(meta as object, message);
+  info(messageOrMeta: string | Record<string, unknown> | unknown, metaOrMessage?: unknown): void {
+    if (typeof messageOrMeta === "string") {
+      if (metaOrMessage === undefined) this.inner.info(messageOrMeta);
+      else this.inner.info(metaOrMessage as object, messageOrMeta);
+    } else {
+      const msg = typeof metaOrMessage === "string" ? metaOrMessage : "";
+      this.inner.info(messageOrMeta as object, msg);
+    }
   }
 
-  warn(message: string, meta?: unknown): void {
-    if (meta === undefined) this.inner.warn(message);
-    else this.inner.warn(meta as object, message);
+  warn(messageOrMeta: string | Record<string, unknown> | unknown, metaOrMessage?: unknown): void {
+    if (typeof messageOrMeta === "string") {
+      if (metaOrMessage === undefined) this.inner.warn(messageOrMeta);
+      else this.inner.warn(metaOrMessage as object, messageOrMeta);
+    } else {
+      const msg = typeof metaOrMessage === "string" ? metaOrMessage : "";
+      this.inner.warn(messageOrMeta as object, msg);
+    }
   }
 
-  error(message: string, meta?: unknown): void {
-    if (meta === undefined) this.inner.error(message);
-    else this.inner.error(meta as object, message);
+  error(messageOrMeta: string | Record<string, unknown> | unknown, metaOrMessage?: unknown): void {
+    if (typeof messageOrMeta === "string") {
+      if (metaOrMessage === undefined) this.inner.error(messageOrMeta);
+      else this.inner.error(metaOrMessage as object, messageOrMeta);
+    } else {
+      const msg = typeof metaOrMessage === "string" ? metaOrMessage : "";
+      this.inner.error(messageOrMeta as object, msg);
+    }
   }
 
   child(bindings: Record<string, unknown>): Logger {

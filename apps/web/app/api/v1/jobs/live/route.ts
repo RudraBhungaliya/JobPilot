@@ -7,10 +7,12 @@ export async function GET(request: Request) {
   const targetUrl = `${BACKEND_API_URL}/api/v1/jobs/live?${searchParams.toString()}`;
 
   try {
+    const authHeader = request.headers.get("authorization") || "";
     const res = await fetch(targetUrl, {
       method: "GET",
       headers: {
         "Accept": "application/json",
+        ...(authHeader ? { "Authorization": authHeader } : {}),
       },
       cache: "no-store",
     });

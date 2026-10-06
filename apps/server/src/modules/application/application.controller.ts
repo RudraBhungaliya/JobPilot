@@ -49,7 +49,7 @@ class ApplicationController {
 
         const application = await applicationService.getApplication(id);
 
-        if (!application) {
+        if (!application || application.userId !== req.user.id) {
             return res.status(404).json({
                 message: "Application not found.",
             });
@@ -70,7 +70,7 @@ class ApplicationController {
             : req.params.id;
 
         const existing = await applicationService.getApplication(id);
-        if (!existing) {
+        if (!existing || existing.userId !== req.user.id) {
             return res.status(404).json({
                 message: "Application not found.",
             });
@@ -98,7 +98,7 @@ class ApplicationController {
             : req.params.id;
 
         const existing = await applicationService.getApplication(id);
-        if (!existing) {
+        if (!existing || existing.userId !== req.user.id) {
             return res.status(404).json({
                 message: "Application not found.",
             });
@@ -113,6 +113,7 @@ class ApplicationController {
                 action: "USER_ACTION_COMPLETED",
                 description: `User action completed for application ${id}.`,
                 applicationId: id,
+                jobId: existing.jobId,
             });
         } catch {
             // Ignore audit log failure
@@ -125,6 +126,65 @@ class ApplicationController {
         });
     }
 
+    async autoApply(
+        req: Request,
+        res: Response,
+    ) {
+        try {
+            const { autoApplyService } = await import("./auto-apply.service.js");
+            const result = await autoApplyService.initiateAutoApply(
+                req.user.id,
+                req.body,
+            );
+
+            return res.status(202).json({
+                success: true,
+                message: "Application queued successfully for real-time auto-apply execution.",
+                data: result,
+            });
+        } catch (error: any) {
+            return res.status(400).json({
+                success: false,
+                message: error.message || "Failed to initiate auto-apply.",
+            });
+        }
+    }
+
+    async resolveCheckpoint(
+        req: Request,
+        res: Response,
+    ) {
+        try {
+            const id = Array.isArray(req.params.id)
+                ? req.params.id[0]
+                : req.params.id;
+
+            const existing = await applicationService.getApplication(id);
+            if (!existing || existing.userId !== req.user.id) {
+                return res.status(404).json({
+                    message: "Application not found.",
+                });
+            }
+
+            const { applicationQueueService } = await import("../queue/application-queue.service.js");
+            const updatedQueue = await applicationQueueService.resumeWaitingJob(
+                id,
+                req.body?.metadata,
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: "Verification checkpoint resolved. Application resumed.",
+                data: updatedQueue,
+            });
+        } catch (error: any) {
+            return res.status(400).json({
+                success: false,
+                message: error.message || "Failed to resolve checkpoint.",
+            });
+        }
+    }
+
     async delete(
         req: Request,
         res: Response,
@@ -134,7 +194,7 @@ class ApplicationController {
             : req.params.id;
 
         const existing = await applicationService.getApplication(id);
-        if (!existing) {
+        if (!existing || existing.userId !== req.user.id) {
             return res.status(404).json({
                 message: "Application not found.",
             });
@@ -152,14 +212,13 @@ class ApplicationController {
         const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const application = await applicationService.getApplication(id);
 
-        if (!application) {
+        if (!application || application.userId !== req.user.id) {
             return res.status(404).json({
                 message: "Application not found.",
             });
         }
 
         const applicationSubmitService = (await import("./application-submit.service.js")).default;
-        // Trigger submit in background / schedule
         applicationSubmitService.submitApplication(req.user.id, id).catch(() => {});
 
         return res.status(202).json({
@@ -182,7 +241,6 @@ class ApplicationController {
         const enqueued: any[] = [];
         for (const job of selectedJobs) {
             try {
-                // Ingest job & queue application
                 const app = await applicationService.createApplication(req.user.id, {
                     jobTitle: job.title,
                     companyName: job.company,
@@ -208,4 +266,3 @@ class ApplicationController {
 }
 
 export default new ApplicationController();
-

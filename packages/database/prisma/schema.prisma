@@ -35,11 +35,12 @@ model User {
   role     UserRole  @default(USER)
   profile  Profile?
 
-  resumes       Resume[]
-  jobs          Job[]
-  companies     Company[]
-  applications  Application[]
-  agentRuns     AgentRun[]
+  resumes           Resume[]
+  jobs              Job[]
+  companies         Company[]
+  applications      Application[]
+  applicationQueues ApplicationQueue[]
+  agentRuns         AgentRun[]
   notifications Notification[]
   auditLogs     AuditLog[]
   humanActions  HumanAction[]
@@ -141,7 +142,7 @@ model Job {
 model Application {
   id String @id @default(cuid())
 
-  status ApplicationStatus @default(SAVED)
+  status ApplicationStatus @default(QUEUED)
 
   attempts Int @default(0)
 
@@ -176,9 +177,11 @@ model Application {
   resumeId String
   resume   Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
 
-  notifications Notification[]
-  auditLogs     AuditLog[]
-  humanActions  HumanAction[]
+  queueRecord       ApplicationQueue?
+  statusTransitions ApplicationStatusTransition[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  humanActions      HumanAction[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -192,19 +195,90 @@ model Application {
 }
 
 enum ApplicationStatus {
+  DISCOVERED
   SAVED
   TAILORING
   PENDING
   MATCHED
+  REVIEW_REQUIRED
   WAITING_FOR_USER
   QUEUED
+  READY_TO_SUBMIT
+  SUBMITTING
   RUNNING
   SUBMITTED
+  VERIFICATION_PENDING
+  APPLIED
   INTERVIEW
   OFFER
   REJECTED
   FAILED
+  RETRYING
+  WITHDRAWN
+  ARCHIVED
   SKIPPED
+}
+
+enum QueueStatus {
+  QUEUED
+  PROCESSING
+  WAITING_FOR_USER
+  COMPLETED
+  FAILED
+  RETRYING
+  CANCELLED
+}
+
+model ApplicationQueue {
+  id String @id @default(cuid())
+
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status   QueueStatus @default(QUEUED)
+  priority Int         @default(0)
+
+  attempts    Int @default(0)
+  maxAttempts Int @default(3)
+
+  availableAt DateTime  @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  lastError String?
+  lockedAt  DateTime?
+  lockedBy  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, availableAt])
+  @@index([userId])
+  @@index([lockedAt])
+  @@index([priority, createdAt])
+}
+
+model ApplicationStatusTransition {
+  id String @id @default(cuid())
+
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  previousStatus ApplicationStatus?
+  newStatus      ApplicationStatus
+
+  reason   String?
+  metadata Json?
+  actor    String   @default("SYSTEM")
+
+  createdAt DateTime @default(now())
+
+  @@index([applicationId])
+  @@index([newStatus])
+  @@index([createdAt])
 }
 
 enum EmploymentType {
@@ -236,14 +310,17 @@ model Profile {
   gender      String?
   nationality String?
 
-  address String?
-  city    String?
-  state   String?
-  country String?
-  zipCode String?
+  location String?
+  address  String?
+  city     String?
+  state    String?
+  country  String?
+  zipCode  String?
 
+  currentRole    String?
   currentTitle   String?
   currentCompany String?
+  targetRoles    String[] @default([])
 
   resumes Resume[]
 
@@ -251,10 +328,12 @@ model Profile {
 
   yearsOfExperience Float?
 
-  expectedSalary Int?
-  currentSalary  Int?
+  expectedSalary       Int?
+  currentSalary        Int?
+  compensationCurrency String @default("INR")
 
-  noticePeriod Int?
+  noticePeriod     Int?
+  noticePeriodDays Int?
 
   github    String?
   linkedin  String?
@@ -264,14 +343,17 @@ model Profile {
   leetcode   String?
   codeforces String?
 
-  workMode       WorkMode       @default(HYBRID)
-  employmentType EmploymentType @default(FULL_TIME)
+  workMode           WorkMode       @default(HYBRID)
+  preferredWorkMode  WorkMode       @default(HYBRID)
+  preferredLocations String[]       @default([])
+  employmentType     EmploymentType @default(FULL_TIME)
 
   willingToRelocate Boolean @default(false)
   willingToTravel   Boolean @default(false)
 
   remoteOnly Boolean @default(false)
 
+  workAuthorization   String?
   sponsorshipRequired Boolean @default(false)
 
   visaStatus String?

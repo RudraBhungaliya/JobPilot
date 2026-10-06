@@ -45,4 +45,4 @@ export const createProfileSchema = z.object({
 export const updateProfileSchema = createProfileSchema.partial();
 
 export type CreateProfileDTO = z.infer<typeof createProfileSchema>;
-export type UpdateProfileDTO = z.infer<typeof updateProfileSchema>;
+export type UpdateProfileDTO = z.infer<typeof updateProfileSchema>;

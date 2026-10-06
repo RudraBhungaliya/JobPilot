@@ -15,7 +15,16 @@ const upload = multer({
 
 const router = Router();
 
-// Preview parsing is intentionally ephemeral: the uploaded file is deleted after extraction.
+// Text-only resume parsing route
+router.post("/parse-text", (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+        return authMiddleware(req, res, () => resumeController.parseTextDirect(req, res));
+    }
+    return resumeController.parseTextDirect(req, res);
+});
+
+// Preview parsing is ephemeral: the uploaded file is deleted after extraction
 router.post(
     "/preview",
     upload.single("resume"),
