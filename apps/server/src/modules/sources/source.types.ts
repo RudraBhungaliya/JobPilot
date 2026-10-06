@@ -2,6 +2,7 @@ export interface SourceSearchInput {
     keyword: string;
     location?: string;
     remote?: boolean;
+    tier?: 'MNC' | 'SEMI_MNC' | 'STARTUP' | 'ALL' | string;
     companyTier?: 'MNC' | 'SEMI_MNC' | 'STARTUP' | 'ALL';
 }
 

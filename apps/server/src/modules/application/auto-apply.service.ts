@@ -169,7 +169,7 @@ export class AutoApplyService {
         }
 
         // 8. Create or find Application record
-        let application = await prisma.application.findUnique({
+        const existingApp = await prisma.application.findUnique({
             where: {
                 userId_jobId: {
                     userId,
@@ -182,24 +182,24 @@ export class AutoApplyService {
             },
         });
 
-        if (!application) {
-            application = await prisma.application.create({
-                data: {
-                    userId,
-                    jobId: job.id,
-                    resumeId,
-                    profileId: profile.id,
-                    status: "DISCOVERED",
-                },
-                include: {
-                    job: { include: { company: true } },
-                    resume: true,
-                },
-            });
+        const currentApp = existingApp ?? (await prisma.application.create({
+            data: {
+                userId,
+                jobId: job.id,
+                resumeId,
+                profileId: profile.id,
+                status: "DISCOVERED",
+            },
+            include: {
+                job: { include: { company: true } },
+                resume: true,
+            },
+        }));
 
+        if (!existingApp) {
             // Transition: DISCOVERED -> SAVED -> QUEUED
             await ApplicationStateMachine.transition({
-                applicationId: application.id,
+                applicationId: currentApp.id,
                 newStatus: "SAVED",
                 reason: "Job bookmarked and prepared for auto-apply execution",
                 actor: "USER",
@@ -208,7 +208,7 @@ export class AutoApplyService {
 
         // 9. Enqueue into persistent ApplicationQueue
         const queueRecord = await applicationQueueService.enqueue({
-            applicationId: application.id,
+            applicationId: currentApp.id,
             userId,
             priority: input.priority ?? 0,
         });
@@ -217,13 +217,13 @@ export class AutoApplyService {
         await auditService.create(userId, {
             action: "APPLICATION_CREATED",
             description: `Auto-apply initiated for ${job.title} at ${job.company.name}`,
-            applicationId: application.id,
+            applicationId: currentApp.id,
             jobId: job.id,
         });
 
         return {
-            applicationId: application.id,
-            queueId: queueRecord?.id || application.id,
+            applicationId: currentApp.id,
+            queueId: queueRecord?.id || currentApp.id,
             status: "QUEUED",
             job: {
                 id: job.id,
@@ -232,7 +232,7 @@ export class AutoApplyService {
                 location: job.location,
                 url: job.url,
             },
-            createdAt: application.createdAt,
+            createdAt: currentApp.createdAt,
         };
     }
 

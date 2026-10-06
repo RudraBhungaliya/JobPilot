@@ -153,7 +153,7 @@ class CandidateMapper {
     }
 
     if (/rehire.?eligibility|eligible.?for.?rehire|will.?past.?employer.?rehire|re.?hire|rehireable/.test(key)) {
-      return { value: "Yes", source: "INFERRED", confidence: "LOW" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/visa.?status|immigration.?status|current.?visa|visa.?type|immigration|what.?is.?your.?visa|visa.?held/.test(key) && context.visaStatus) {
