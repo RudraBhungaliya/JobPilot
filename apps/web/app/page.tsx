@@ -402,9 +402,13 @@ export default function Home() {
   const [isDispatchingBatch, setIsDispatchingBatch] = useState(false);
   const [securityModal, setSecurityModal] = useState<{
     job: JobOpening | ApplicationTrackerItem;
+    applicationId?: string;
     type: string;
     reason: string;
+    checkpointUrl?: string;
+    questions?: Array<{ selector: string; label: string; type?: string; hint?: string; required?: boolean }>;
   } | null>(null);
+  const [verificationAnswers, setVerificationAnswers] = useState<Record<string, any>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Load persistent applications & campaigns
@@ -652,11 +656,47 @@ export default function Home() {
     }
   };
 
+  // Resolve Human-in-the-Loop Checkpoint (CAPTCHA, 2FA, Email, Approval, Missing Fields)
+  const handleResolveCheckpoint = async (appId: string, answers: Record<string, any>) => {
+    try {
+      showToast("Submitting verification & resuming application...");
+      const res = await fetch(`/api/v1/applications/${appId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && !data.success) {
+        throw new Error(data.message || "Failed to resume application.");
+      }
+
+      setApplications((prev) =>
+        prev.map((a) =>
+          a.id === appId
+            ? {
+                ...a,
+                status: "RUNNING",
+                step: "Verification accepted (RESUMED). Submitting to employer portal...",
+                reason: undefined,
+              }
+            : a
+        )
+      );
+      setSecurityModal(null);
+      setVerificationAnswers({});
+      showToast("Verification accepted! Application resumed and submitting.");
+      fetchRateLimits();
+    } catch (err: any) {
+      showToast(`Verification error: ${err.message || "Failed to submit verification"}`);
+    }
+  };
+
   // Apply Action via Real Persistent Auto-Apply Queue
   const handleApply = async (job: JobOpening) => {
     setIsApplying(true);
-    const newApp: ApplicationTrackerItem = {
-      id: job.id,
+    const tempId = job.id;
+    const initialApp: ApplicationTrackerItem = {
+      id: tempId,
       title: job.title,
       company: job.company,
       status: "RUNNING",
@@ -667,18 +707,85 @@ export default function Home() {
       canonicalUrl: job.canonicalUrl || job.url,
       atsUrl: job.atsUrl,
       category: job.category,
-      step: `Checking rate limit & queuing for ${job.company}...`,
+      step: `Connecting to ${job.company} portal...`,
     };
 
-    setApplications((prev) => [newApp, ...prev.filter((a) => a.id !== job.id)]);
+    setApplications((prev) => [initialApp, ...prev.filter((a) => a.id !== tempId)]);
 
     try {
-      await new Promise((r) => setTimeout(r, 600));
-      setApplications((prev) =>
-        prev.map((a) => (a.id === job.id ? { ...a, status: "SUBMITTED", step: "Application successfully submitted" } : a))
-      );
-      showToast(`Application submitted to ${job.company} official portal.`);
+      const res = await fetch("/api/v1/applications/auto-apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jobId: job.id,
+          discoveredJob: {
+            id: job.id,
+            title: job.title,
+            company: job.company,
+            location: job.location,
+            url: job.canonicalUrl || job.url,
+            atsProvider: job.atsProvider,
+            salaryINR: job.salaryINR,
+            department: job.department,
+          },
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && !data.success) {
+        throw new Error(data.message || "Failed to queue application");
+      }
+
+      const serverApp = data.data;
+      const appId = serverApp?.applicationId || tempId;
+      const backendStatus = serverApp?.status || "QUEUED";
+
+      if (backendStatus === "WAITING_FOR_USER" || serverApp?.requiresHumanVerification) {
+        setApplications((prev) =>
+          prev.map((a) =>
+            a.id === tempId || a.id === appId
+              ? {
+                  ...a,
+                  id: appId,
+                  status: "NEEDS_INTERVENTION",
+                  step: serverApp?.reason || "Human verification or security challenge required",
+                  reason: serverApp?.reason || "Verification required",
+                }
+              : a
+          )
+        );
+        setSecurityModal({
+          job,
+          applicationId: appId,
+          type: serverApp?.verificationType || "SECURITY_CHALLENGE",
+          reason: serverApp?.reason || "Verification challenge detected on careers portal",
+          questions: serverApp?.questions,
+          checkpointUrl: serverApp?.checkpointUrl || job.canonicalUrl || job.url,
+        });
+        showToast(`⚠️ Verification required for ${job.company}`);
+      } else {
+        setApplications((prev) =>
+          prev.map((a) =>
+            a.id === tempId || a.id === appId
+              ? {
+                  ...a,
+                  id: appId,
+                  status: backendStatus === "QUEUED" ? "QUEUED" : "RUNNING",
+                  step: `Application queued for ${job.company} official portal`,
+                }
+              : a
+          )
+        );
+        showToast(`Application queued for ${job.company} official portal.`);
+      }
       fetchRateLimits();
+    } catch (err: any) {
+      setApplications((prev) =>
+        prev.map((a) =>
+          a.id === tempId ? { ...a, status: "FAILED", step: err.message || "Failed to apply" } : a
+        )
+      );
+      showToast(`Submission notice: ${err.message || "Error submitting application"}`);
     } finally {
       setIsApplying(false);
     }
@@ -716,14 +823,13 @@ export default function Home() {
         }),
       });
 
-      // Animate progress
-      for (let i = 0; i < batch.length; i++) {
-        const j = batch[i];
+      // Register real queued jobs in application tracker
+      for (const j of batch) {
         const newApp: ApplicationTrackerItem = {
           id: j.id,
           title: j.title,
           company: j.company,
-          status: "RUNNING",
+          status: "QUEUED",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           atsProvider: j.atsProvider,
           salaryINR: j.salaryINR,
@@ -731,19 +837,9 @@ export default function Home() {
           canonicalUrl: j.canonicalUrl || j.url,
           atsUrl: j.atsUrl,
           category: j.category,
-          step: `Human pacing (${antiBanPacingSecs}s) & submitting to ${j.company}...`,
+          step: `Enqueued in auto-apply batch (${antiBanPacingSecs}s anti-ban pacing)`,
         };
         setApplications((prev) => [newApp, ...prev.filter((a) => a.id !== j.id)]);
-
-        await new Promise((r) => setTimeout(r, 600));
-
-        setApplications((prev) =>
-          prev.map((a) => (a.id === j.id ? { ...a, status: "SUBMITTED", step: "Application confirmed & queued" } : a))
-        );
-
-        if (i < batch.length - 1) {
-          await new Promise((r) => setTimeout(r, Math.max(800, antiBanPacingSecs * 250)));
-        }
       }
 
       setCampaigns((prev) =>
@@ -751,7 +847,7 @@ export default function Home() {
       );
 
       fetchRateLimits();
-      showToast(`✅ Auto-Queue batch complete! ${batch.length} applications submitted with rate limit pacing.`);
+      showToast(`✅ Auto-Queue batch dispatched! ${batch.length} applications queued with rate limit pacing.`);
     } catch {
       showToast(`Queue batch initiated.`);
     } finally {
@@ -1357,6 +1453,123 @@ export default function Home() {
                   })}
                 </div>
               </div>
+
+              {/* Realtime Applications & HITL Verification Tracker */}
+              <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-blue-600" />
+                    <h3 className="text-xs font-bold text-slate-900">
+                      Live Application Queue & HITL Checkpoints
+                    </h3>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {applications.length} tracked applications &middot; {applications.filter(a => a.status === "NEEDS_INTERVENTION").length} awaiting user verification
+                  </span>
+                </div>
+
+                {applications.length === 0 ? (
+                  <div className="p-8 text-center border border-dashed border-slate-200 rounded-xl space-y-2">
+                    <p className="text-xs text-slate-500">No applications currently in queue.</p>
+                    <p className="text-[11px] text-slate-400">Launch an auto-apply batch above or click Apply on any verified opening to start autonomous execution.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-100 text-slate-400 font-semibold text-[11px]">
+                          <th className="py-2.5">Company & Role</th>
+                          <th className="py-2.5">ATS Provider</th>
+                          <th className="py-2.5">Status</th>
+                          <th className="py-2.5">Execution Step / Details</th>
+                          <th className="py-2.5 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {applications.map((app) => {
+                          const isIntervention = app.status === "NEEDS_INTERVENTION";
+                          const isRunning = app.status === "RUNNING";
+                          const isSubmitted = app.status === "SUBMITTED";
+                          const isFailed = app.status === "FAILED";
+
+                          return (
+                            <tr key={app.id} className="hover:bg-slate-50/70 transition">
+                              <td className="py-3">
+                                <div className="font-bold text-slate-900">{app.company}</div>
+                                <div className="text-[11px] text-slate-500">{app.title} &middot; {app.location}</div>
+                              </td>
+                              <td className="py-3">
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold uppercase">
+                                  {app.atsProvider || "Portal"}
+                                </span>
+                              </td>
+                              <td className="py-3">
+                                {isIntervention ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">
+                                    <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                    <span>NEEDS VERIFICATION</span>
+                                  </span>
+                                ) : isRunning ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <RefreshCw className="w-3 h-3 text-blue-600 animate-spin" />
+                                    <span>RUNNING / SUBMITTING</span>
+                                  </span>
+                                ) : isSubmitted ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>SUBMITTED & VERIFIED</span>
+                                  </span>
+                                ) : isFailed ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                    <X className="w-3 h-3 text-rose-600" />
+                                    <span>FAILED</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
+                                    <span>QUEUED</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 text-[11px] text-slate-600 max-w-xs truncate">
+                                {app.step || (isIntervention ? app.reason : "In queue")}
+                              </td>
+                              <td className="py-3 text-right">
+                                {isIntervention ? (
+                                  <button
+                                    onClick={() => {
+                                      setSecurityModal({
+                                        job: app,
+                                        applicationId: app.id,
+                                        type: /2fa|otp|passcode/i.test(app.reason || "")
+                                          ? "2FA_OTP"
+                                          : /captcha|turnstile|puzzle/i.test(app.reason || "")
+                                          ? "CAPTCHA"
+                                          : /email/i.test(app.reason || "")
+                                          ? "EMAIL_VERIFICATION"
+                                          : /approval/i.test(app.reason || "")
+                                          ? "SUBMISSION_APPROVAL"
+                                          : "SECURITY_CHALLENGE",
+                                        reason: app.reason || "Human verification challenge detected",
+                                        checkpointUrl: app.canonicalUrl,
+                                      });
+                                    }}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                  >
+                                    <ShieldAlert className="w-3.5 h-3.5" />
+                                    <span>Resolve Checkpoint</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 font-mono">{app.time}</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -1871,6 +2084,268 @@ export default function Home() {
                 className="bg-[#09152b] hover:bg-slate-800 text-white px-4 py-2 rounded-lg font-bold cursor-pointer shadow-sm"
               >
                 Activate Queue Campaign
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Human-in-the-Loop Security & Verification Modal */}
+      {securityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-150">
+          <div
+            className="w-full max-w-xl bg-[#0f172a] text-slate-100 border border-slate-700/60 rounded-2xl shadow-2xl p-6 space-y-5 text-xs animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">Human-in-the-Loop Verification Gate</h3>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold uppercase">
+                      {securityModal.job.atsProvider || "ATS Portal"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    {securityModal.job.company} &middot; {securityModal.job.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSecurityModal(null)}
+                className="text-slate-400 hover:text-white cursor-pointer p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Checkpoint Callout */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-amber-400 text-xs">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Verification Checkpoint Enforced</span>
+              </div>
+              <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                {securityModal.reason || "Autonomous execution paused. Real employer verification is required before submission."}
+              </p>
+            </div>
+
+            {/* Dynamic Challenge Forms */}
+            <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-1">
+              {/* Challenge Type A: CAPTCHA / Bot Protection */}
+              {((securityModal.type === "CAPTCHA") || /captcha|turnstile|puzzle|recaptcha|hcaptcha|arkose/i.test(securityModal.reason)) && (
+                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200">CAPTCHA / Security Puzzle Challenge</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">
+                      Cloudflare / Turnstile / reCAPTCHA
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    The employer portal requires human interaction to clear bot detection. If prompted on the portal, complete the challenge, then confirm below to resume submission.
+                  </p>
+                  {securityModal.checkpointUrl && (
+                    <a
+                      href={securityModal.checkpointUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-semibold underline decoration-blue-500/50"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open Application Portal in New Window</span>
+                    </a>
+                  )}
+                  <label className="flex items-start gap-2.5 pt-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(verificationAnswers.captchaSolved)}
+                      onChange={(e) =>
+                        setVerificationAnswers((prev) => ({ ...prev, captchaSolved: e.target.checked }))
+                      }
+                      className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-400"
+                    />
+                    <span className="text-xs text-slate-200 font-medium">
+                      I have completed the CAPTCHA / bot challenge on the careers portal.
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Challenge Type B: 2FA / OTP Code */}
+              {((securityModal.type === "2FA_OTP") || /2fa|otp|passcode|6-digit|pin/i.test(securityModal.reason)) && (
+                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200">Two-Factor Authentication / OTP</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono">
+                      Real 2FA Security
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Enter the 6-digit verification code or one-time passcode sent to your phone or email.
+                  </p>
+                  <input
+                    type="text"
+                    value={verificationAnswers.otpCode || ""}
+                    onChange={(e) =>
+                      setVerificationAnswers((prev) => ({ ...prev, otpCode: e.target.value }))
+                    }
+                    placeholder="Enter OTP / verification code (e.g. 582914)"
+                    className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:border-blue-500 focus:outline-none"
+                    autoFocus
+                  />
+                </div>
+              )}
+
+              {/* Challenge Type C: Email Verification */}
+              {((securityModal.type === "EMAIL_VERIFICATION") || /email.*verif/i.test(securityModal.reason)) && (
+                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200">Email Verification Pending</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                      Candidate Inbox Action
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    A confirmation email was sent to your email address ({INITIAL_PROFILE.email}). Open your inbox, click the verification link, then confirm below.
+                  </p>
+                  <div className="space-y-2 pt-1">
+                    <input
+                      type="text"
+                      value={verificationAnswers.emailToken || ""}
+                      onChange={(e) =>
+                        setVerificationAnswers((prev) => ({ ...prev, emailToken: e.target.value }))
+                      }
+                      placeholder="Optional: Paste email verification token / URL if provided"
+                      className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:border-blue-500 focus:outline-none"
+                    />
+                    <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(verificationAnswers.emailVerified)}
+                        onChange={(e) =>
+                          setVerificationAnswers((prev) => ({ ...prev, emailVerified: e.target.checked }))
+                        }
+                        className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-400"
+                      />
+                      <span className="text-xs text-slate-200 font-medium">
+                        I clicked the confirmation link in my email inbox.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Challenge Type D: Pre-Submission Approval Sign-Off */}
+              {((securityModal.type === "SUBMISSION_APPROVAL") || /approval/i.test(securityModal.reason)) && (
+                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200">Pre-Submission Sign-Off Gate</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                      Final Approval
+                    </span>
+                  </div>
+                  <div className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                    <div><span className="text-slate-500 font-semibold">Target Company:</span> {securityModal.job.company}</div>
+                    <div><span className="text-slate-500 font-semibold">Job Title:</span> {securityModal.job.title}</div>
+                    <div><span className="text-slate-500 font-semibold">Candidate:</span> {INITIAL_PROFILE.firstName} {INITIAL_PROFILE.lastName} ({INITIAL_PROFILE.email})</div>
+                  </div>
+                  <label className="flex items-start gap-2.5 pt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(verificationAnswers.approvalConfirmed)}
+                      onChange={(e) =>
+                        setVerificationAnswers((prev) => ({ ...prev, approvalConfirmed: e.target.checked }))
+                      }
+                      className="mt-0.5 rounded border-slate-700 text-emerald-500 focus:ring-emerald-400"
+                    />
+                    <span className="text-xs text-slate-200 font-medium">
+                      I have reviewed this application and authorize JobPilot to submit to {securityModal.job.company}.
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Challenge Type E: Missing Required Fields / Custom ATS Questions */}
+              {Array.isArray(securityModal.questions) && securityModal.questions.length > 0 && (
+                <div className="space-y-3">
+                  <div className="font-bold text-slate-200 text-xs">Required Candidate Information:</div>
+                  {securityModal.questions.map((q, idx) => (
+                    <div key={idx} className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-200">
+                        {q.label || q.selector}
+                      </label>
+                      {q.hint && <p className="text-[10px] text-slate-400">{q.hint}</p>}
+                      <input
+                        type="text"
+                        value={verificationAnswers[q.selector] || ""}
+                        onChange={(e) =>
+                          setVerificationAnswers((prev) => ({
+                            ...prev,
+                            [q.selector]: e.target.value,
+                          }))
+                        }
+                        placeholder="Enter value..."
+                        className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* General missing profile info inputs if detected in reason */}
+              {/missing.*phone|missing.*field|missing.*profile/i.test(securityModal.reason) && (
+                <div className="p-4 bg-slate-900/80 rounded-xl border border-slate-800 space-y-3">
+                  <div className="font-bold text-slate-200">Provide Missing Candidate Details:</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        defaultValue={INITIAL_PROFILE.phone}
+                        onChange={(e) =>
+                          setVerificationAnswers((prev) => ({ ...prev, phone: e.target.value }))
+                        }
+                        className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Location / City</label>
+                      <input
+                        type="text"
+                        defaultValue={INITIAL_PROFILE.city}
+                        onChange={(e) =>
+                          setVerificationAnswers((prev) => ({ ...prev, city: e.target.value }))
+                        }
+                        className="w-full bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+              <button
+                onClick={() => setSecurityModal(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition"
+              >
+                Keep Application Paused
+              </button>
+
+              <button
+                onClick={() => {
+                  const appId = securityModal.applicationId || securityModal.job.id;
+                  handleResolveCheckpoint(appId, verificationAnswers);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white px-5 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5 shadow-md shadow-emerald-900/20"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-200" />
+                <span>Verify & Resume Application</span>
               </button>
             </div>
           </div>

@@ -146,11 +146,63 @@ class HumanActionService {
                 answers,
             );
 
-        // Move application back to QUEUED so the worker picks it up
-        await applicationRepository.update(
-            humanAction.applicationId,
-            { status: "QUEUED" },
-        );
+        // Transition application state: WAITING_FOR_USER -> RESUMED
+        try {
+            const { default: ApplicationStateMachine } = await import("../application/application-state-machine.js");
+            await ApplicationStateMachine.transition({
+                applicationId: humanAction.applicationId,
+                newStatus: "RESUMED",
+                reason: `User completed verification / provided answers for ${Object.keys(answers).length} field(s).`,
+                metadata: {
+                    humanActionId: id,
+                    answeredFields: Object.keys(answers),
+                },
+                actor: "USER",
+            });
+        } catch (stateErr) {
+            // Fallback direct update if state machine throws
+            await applicationRepository.update(
+                humanAction.applicationId,
+                { status: "RESUMED" },
+            ).catch(() => {
+                return applicationRepository.update(
+                    humanAction.applicationId,
+                    { status: "QUEUED" },
+                );
+            });
+        }
+
+        // Enrich candidate profile with any answered missing fields
+        try {
+            const { prisma } = await import("@jobpilot/database");
+            const profile = await prisma.profile.findUnique({
+                where: { userId },
+            });
+            if (profile) {
+                const profileUpdates: Record<string, any> = {};
+                for (const [key, val] of Object.entries(answers)) {
+                    const lowerKey = key.toLowerCase();
+                    const strVal = String(val).trim();
+                    if (!strVal) continue;
+                    if (lowerKey.includes("phone") && !profile.phone) profileUpdates.phone = strVal;
+                    if (lowerKey.includes("city") && !profile.city) profileUpdates.city = strVal;
+                    if (lowerKey.includes("location") && !profile.location) profileUpdates.location = strVal;
+                    if (lowerKey.includes("first") && !profile.firstName) profileUpdates.firstName = strVal;
+                    if (lowerKey.includes("last") && !profile.lastName) profileUpdates.lastName = strVal;
+                    if (lowerKey.includes("linkedin") && !profile.linkedin) profileUpdates.linkedin = strVal;
+                    if (lowerKey.includes("github") && !profile.github) profileUpdates.github = strVal;
+                    if (lowerKey.includes("portfolio") && !profile.portfolio) profileUpdates.portfolio = strVal;
+                }
+                if (Object.keys(profileUpdates).length > 0) {
+                    await prisma.profile.update({
+                        where: { id: profile.id },
+                        data: profileUpdates,
+                    });
+                }
+            }
+        } catch {
+            // Non-blocking profile enrichment
+        }
 
         try {
             const { default: applicationQueueService } = await import("../queue/application-queue.service.js");

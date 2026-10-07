@@ -325,7 +325,7 @@ export class AutoApplyService {
                     userId: queueJob.userId,
                     jobId: jobOpening.id,
                     id: { not: fullApp.id },
-                    status: { in: ["APPLIED", "SUBMITTED", "INTERVIEW", "ACCEPTED"] },
+                    status: { in: ["APPLIED", "SUBMITTED", "INTERVIEW", "OFFER"] },
                 },
             });
 
@@ -393,13 +393,47 @@ export class AutoApplyService {
             // 4. Determine ATS Provider
             const atsProvider = this.detectAtsProvider(jobUrl, jobOpening.atsProvider);
 
-            // 5. STEP 1: TAILORING
-            await ApplicationStateMachine.transition({
-                applicationId: fullApp.id,
-                newStatus: "TAILORING",
-                reason: "Aligning candidate profile parameters and tailoring responses via Gemini engine.",
-                actor: "QUEUE_WORKER",
-            });
+            // Pre-submission approval check when configured
+            const requireApproval = process.env.REQUIRE_SUBMISSION_APPROVAL === "true";
+            if (requireApproval) {
+                const existingActions = await humanActionService.getAllActions(queueJob.userId, fullApp.id).catch(() => []);
+                const alreadyApproved = existingActions.some((a) =>
+                    a.resolvedAt !== null &&
+                    Array.isArray(a.questions) &&
+                    (a.questions as any[]).some((q: any) => q.type === "approval" || q.selector === "submission_approval" || q.selector === "submission-approval")
+                );
+
+                if (!alreadyApproved) {
+                    await humanActionService.createAction({
+                        userId: queueJob.userId,
+                        applicationId: fullApp.id,
+                        questions: [{
+                            selector: "submission_approval",
+                            label: `Final Submission Review & Sign-Off: Ready to submit application for ${jobOpening.title} at ${companyName}. Approve submission?`,
+                            type: "approval",
+                            required: true,
+                            hint: "Confirm approval in JobPilot dashboard to authorize the worker to finalize and submit this application.",
+                        }],
+                    });
+
+                    await applicationQueueService.markWaitingForUser(
+                        queueJobId,
+                        `User approval required before submitting to ${companyName} (${jobOpening.title})`,
+                        { verificationType: "SUBMISSION_APPROVAL" }
+                    );
+                    return false;
+                }
+            }
+
+            // 5. STEP 1: TAILORING (Skip if already resumed/tailored)
+            if (fullApp.status !== "RESUMED") {
+                await ApplicationStateMachine.transition({
+                    applicationId: fullApp.id,
+                    newStatus: "TAILORING",
+                    reason: "Aligning candidate profile parameters and tailoring responses via Gemini engine.",
+                    actor: "QUEUE_WORKER",
+                });
+            }
 
             const { tailoringService } = await import("../ai/tailoring.service.js");
             const tailoredResult = await tailoringService.tailorForJob({
@@ -414,24 +448,26 @@ export class AutoApplyService {
                 return { confidence: "MEDIUM" as const };
             });
 
-            // 6. Rate Limit Pacing
+            // 6. Transition to READY_TO_SUBMIT (if not already resumed)
+            if (fullApp.status !== "RESUMED") {
+                await ApplicationStateMachine.transition({
+                    applicationId: fullApp.id,
+                    newStatus: "READY_TO_SUBMIT",
+                    reason: "Profile tailoring completed and verified. Ready for submission.",
+                    actor: "QUEUE_WORKER",
+                });
+            }
+
+            // 7. Rate Limit Pacing
             console.log(`[AutoApplyService] Waiting for rate limiter slot on provider: ${atsProvider}`);
             await atsRateLimiter.waitForSlot(atsProvider);
 
-            // 7. STEP 2: READY_TO_SUBMIT
-            await ApplicationStateMachine.transition({
-                applicationId: fullApp.id,
-                newStatus: "READY_TO_SUBMIT",
-                reason: "Application payload synthesized and verified. Ready for official ATS submission.",
-                metadata: { confidence: tailoredResult.confidence, atsProvider },
-                actor: "QUEUE_WORKER",
-            });
-
-            // 8. STEP 3: SUBMITTING
+            // 8. Transition to SUBMITTING (guarantees WAITING_FOR_USER -> RESUMED -> SUBMITTING lifecycle)
             await ApplicationStateMachine.transition({
                 applicationId: fullApp.id,
                 newStatus: "SUBMITTING",
-                reason: `Connecting to ${companyName} ATS endpoint (${jobUrl}).`,
+                reason: `Connecting to ${companyName} ATS endpoint (${jobUrl}) for official submission.`,
+                metadata: { confidence: tailoredResult.confidence, atsProvider },
                 actor: "QUEUE_WORKER",
             });
 
@@ -508,10 +544,27 @@ export class AutoApplyService {
                 };
             }
 
-            // A. Security Challenge / CAPTCHA / 2FA / Verification Checkpoint (HITL)
+            // A. Security Challenge / CAPTCHA / 2FA / Email Verification Checkpoint (HITL)
             if (adapterResult.status === "WAITING_FOR_USER" || adapterResult.requiresHumanVerification) {
                 const reason = adapterResult.failureReason || `${adapterResult.verificationType || "Security verification"} challenge required.`;
                 console.log(`[AutoApplyService] ⚠️ HITL required for App #${fullApp.id}: ${reason}`);
+
+                let qType = "verification";
+                let qHint = "Please complete the verification challenge on the careers portal.";
+                const verType = adapterResult.verificationType || "SECURITY_CHALLENGE";
+                if (/captcha|turnstile|recaptcha|hcaptcha|arkose|waf/i.test(verType) || /captcha|puzzle/i.test(reason)) {
+                    qType = "captcha";
+                    qHint = "Solve the CAPTCHA challenge or bot puzzle on the application page.";
+                } else if (/2fa|otp|passcode/i.test(verType) || /2fa|otp|passcode|6-digit/i.test(reason)) {
+                    qType = "2fa";
+                    qHint = "Enter the 2FA / OTP verification code sent to your mobile or email.";
+                } else if (/email/i.test(verType) || /email.*verif/i.test(reason)) {
+                    qType = "email_verification";
+                    qHint = "Click the verification link sent to your email or enter the verification code.";
+                } else if (/auth|account|sign.?in/i.test(verType)) {
+                    qType = "security_challenge";
+                    qHint = "Complete employer portal login / authentication challenge.";
+                }
 
                 await humanActionService.createAction({
                     userId: queueJob.userId,
@@ -519,9 +572,9 @@ export class AutoApplyService {
                     questions: [{
                         selector: "security-challenge",
                         label: reason,
-                        type: "verification",
+                        type: qType,
                         required: true,
-                        hint: "Please complete the CAPTCHA or verification challenge on the careers portal.",
+                        hint: qHint,
                     }],
                 });
 
@@ -531,7 +584,7 @@ export class AutoApplyService {
                     {
                         checkpointUrl: jobUrl,
                         atsProvider,
-                        type: adapterResult.verificationType,
+                        type: verType,
                         metadata: adapterResult.metadata,
                     }
                 );

@@ -306,6 +306,7 @@ class FormTool {
             { selector: 'iframe[src*="hcaptcha"], .h-captcha', type: "hCaptcha", message: "hCaptcha human verification challenge detected." },
             { selector: 'iframe[src*="turnstile"], iframe[src*="challenges.cloudflare.com"], .cf-turnstile, #challenge-stage', type: "Cloudflare Turnstile", message: "Cloudflare bot challenge detected." },
             { selector: 'iframe[src*="arkoselabs"], iframe[src*="funcaptcha"]', type: "Arkose", message: "Arkose Labs verification challenge detected." },
+            { selector: 'iframe[src*="awswaf"], #aws-waf-captcha, .aws-waf-captcha', type: "AWS WAF Captcha", message: "AWS WAF Captcha challenge detected." },
         ];
 
         for (const item of captchaSelectors) {
@@ -326,7 +327,7 @@ class FormTool {
         // Check for 2FA / OTP verification inputs
         try {
             const verificationInputs = page.locator(
-                'input[name*="otp" i], input[name*="2fa" i], input[name*="verification" i], input[autocomplete="one-time-code"]'
+                'input[name*="otp" i], input[name*="2fa" i], input[name*="mfa" i], input[name*="passcode" i], input[name*="pin" i], input[name*="verification" i], input[autocomplete="one-time-code"], [data-testid*="otp" i], [data-testid*="2fa" i]'
             );
             if ((await verificationInputs.count()) > 0) {
                 return {
@@ -339,21 +340,70 @@ class FormTool {
             // Ignore
         }
 
+        // Check for Email Verification on page
+        try {
+            const emailVerificationSelectors = [
+                'iframe[src*="email-verify" i]',
+                '.email-verification',
+                '[data-testid*="email-verification" i]',
+                '[data-testid*="email-confirm" i]',
+            ];
+            for (const sel of emailVerificationSelectors) {
+                if ((await page.locator(sel).count()) > 0) {
+                    return {
+                        detected: true,
+                        type: "EMAIL_VERIFICATION",
+                        message: "Email verification required: Check your inbox for the verification link or code.",
+                    };
+                }
+            }
+        } catch {
+            // Ignore
+        }
+
         // Check page body text for human challenge indicators
         try {
             const bodyText = (await page.locator("body").innerText()).toLowerCase();
+            if (
+                bodyText.includes("verification email sent") ||
+                bodyText.includes("check your email to verify") ||
+                bodyText.includes("we sent a verification link") ||
+                bodyText.includes("we sent a verification code to your email") ||
+                bodyText.includes("confirm your email address") ||
+                bodyText.includes("verify your email")
+            ) {
+                return {
+                    detected: true,
+                    type: "EMAIL_VERIFICATION",
+                    message: "Email verification link or code sent by employer ATS portal.",
+                };
+            }
+
             if (
                 bodyText.includes("verify you are human") ||
                 bodyText.includes("complete the security check") ||
                 bodyText.includes("please solve the puzzle") ||
                 bodyText.includes("security verification required") ||
-                bodyText.includes("enter the 6-digit code") ||
-                bodyText.includes("enter the code sent to")
+                bodyText.includes("unusual traffic") ||
+                bodyText.includes("bot challenge")
             ) {
                 return {
                     detected: true,
                     type: "SECURITY_CHALLENGE",
                     message: "Security verification or bot challenge detected on application page.",
+                };
+            }
+
+            if (
+                bodyText.includes("enter the 6-digit code") ||
+                bodyText.includes("enter the code sent to") ||
+                bodyText.includes("two-factor authentication") ||
+                bodyText.includes("two-step verification")
+            ) {
+                return {
+                    detected: true,
+                    type: "2FA_OTP",
+                    message: "Two-factor authentication code required.",
                 };
             }
         } catch {

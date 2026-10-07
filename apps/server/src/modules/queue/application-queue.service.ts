@@ -251,7 +251,7 @@ export class ApplicationQueueService {
             try {
                 await ApplicationStateMachine.transition({
                     applicationId,
-                    newStatus: "READY_TO_SUBMIT",
+                    newStatus: "RESUMED",
                     reason: "User verification cleared; resuming submission pipeline.",
                     metadata,
                     actor: "USER",

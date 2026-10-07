@@ -104,9 +104,52 @@ class ApplicationController {
             });
         }
 
-        const application = await applicationService.updateApplication(id, {
-            status: "QUEUED",
-        });
+        const answers = req.body?.answers || req.body?.metadata || {};
+        let resolvedAction = null;
+
+        // 1. Resolve pending HumanAction if present
+        try {
+            const { default: humanActionService } = await import("../human-action/human-action.service.js");
+            const pending = await humanActionService.getPendingActions(req.user.id, id);
+            if (pending.length > 0) {
+                const latest = pending[0]!;
+                resolvedAction = await humanActionService.resolveAction(req.user.id, latest.id, answers);
+            }
+        } catch (err: any) {
+            // If human action resolution fails with error, report it
+            if (err.message && !err.message.includes("not found")) {
+                return res.status(400).json({
+                    success: false,
+                    message: err.message,
+                });
+            }
+        }
+
+        // 2. Transition state machine WAITING_FOR_USER -> RESUMED
+        try {
+            const { default: ApplicationStateMachine } = await import("./application-state-machine.js");
+            await ApplicationStateMachine.transition({
+                applicationId: id,
+                newStatus: "RESUMED",
+                reason: "Application resumed by candidate.",
+                metadata: { answers },
+                actor: "USER",
+            });
+        } catch (stateErr) {
+            await applicationService.updateApplication(id, {
+                status: "RESUMED",
+            }).catch(() => {
+                return applicationService.updateApplication(id, { status: "QUEUED" });
+            });
+        }
+
+        // 3. Resume ApplicationQueue job
+        try {
+            const { applicationQueueService } = await import("../queue/application-queue.service.js");
+            await applicationQueueService.resumeWaitingJob(id, answers);
+        } catch {
+            // Queue record may not exist
+        }
 
         try {
             await auditService.create(req.user.id, {
@@ -119,10 +162,13 @@ class ApplicationController {
             // Ignore audit log failure
         }
 
+        const updated = await applicationService.getApplication(id);
+
         return res.status(200).json({
             success: true,
             message: "Application resumed.",
-            data: application,
+            data: updated || existing,
+            resolvedAction,
         });
     }
 
@@ -166,10 +212,38 @@ class ApplicationController {
                 });
             }
 
+            const answers = req.body?.answers || req.body?.metadata || { checkpoint: "RESOLVED" };
+
+            // 1. Resolve pending human action if present
+            try {
+                const { default: humanActionService } = await import("../human-action/human-action.service.js");
+                const pending = await humanActionService.getPendingActions(req.user.id, id);
+                if (pending.length > 0) {
+                    const latest = pending[0]!;
+                    await humanActionService.resolveAction(req.user.id, latest.id, answers);
+                }
+            } catch {
+                // Ignore if no action
+            }
+
+            // 2. State transition to RESUMED
+            try {
+                const { default: ApplicationStateMachine } = await import("./application-state-machine.js");
+                await ApplicationStateMachine.transition({
+                    applicationId: id,
+                    newStatus: "RESUMED",
+                    reason: "Verification checkpoint resolved by user.",
+                    metadata: answers,
+                    actor: "USER",
+                });
+            } catch {
+                // Fallback
+            }
+
             const { applicationQueueService } = await import("../queue/application-queue.service.js");
             const updatedQueue = await applicationQueueService.resumeWaitingJob(
                 id,
-                req.body?.metadata,
+                answers,
             );
 
             return res.status(200).json({

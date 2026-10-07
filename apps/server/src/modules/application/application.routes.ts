@@ -94,17 +94,6 @@ router.delete(
 );
 
 /**
- * POST /api/v1/applications/:id/resume
- * User submits answers for required fields → re-queues the application.
- */
-router.post(
-    "/:id/resume",
-    humanActionController.resume.bind(
-        humanActionController,
-    ),
-);
-
-/**
  * GET /api/v1/applications/:id/human-actions
  * Returns pending question records for an application.
  */

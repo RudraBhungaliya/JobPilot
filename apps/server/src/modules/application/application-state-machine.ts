@@ -19,10 +19,11 @@ const VALID_TRANSITIONS: Record<ApplicationStatus, ApplicationStatus[]> = {
     QUEUED: ["TAILORING", "RUNNING", "WAITING_FOR_USER", "FAILED", "WITHDRAWN"],
     TAILORING: ["REVIEW_REQUIRED", "WAITING_FOR_USER", "READY_TO_SUBMIT", "FAILED", "WITHDRAWN"],
     REVIEW_REQUIRED: ["READY_TO_SUBMIT", "TAILORING", "WITHDRAWN", "REJECTED"],
-    WAITING_FOR_USER: ["READY_TO_SUBMIT", "TAILORING", "SUBMITTING", "QUEUED", "WITHDRAWN", "FAILED"],
+    WAITING_FOR_USER: ["RESUMED", "READY_TO_SUBMIT", "TAILORING", "SUBMITTING", "QUEUED", "WITHDRAWN", "FAILED"],
+    RESUMED: ["SUBMITTING", "READY_TO_SUBMIT", "QUEUED", "RUNNING", "FAILED", "WITHDRAWN"],
     READY_TO_SUBMIT: ["SUBMITTING", "WAITING_FOR_USER", "WITHDRAWN", "FAILED"],
     SUBMITTING: ["VERIFICATION_PENDING", "WAITING_FOR_USER", "SUBMITTED", "APPLIED", "FAILED", "RETRYING"],
-    VERIFICATION_PENDING: ["WAITING_FOR_USER", "SUBMITTED", "APPLIED", "FAILED", "WITHDRAWN"],
+    VERIFICATION_PENDING: ["WAITING_FOR_USER", "RESUMED", "SUBMITTED", "APPLIED", "FAILED", "WITHDRAWN"],
     SUBMITTED: ["APPLIED", "INTERVIEW", "REJECTED", "WITHDRAWN", "ARCHIVED"],
     APPLIED: ["INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN", "ARCHIVED"],
     FAILED: ["RETRYING", "QUEUED", "ARCHIVED"],
@@ -37,6 +38,15 @@ const VALID_TRANSITIONS: Record<ApplicationStatus, ApplicationStatus[]> = {
 };
 
 export class ApplicationStateMachine {
+    /**
+     * Check if a state transition is valid according to canonical lifecycle
+     */
+    static canTransition(from: ApplicationStatus, to: ApplicationStatus): boolean {
+        if (from === to) return true;
+        const allowed = VALID_TRANSITIONS[from] || [];
+        return allowed.includes(to);
+    }
+
     /**
      * Transition an application to a new state with strict audit logging
      */
