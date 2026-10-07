@@ -47,11 +47,12 @@ export default async function authMiddleware(
     next: NextFunction
 ) {
     const authHeader = req.headers.authorization;
+    const queryToken = typeof req.query?.token === "string" ? req.query.token : undefined;
+    const rawToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : queryToken;
 
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-        const token = authHeader.split(" ")[1];
+    if (rawToken) {
         try {
-            const payload = verifyAccessToken(token);
+            const payload = verifyAccessToken(rawToken);
             req.user = {
                 id: payload.userId,
                 email: payload.email,
@@ -65,7 +66,7 @@ export default async function authMiddleware(
         }
     }
 
-    if (process.env.NODE_ENV === "production" && !authHeader) {
+    if (process.env.NODE_ENV === "production" && !rawToken) {
         return next(new AppError("Unauthorized", 401));
     }
 

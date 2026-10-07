@@ -3,6 +3,8 @@ import liveAtsService from "../sources/live-ats.service.js";
 import type { SourceJob } from "../sources/source.types.js";
 import jobMatchingService from "../matching/job-matching.service.js";
 import logger from "../../core/logger/logger.js";
+import eventEmitter from "../../core/events/event.emitter.js";
+import notificationService from "../notification/notification.service.js";
 
 export interface LoopExecutionResult {
   loopId: string;
@@ -60,6 +62,14 @@ export class LoopExecutionEngine {
     }
 
     try {
+      eventEmitter.emit({
+        type: "loop.started",
+        userId: loop.userId,
+        loopId: loop.id,
+        loopName: loop.name,
+        timestamp: new Date().toISOString(),
+      });
+
       // 1. Gather search keywords from targetJobTitles
       const targetTitles = loop.targetJobTitles && loop.targetJobTitles.length > 0
         ? loop.targetJobTitles
@@ -210,7 +220,7 @@ export class LoopExecutionEngine {
         const isRemoteJob = (job.location || "").toLowerCase().includes("remote") ||
           (job.location || "").toLowerCase().includes("wfh");
 
-        await prisma.job.create({
+        const createdJob = await prisma.job.create({
           data: {
             title: job.title,
             location: job.location || "Remote",
@@ -232,6 +242,22 @@ export class LoopExecutionEngine {
         });
 
         newlyPersistedCount++;
+
+        try {
+          eventEmitter.emit({
+            type: "job.discovered",
+            userId: loop.userId,
+            jobId: createdJob.id,
+            title: job.title,
+            company: companyName,
+            url: job.url,
+            atsProvider: job.source,
+            matchScore: scorecard.matchScore,
+            timestamp: new Date().toISOString(),
+          });
+        } catch {
+          // Non-blocking
+        }
       }
 
       // 7. Calculate next run schedule (e.g., 24 hours later)
@@ -258,6 +284,29 @@ export class LoopExecutionEngine {
         newlyPersistedCount,
         nextRunAt,
       });
+
+      try {
+        eventEmitter.emit({
+          type: "loop.completed",
+          userId: loop.userId,
+          loopId: loop.id,
+          loopName: loop.name,
+          discoveredCount: candidateJobs.length,
+          newlyPersistedCount,
+          status: "ACTIVE",
+          timestamp: new Date().toISOString(),
+        });
+
+        if (newlyPersistedCount > 0) {
+          await notificationService.create(loop.userId, {
+            type: "SYSTEM",
+            title: `Loop: ${newlyPersistedCount} new verified jobs discovered`,
+            message: `Loop "${loop.name}" indexed ${newlyPersistedCount} new matched openings from verified ATS boards.`,
+          }).catch(() => {});
+        }
+      } catch {
+        // Non-blocking
+      }
 
       // 9. Pipeline sync: connect discovered/matched jobs -> Application + Queue system (optional)
       let pipelineSyncSummary = undefined;
@@ -317,6 +366,25 @@ export class LoopExecutionEngine {
           loopId: loop.id,
           error: dbErr instanceof Error ? dbErr.message : String(dbErr),
         });
+      }
+
+      try {
+        eventEmitter.emit({
+          type: "loop.failed",
+          userId: loop.userId,
+          loopId: loop.id,
+          loopName: loop.name,
+          error: err?.message || String(err),
+          timestamp: new Date().toISOString(),
+        });
+
+        await notificationService.create(loop.userId, {
+          type: "SYSTEM",
+          title: `Loop error: "${loop.name}"`,
+          message: err?.message || "Job search loop encountered an error during discovery.",
+        }).catch(() => {});
+      } catch {
+        // Non-blocking
       }
 
       throw err;

@@ -411,41 +411,415 @@ export default function Home() {
   const [verificationAnswers, setVerificationAnswers] = useState<Record<string, any>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Load persistent applications & campaigns
-  useEffect(() => {
+  // Live Backend Pipeline Stats & Notifications
+  const [pipelineStats, setPipelineStats] = useState<{
+    totalApplications: number;
+    queuedCount: number;
+    runningCount: number;
+    submittedCount: number;
+    savedCount: number;
+    waitingUserCount: number;
+    appliedTodayCount: number;
+    dailyLimit: number;
+    remainingDailyQuota: number;
+    totalMatches: number;
+    activeQueuesCount: number;
+    cvCount: number;
+    unreadNotificationsCount: number;
+    tierBreakdown: {
+      tier1Mnc: number;
+      tier2Unicorn: number;
+      remoteTech: number;
+      midMarket: number;
+      total: number;
+    };
+  } | null>(null);
+
+  interface AppNotification {
+    id: string;
+    type: string;
+    title: string;
+    message: string;
+    createdAt: string;
+    readAt?: string | null;
+    applicationId?: string;
+  }
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+
+  // Fetch PostgreSQL Pipeline Stats
+  const fetchPipelineStats = async () => {
     try {
-      const savedApps = localStorage.getItem("jobpilot_applications");
-      if (savedApps) {
-        const parsed = JSON.parse(savedApps);
-        if (Array.isArray(parsed)) setApplications(parsed);
-      }
-      const savedCamps = localStorage.getItem("jobpilot_campaigns");
-      if (savedCamps) {
-        const parsed = JSON.parse(savedCamps);
-        if (Array.isArray(parsed)) setCampaigns(parsed);
+      const res = await fetch("/api/v1/applications/pipeline/stats");
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) {
+          setPipelineStats(json.data);
+          if (typeof json.data.unreadNotificationsCount === "number") {
+            setUnreadCount(json.data.unreadNotificationsCount);
+          }
+        }
       }
     } catch {
-      // Ignore
+      // Fallback
     }
+  };
+
+  // Fetch PostgreSQL Applications
+  const fetchBackendApplications = async () => {
+    try {
+      const res = await fetch("/api/v1/applications");
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          const mapped: ApplicationTrackerItem[] = json.data.map((item: any) => {
+            let mappedStatus: ApplicationTrackerItem["status"] = "QUEUED";
+            if (item.status === "WAITING_FOR_USER") mappedStatus = "NEEDS_INTERVENTION";
+            else if (item.status === "SUBMITTED" || item.status === "APPLIED" || item.status === "OFFER") mappedStatus = "SUBMITTED";
+            else if (item.status === "FAILED" || item.status === "REJECTED") mappedStatus = "FAILED";
+            else if (item.status === "RUNNING" || item.status === "SUBMITTING" || item.status === "TAILORING") mappedStatus = "RUNNING";
+            else mappedStatus = "QUEUED";
+
+            return {
+              id: item.id,
+              title: item.job?.title || item.title || "Software Engineer",
+              company: item.company?.name || item.companyName || item.job?.company?.name || "Company",
+              status: mappedStatus,
+              time: item.createdAt ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Recently",
+              atsProvider: item.company?.verifiedAts || item.atsProvider || item.job?.atsProvider || "Greenhouse",
+              salaryINR: item.salaryINR || "Competitive",
+              location: item.location || item.company?.location || "Remote",
+              canonicalUrl: item.canonicalUrl || item.job?.url || item.url,
+              step: item.status === "WAITING_FOR_USER"
+                ? (item.failureReason || "Human verification or security challenge required")
+                : item.status === "SUBMITTED"
+                ? "Application successfully submitted and verified"
+                : `Application status: ${item.status}`,
+              reason: item.failureReason,
+            };
+          });
+          setApplications(mapped);
+        }
+      }
+    } catch {
+      // Keep existing state on error
+    }
+  };
+
+  // Fetch PostgreSQL Loops
+  const fetchBackendLoops = async () => {
+    try {
+      const res = await fetch("/api/v1/loops");
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.data) && json.data.length > 0) {
+          const mapped: QueueCampaign[] = json.data.map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            jobTitles: l.criteria?.jobTitles || [l.name],
+            locations: l.criteria?.locations || ["Remote", "India"],
+            priorityTier: l.criteria?.priorityTier || "MNC_FIRST",
+            priorityLabel: l.criteria?.priorityLabel || "Top Tier Enterprise First",
+            minSalaryLPA: l.criteria?.minSalaryLPA || 24,
+            mode: l.autoApplyEnabled ? "AUTO_DAILY" : "MANUAL_APPROVAL",
+            sendRecruiterEmail: true,
+            emailTemplateId: "tmpl-1",
+            status: l.status === "ACTIVE" ? "ACTIVE" : "PAUSED",
+            dailyLimit: l.dailyApplicationLimit || 10,
+            appliedToday: l.appliedTodayCount || 0,
+            totalMatches: l.totalMatches || 0,
+            rateLimitPerHour: 5,
+            minDelaySeconds: 4,
+            maxDelaySeconds: 12,
+            lastRunTime: l.lastRunAt ? new Date(l.lastRunAt).toLocaleTimeString() : undefined,
+          }));
+          setCampaigns(mapped);
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  // Fetch Notifications
+  const fetchNotifications = async () => {
+    try {
+      const [notifsRes, countRes] = await Promise.all([
+        fetch("/api/v1/notifications?limit=20"),
+        fetch("/api/v1/notifications/unread-count"),
+      ]);
+      if (notifsRes.ok) {
+        const notifsData = await notifsRes.json();
+        if (Array.isArray(notifsData.data)) {
+          setNotifications(notifsData.data);
+        }
+      }
+      if (countRes.ok) {
+        const countData = await countRes.json();
+        if (typeof countData.unreadCount === "number") {
+          setUnreadCount(countData.unreadCount);
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  // Mark all notifications read
+  const markAllNotificationsRead = async () => {
+    try {
+      const res = await fetch("/api/v1/notifications/read-all", { method: "PATCH" });
+      if (res.ok) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
+        setUnreadCount(0);
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  // Load backend state on mount
+  useEffect(() => {
+    fetchPipelineStats();
+    fetchBackendApplications();
+    fetchBackendLoops();
+    fetchNotifications();
   }, []);
 
-  // Save applications
+  // SSE Real-time Subscription with Auto-Reconnection & Backoff
   useEffect(() => {
-    try {
-      localStorage.setItem("jobpilot_applications", JSON.stringify(applications));
-    } catch {
-      // Ignore
-    }
-  }, [applications]);
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let backoffDelay = 1000;
+    let isMounted = true;
 
-  // Save campaigns
-  useEffect(() => {
-    try {
-      localStorage.setItem("jobpilot_campaigns", JSON.stringify(campaigns));
-    } catch {
-      // Ignore
-    }
-  }, [campaigns]);
+    const setupSSE = () => {
+      if (!isMounted) return;
+      try {
+        eventSource = new EventSource("/api/v1/events");
+
+        eventSource.onopen = () => {
+          backoffDelay = 1000;
+        };
+
+        eventSource.onmessage = (e) => {
+          if (!e.data) return;
+          try {
+            const ev = JSON.parse(e.data);
+            if (!ev || !ev.type) return;
+
+            switch (ev.type) {
+              case "application.status_changed": {
+                const { applicationId, toStatus, reason } = ev;
+                let mappedStatus: ApplicationTrackerItem["status"] = "QUEUED";
+                if (toStatus === "WAITING_FOR_USER") mappedStatus = "NEEDS_INTERVENTION";
+                else if (toStatus === "SUBMITTED" || toStatus === "APPLIED" || toStatus === "OFFER") mappedStatus = "SUBMITTED";
+                else if (toStatus === "FAILED" || toStatus === "REJECTED") mappedStatus = "FAILED";
+                else if (toStatus === "RUNNING" || toStatus === "SUBMITTING" || toStatus === "TAILORING") mappedStatus = "RUNNING";
+                else mappedStatus = "QUEUED";
+
+                setApplications((prev) =>
+                  prev.map((app) =>
+                    app.id === applicationId
+                      ? {
+                          ...app,
+                          status: mappedStatus,
+                          step: reason || `Status changed to ${toStatus}`,
+                          reason: reason || app.reason,
+                        }
+                      : app
+                  )
+                );
+                fetchPipelineStats();
+                break;
+              }
+
+              case "human_action.required": {
+                const { applicationId, actionType, description, metadata } = ev;
+                setApplications((prev) =>
+                  prev.map((app) =>
+                    app.id === applicationId
+                      ? {
+                          ...app,
+                          status: "NEEDS_INTERVENTION",
+                          step: description || "Verification or security challenge required",
+                          reason: description || "Action required",
+                        }
+                      : app
+                  )
+                );
+                const targetApp = applications.find((a) => a.id === applicationId);
+                setSecurityModal({
+                  job: targetApp || ({
+                    id: applicationId,
+                    title: "Application Challenge",
+                    company: metadata?.companyName || "Employer Portal",
+                  } as any),
+                  applicationId,
+                  type: actionType || "SECURITY_CHALLENGE",
+                  reason: description || "Security challenge or manual field sign-off required.",
+                  questions: metadata?.questions,
+                  checkpointUrl: metadata?.checkpointUrl,
+                });
+                showToast(`⚠️ Action Required: ${description || "Security verification needed"}`);
+                fetchPipelineStats();
+                fetchNotifications();
+                break;
+              }
+
+              case "human_action.resolved": {
+                const { applicationId } = ev;
+                setApplications((prev) =>
+                  prev.map((app) =>
+                    app.id === applicationId
+                      ? {
+                          ...app,
+                          status: "RUNNING",
+                          step: "Verification accepted (RESUMED). Submitting to employer portal...",
+                          reason: undefined,
+                        }
+                      : app
+                  )
+                );
+                fetchPipelineStats();
+                break;
+              }
+
+              case "notification.created": {
+                const newNotif: AppNotification = {
+                  id: ev.notificationId || `notif-${Date.now()}`,
+                  type: ev.notificationType || "SYSTEM",
+                  title: ev.title || "Notification",
+                  message: ev.message || "",
+                  createdAt: ev.timestamp || new Date().toISOString(),
+                  readAt: null,
+                };
+                setNotifications((prev) => [newNotif, ...prev.filter((n) => n.id !== newNotif.id)]);
+                setUnreadCount((prev) => prev + 1);
+                showToast(`🔔 ${newNotif.title}: ${newNotif.message}`);
+                break;
+              }
+
+              case "loop.started": {
+                const { loopId, loopName } = ev;
+                setCampaigns((prev) =>
+                  prev.map((c) =>
+                    c.id === loopId ? { ...c, status: "ACTIVE", lastRunTime: "Running now..." } : c
+                  )
+                );
+                showToast(`🔄 Search Loop started: ${loopName || loopId}`);
+                break;
+              }
+
+              case "loop.completed": {
+                const { loopId, loopName, newlyPersistedCount } = ev;
+                setCampaigns((prev) =>
+                  prev.map((c) =>
+                    c.id === loopId ? { ...c, lastRunTime: "Just now" } : c
+                  )
+                );
+                if (newlyPersistedCount > 0) {
+                  showToast(`✅ Search Loop "${loopName}" indexed ${newlyPersistedCount} new verified jobs!`);
+                }
+                fetchPipelineStats();
+                fetchLiveJobs();
+                break;
+              }
+
+              case "loop.failed": {
+                const { loopId, loopName, error } = ev;
+                setCampaigns((prev) =>
+                  prev.map((c) =>
+                    c.id === loopId ? { ...c, lastRunTime: "Failed" } : c
+                  )
+                );
+                showToast(`❌ Search Loop "${loopName}" failed: ${error}`);
+                break;
+              }
+
+              case "job.discovered": {
+                fetchPipelineStats();
+                break;
+              }
+
+              case "queue.job_started": {
+                const { applicationId } = ev;
+                setApplications((prev) =>
+                  prev.map((app) =>
+                    app.id === applicationId ? { ...app, status: "RUNNING", step: "Processing in queue..." } : app
+                  )
+                );
+                fetchPipelineStats();
+                break;
+              }
+
+              case "queue.job_completed": {
+                const { applicationId, status } = ev;
+                setApplications((prev) =>
+                  prev.map((app) =>
+                    app.id === applicationId
+                      ? {
+                          ...app,
+                          status: status === "SUBMITTED" || status === "APPLIED" ? "SUBMITTED" : "RUNNING",
+                          step: "Queue job completed successfully",
+                        }
+                      : app
+                  )
+                );
+                fetchPipelineStats();
+                break;
+              }
+
+              case "queue.job_failed": {
+                const { applicationId, error } = ev;
+                setApplications((prev) =>
+                  prev.map((app) =>
+                    app.id === applicationId ? { ...app, status: "FAILED", step: error || "Submission failed" } : app
+                  )
+                );
+                fetchPipelineStats();
+                break;
+              }
+
+              case "dashboard.stats_updated": {
+                fetchPipelineStats();
+                break;
+              }
+            }
+          } catch {
+            // Heartbeat or non-json message
+          }
+        };
+
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          if (!isMounted) return;
+          const nextDelay = Math.min(backoffDelay * 1.5, 30000);
+          backoffDelay = nextDelay;
+          reconnectTimeout = setTimeout(setupSSE, nextDelay);
+        };
+      } catch {
+        if (isMounted) {
+          reconnectTimeout = setTimeout(setupSSE, 5000);
+        }
+      }
+    };
+
+    setupSSE();
+
+    return () => {
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+    };
+  }, []);
 
   // Realtime Rate Limits Fetch
   const fetchRateLimits = async () => {
@@ -855,13 +1229,13 @@ export default function Home() {
     }
   };
 
-  // Stats
-  const activeQueuesCount = campaigns.filter((c) => c.status === "ACTIVE").length;
+  // PostgreSQL-backed Dashboard Statistics (Zero fake offsets, zero mock data)
+  const activeQueuesCount = pipelineStats?.activeQueuesCount ?? campaigns.filter((c) => c.status === "ACTIVE").length;
   const emailTemplatesCount = templates.length;
-  const cvCount = 1;
-  const totalMatchesCount = 10803;
-  const emailsSentCount = emailLogs.length + 22;
-  const applicationsSubmittedCount = applications.filter((a) => a.status === "SUBMITTED").length + 38;
+  const cvCount = pipelineStats?.cvCount && pipelineStats.cvCount > 0 ? pipelineStats.cvCount : 1;
+  const totalMatchesCount = pipelineStats?.totalMatches ?? jobs.length;
+  const emailsSentCount = emailLogs.length;
+  const applicationsSubmittedCount = pipelineStats?.submittedCount ?? applications.filter((a) => a.status === "SUBMITTED").length;
 
   return (
     <div className="min-h-screen bg-[#f4f7fa] text-[#1e293b] flex flex-row">
@@ -1030,10 +1404,117 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-6 text-xs text-slate-600 font-medium">
-            <button className="text-slate-500 hover:text-slate-800 relative cursor-pointer">
-              <Bell className="w-4 h-4" />
-              <span className="w-2 h-2 rounded-full bg-blue-600 absolute -top-0.5 -right-0.5" />
-            </button>
+            {/* Real-time Notifications Center */}
+            <div className="relative">
+              <button
+                onClick={() => setIsNotificationsOpen((prev) => !prev)}
+                className="text-slate-500 hover:text-slate-800 relative cursor-pointer p-1 rounded-lg hover:bg-slate-100 transition"
+                title="Notifications & Live Events"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadCount > 0 && (
+                  <span className="min-w-4 h-4 px-1 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center absolute -top-1 -right-1 shadow-xs animate-pulse">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Notifications Dropdown Popup */}
+              {isNotificationsOpen && (
+                <div className="absolute right-0 mt-2 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 text-sm">Notifications</span>
+                      {unreadCount > 0 && (
+                        <span className="bg-blue-100 text-blue-700 font-bold text-[10px] px-2 py-0.5 rounded-full">
+                          {unreadCount} unread
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={markAllNotificationsRead}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 font-semibold cursor-pointer"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-slate-400 text-xs">
+                        <Inbox className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        No notifications yet. Real-time application & loop events will appear here.
+                      </div>
+                    ) : (
+                      notifications.map((notif) => {
+                        const isActionRequired = notif.type === "WAITING_FOR_USER" || notif.type === "HUMAN_INTERVENTION";
+                        const isSuccess = notif.type === "SUBMITTED" || notif.type === "APPLICATION_SUBMITTED";
+                        const isError = notif.type === "FAILED" || notif.type === "APPLICATION_FAILED";
+
+                        return (
+                          <div
+                            key={notif.id}
+                            className={`p-3.5 hover:bg-slate-50/80 transition flex items-start gap-3 text-xs ${
+                              !notif.readAt ? "bg-blue-50/30" : ""
+                            }`}
+                          >
+                            <div className="mt-0.5 shrink-0">
+                              {isActionRequired ? (
+                                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                              ) : isSuccess ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                              ) : isError ? (
+                                <X className="w-4 h-4 text-rose-500" />
+                              ) : (
+                                <Activity className="w-4 h-4 text-blue-500" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-semibold text-slate-800 truncate block">
+                                  {notif.title}
+                                </span>
+                                <span className="text-[10px] text-slate-400 shrink-0">
+                                  {new Date(notif.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </div>
+                              <p className="text-slate-600 text-[11px] mt-0.5 leading-snug line-clamp-2">
+                                {notif.message}
+                              </p>
+                              {isActionRequired && notif.applicationId && (
+                                <button
+                                  onClick={() => {
+                                    setIsNotificationsOpen(false);
+                                    const app = applications.find((a) => a.id === notif.applicationId);
+                                    if (app) {
+                                      setSecurityModal({
+                                        job: app,
+                                        applicationId: app.id,
+                                        type: "SECURITY_CHALLENGE",
+                                        reason: notif.message,
+                                      });
+                                    }
+                                  }}
+                                  className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded cursor-pointer hover:bg-amber-100"
+                                >
+                                  <span>Resolve Checkpoint</span>
+                                  <ChevronRight className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                            {!notif.readAt && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0 mt-1.5" />
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="flex items-center gap-1.5 cursor-pointer hover:text-slate-900">
               <MessageSquare className="w-4 h-4 text-slate-500" />
@@ -1157,57 +1638,78 @@ export default function Home() {
                       <span className="text-sm font-bold text-slate-900">Total Matches</span>
                     </div>
 
-                    {/* Donut Chart Graphic matching image */}
-                    <div className="relative flex flex-col items-center justify-center py-6">
-                      <div
-                        className="relative w-48 h-48 rounded-full flex items-center justify-center shadow-xs"
-                        style={{
-                          background: "conic-gradient(#ef4444 0% 46%, #0d9488 46% 75%, #3b82f6 75% 92%, #8b5cf6 92% 100%)",
-                        }}
-                      >
-                        <div className="w-32 h-32 rounded-full bg-white flex flex-col items-center justify-center shadow-inner text-center">
-                          <span className="text-[11px] text-slate-400 font-medium">Total</span>
-                          <span className="text-xl font-black text-slate-900">10,803</span>
-                        </div>
-                      </div>
+                    {/* Donut Chart Graphic matching PostgreSQL state */}
+                    {(() => {
+                      const t1 = pipelineStats?.tierBreakdown?.tier1Mnc ?? 0;
+                      const t2 = pipelineStats?.tierBreakdown?.tier2Unicorn ?? 0;
+                      const t3 = pipelineStats?.tierBreakdown?.remoteTech ?? 0;
+                      const t4 = pipelineStats?.tierBreakdown?.midMarket ?? 0;
+                      const totalTiers = t1 + t2 + t3 + t4 || totalMatchesCount || 1;
 
-                      {/* Red Pill label matching the screenshot badge */}
-                      <div className="mt-4 bg-[#ef4444] text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm flex items-center gap-1.5">
-                        <span>Tier 1 MNCs: 5,043</span>
-                      </div>
-                    </div>
+                      const p1 = Math.round((t1 / totalTiers) * 100);
+                      const p2 = Math.min(100, p1 + Math.round((t2 / totalTiers) * 100));
+                      const p3 = Math.min(100, p2 + Math.round((t3 / totalTiers) * 100));
 
-                    {/* Tier Breakdown */}
-                    <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
-                      <div className="flex items-center justify-between text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                          <span className="font-medium">Tier 1 MNCs (Google, MSFT, Stripe...)</span>
-                        </div>
-                        <span className="font-bold">5,043</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-teal-600" />
-                          <span className="font-medium">Semi-MNCs & Unicorns</span>
-                        </div>
-                        <span className="font-bold">3,210</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                          <span className="font-medium">Remote AI Tech (OpenAI, Cursor...)</span>
-                        </div>
-                        <span className="font-bold">1,850</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-700">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
-                          <span className="font-medium">Mid-Market (Freshworks, Zoho...)</span>
-                        </div>
-                        <span className="font-bold">700</span>
-                      </div>
-                    </div>
+                      const donutBackground =
+                        totalMatchesCount > 0
+                          ? `conic-gradient(#ef4444 0% ${p1}%, #0d9488 ${p1}% ${p2}%, #3b82f6 ${p2}% ${p3}%, #8b5cf6 ${p3}% 100%)`
+                          : "conic-gradient(#e2e8f0 0% 100%)";
+
+                      return (
+                        <>
+                          <div className="relative flex flex-col items-center justify-center py-6">
+                            <div
+                              className="relative w-48 h-48 rounded-full flex items-center justify-center shadow-xs"
+                              style={{ background: donutBackground }}
+                            >
+                              <div className="w-32 h-32 rounded-full bg-white flex flex-col items-center justify-center shadow-inner text-center">
+                                <span className="text-[11px] text-slate-400 font-medium">Total</span>
+                                <span className="text-xl font-black text-slate-900">
+                                  {totalMatchesCount.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Red Pill label matching the screenshot badge */}
+                            <div className="mt-4 bg-[#ef4444] text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm flex items-center gap-1.5">
+                              <span>Tier 1 MNCs: {t1.toLocaleString()}</span>
+                            </div>
+                          </div>
+
+                          {/* Tier Breakdown */}
+                          <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
+                            <div className="flex items-center justify-between text-slate-700">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                                <span className="font-medium">Tier 1 MNCs (Google, MSFT, Stripe...)</span>
+                              </div>
+                              <span className="font-bold">{t1.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-700">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-teal-600" />
+                                <span className="font-medium">Semi-MNCs & Unicorns</span>
+                              </div>
+                              <span className="font-bold">{t2.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-700">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                                <span className="font-medium">Remote AI Tech (OpenAI, Cursor...)</span>
+                              </div>
+                              <span className="font-bold">{t3.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-700">
+                              <div className="flex items-center gap-2">
+                                <div className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                                <span className="font-medium">Mid-Market (Freshworks, Zoho...)</span>
+                              </div>
+                              <span className="font-bold">{t4.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Matches Details Table Card */}

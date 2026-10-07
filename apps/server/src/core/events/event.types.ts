@@ -6,7 +6,15 @@ export type EventType =
     | "application.status_changed"
     | "human_action.required"
     | "human_action.resolved"
-    | "notification.created";
+    | "notification.created"
+    | "loop.started"
+    | "loop.completed"
+    | "loop.failed"
+    | "job.discovered"
+    | "queue.job_started"
+    | "queue.job_completed"
+    | "queue.job_failed"
+    | "dashboard.stats_updated";
 
 export interface BaseEvent {
     type: EventType;
@@ -30,6 +38,9 @@ export interface ApplicationStatusEvent extends BaseEvent {
     applicationId: string;
     status: string;
     jobId: string;
+    companyName?: string;
+    jobTitle?: string;
+    reason?: string;
 }
 
 export interface HumanActionEvent extends BaseEvent {
@@ -37,6 +48,7 @@ export interface HumanActionEvent extends BaseEvent {
     applicationId: string;
     humanActionId: string;
     questionCount?: number;
+    questions?: any[];
 }
 
 export interface NotificationEvent extends BaseEvent {
@@ -45,10 +57,51 @@ export interface NotificationEvent extends BaseEvent {
     notificationType: string;
     title: string;
     message: string;
+    applicationId?: string;
+}
+
+export interface LoopEvent extends BaseEvent {
+    type: "loop.started" | "loop.completed" | "loop.failed";
+    loopId: string;
+    loopName?: string;
+    discoveredCount?: number;
+    newlyPersistedCount?: number;
+    status?: string;
+    error?: string;
+}
+
+export interface JobDiscoveredEvent extends BaseEvent {
+    type: "job.discovered";
+    jobId: string;
+    title: string;
+    company: string;
+    url?: string;
+    atsProvider?: string;
+    matchScore?: number;
+}
+
+export interface QueueJobEvent extends BaseEvent {
+    type: "queue.job_started" | "queue.job_completed" | "queue.job_failed";
+    queueJobId: string;
+    applicationId: string;
+    company?: string;
+    jobTitle?: string;
+    status?: string;
+    error?: string;
+    confirmationId?: string;
+}
+
+export interface DashboardStatsEvent extends BaseEvent {
+    type: "dashboard.stats_updated";
+    stats?: Record<string, any>;
 }
 
 export type AppEvent =
     | AgentEvent
     | ApplicationStatusEvent
     | HumanActionEvent
-    | NotificationEvent;
+    | NotificationEvent
+    | LoopEvent
+    | JobDiscoveredEvent
+    | QueueJobEvent
+    | DashboardStatsEvent;

@@ -413,6 +413,11 @@ export class PipelineSyncService {
       savedCount,
       waitingUserCount,
       appliedTodayCount,
+      userJobCount,
+      allJobCount,
+      activeQueuesCount,
+      cvCount,
+      unreadNotificationsCount,
     ] = await Promise.all([
       prisma.application.count({ where: { userId } }),
       prisma.application.count({ where: { userId, status: "QUEUED" } }),
@@ -427,18 +432,79 @@ export class PipelineSyncService {
           createdAt: { gte: startOfDay },
         },
       }),
+      (prisma.job?.count ? prisma.job.count({ where: { userId } }) : Promise.resolve(0)).catch(() => 0),
+      (prisma.job?.count ? prisma.job.count() : Promise.resolve(0)).catch(() => 0),
+      (prisma.jobSearchLoop?.count ? prisma.jobSearchLoop.count({ where: { userId, status: "ACTIVE" } }) : Promise.resolve(0)).catch(() => 0),
+      (prisma.resume?.count ? prisma.resume.count({ where: { userId } }) : Promise.resolve(0)).catch(() => 0),
+      (prisma.notification?.count ? prisma.notification.count({ where: { userId, readAt: null } }) : Promise.resolve(0)).catch(() => 0),
     ]);
 
+    // Query tier counts from database if available
+    let tier1Mnc = 0;
+    let tier2Unicorn = 0;
+    let remoteTech = 0;
+    let midMarket = 0;
+    try {
+      if (prisma.job?.count) {
+        [tier1Mnc, tier2Unicorn, remoteTech, midMarket] = await Promise.all([
+          prisma.job.count({
+            where: {
+              OR: [
+                { company: { tier: { in: ["TIER_1_MNC", "TIER_1", "MNC", "S"] } } },
+                { tags: { has: "tier-1" } },
+              ],
+            },
+          }).catch(() => 0),
+          prisma.job.count({
+            where: {
+              OR: [
+                { company: { tier: { in: ["TIER_2_UNICORN", "TIER_2", "UNICORN", "SEMI_MNC", "A"] } } },
+                { tags: { has: "unicorn" } },
+              ],
+            },
+          }).catch(() => 0),
+          prisma.job.count({
+            where: {
+              OR: [
+                { workMode: "REMOTE" },
+                { location: { contains: "Remote", mode: "insensitive" } },
+              ],
+            },
+          }).catch(() => 0),
+          prisma.job.count({
+            where: {
+              OR: [
+                { company: { tier: { in: ["TIER_3_MIDMARKET", "TIER_3", "MIDMARKET", "B"] } } },
+                { tags: { has: "midmarket" } },
+              ],
+            },
+          }).catch(() => 0),
+        ]);
+      }
+    } catch {
+      // Ignore
+    }
+
     let dailyLimit = 10;
-    if (loopId) {
+    if (loopId && prisma.jobSearchLoop?.findUnique) {
       const loop = await prisma.jobSearchLoop.findUnique({
         where: { id: loopId },
         select: { dailyApplicationLimit: true, autoApplyEnabled: true },
-      });
+      }).catch(() => null);
       if (loop?.dailyApplicationLimit) {
         dailyLimit = loop.dailyApplicationLimit;
       }
+    } else if (prisma.jobSearchLoop?.findMany) {
+      const activeLoops = await prisma.jobSearchLoop.findMany({
+        where: { userId, status: "ACTIVE" },
+        select: { dailyApplicationLimit: true },
+      }).catch(() => []);
+      if (activeLoops && activeLoops.length > 0) {
+        dailyLimit = Math.max(...activeLoops.map((l: any) => l.dailyApplicationLimit || 10));
+      }
     }
+
+    const totalMatches = userJobCount > 0 ? userJobCount : (allJobCount > 0 ? allJobCount : totalApplications);
 
     return {
       totalApplications,
@@ -450,6 +516,17 @@ export class PipelineSyncService {
       appliedTodayCount,
       dailyLimit,
       remainingDailyQuota: Math.max(0, dailyLimit - appliedTodayCount),
+      totalMatches,
+      activeQueuesCount,
+      cvCount,
+      unreadNotificationsCount,
+      tierBreakdown: {
+        tier1Mnc,
+        tier2Unicorn,
+        remoteTech,
+        midMarket,
+        total: (tier1Mnc + tier2Unicorn + remoteTech + midMarket) || totalMatches,
+      },
     };
   }
 }
