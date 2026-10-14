@@ -22,41 +22,20 @@ class CrawlerService {
 
         // If a direct URL was provided to crawl
         if (dto.url) {
-            try {
-                const { html, redirectedUrl } = await pageFetcherService.fetch(dto.url);
-                const platform = this.detect(redirectedUrl, html);
-
-                let parsedJob: ParsedJob | undefined;
-                if (html && html.trim()) {
-                    parsedJob = await parserService.parse({
-                        url: redirectedUrl,
-                        html,
-                        platform,
-                    });
-                }
-
-                if (!parsedJob || !parsedJob.title || parsedJob.title === "Unknown Title") {
-                    parsedJob = {
-                        title: "Software Engineer",
-                        company: "Company",
-                        location: "Remote / Onsite",
-                        description: "",
-                        url: redirectedUrl,
-                        platform,
-                    };
-                }
-
-                parsedJobs.push(parsedJob);
-                return normalizerService.normalize(parsedJobs);
-            } catch (err) {
-                console.error(`Failed to crawl direct URL ${dto.url}:`, err);
-                return [];
+            const { html, redirectedUrl } = await pageFetcherService.fetch(dto.url);
+            const platform = this.detect(redirectedUrl, html);
+            if (!html.trim()) throw new Error("The job page returned an empty response.");
+            const parsedJob = await parserService.parse({ url: redirectedUrl, html, platform });
+            if (!parsedJob?.title?.trim() || !parsedJob.company?.trim() || !parsedJob.url) {
+                throw new Error("The job page did not contain enough verified information to create a job record.");
             }
+            parsedJobs.push(parsedJob);
+            return normalizerService.normalize(parsedJobs);
         }
 
         const sourceJobs =
             await sourceService.search({
-                keyword: dto.keyword || "software engineer",
+                keyword: dto.keyword || "",
                 location: dto.location,
                 remote: dto.remote,
             });
@@ -75,22 +54,24 @@ class CrawlerService {
                             platform,
                         });
                     }
-                } catch {
-                    // Fallback to structured source job metadata
+                } catch (error) {
+                    if (error instanceof Error) {
+                        // The source record remains usable because it is an actual provider response.
+                    }
                 }
 
-                if (!parsedJob || !parsedJob.title) {
+                if (!parsedJob || !parsedJob.title?.trim() || !parsedJob.company?.trim() || !parsedJob.url) {
                     parsedJob = {
                         title: sourceJob.title,
                         company: sourceJob.company,
-                        location: sourceJob.location || "Remote",
+                        location: sourceJob.location || "",
                         description: sourceJob.description,
                         url: sourceJob.url,
                         platform: this.detect(sourceJob.url),
                     };
                 }
 
-                if (parsedJob) {
+                if (parsedJob?.title?.trim() && parsedJob.company?.trim() && parsedJob.url) {
                     parsedJobs.push(parsedJob);
                 }
             } catch (err) {

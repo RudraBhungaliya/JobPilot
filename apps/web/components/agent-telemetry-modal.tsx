@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Application } from "../lib/mock-data";
+import { Application } from "../lib/domain-types";
 import {
   X,
   Cpu,

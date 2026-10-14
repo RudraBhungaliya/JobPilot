@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const BACKEND_URL = process.env.BACKEND_API_URL || "http://127.0.0.1:8000";
+import { getBackendApiUrl, getBackendHeaders } from "@/lib/api-config";
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const res = await fetch(`${BACKEND_URL}/api/v1/loops/${id}/run`, {
+    const backendUrl = getBackendApiUrl();
+    const res = await fetch(`${backendUrl}/api/v1/loops/${id}/run`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getBackendHeaders(req, { "Content-Type": "application/json" }),
     });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });

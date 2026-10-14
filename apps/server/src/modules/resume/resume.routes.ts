@@ -4,8 +4,18 @@ import multer from "multer";
 import authMiddleware from "../auth/auth.middleware.js";
 import resumeController from "./resume.controller.js";
 
+import fs from "node:fs";
+import path from "node:path";
+
+const uploadDir = path.resolve(process.cwd(), "uploads/resumes");
+try {
+    fs.mkdirSync(uploadDir, { recursive: true });
+} catch {
+    // Ignore if already exists
+}
+
 const upload = multer({
-    dest: "uploads/resumes",
+    dest: uploadDir,
     limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
         const extension = file.originalname.split(".").pop()?.toLowerCase();

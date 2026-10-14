@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { ResumeVersion } from "../lib/mock-data";
+import { ResumeVersion } from "../lib/domain-types";
 import {
   FileText,
   Plus,

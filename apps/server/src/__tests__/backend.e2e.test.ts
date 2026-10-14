@@ -12,9 +12,46 @@ import applicationService from "../modules/application/application.service.js";
 import auditService from "../modules/audit/audit.service.js";
 import notificationService from "../modules/notification/notification.service.js";
 import type { AgentStateType } from "../modules/agent/graph/state.js";
+import { prisma } from "@jobpilot/database";
+
+function installQueueTestStore(t: any) {
+    const delegate = (prisma as any).queueJob;
+    const originals = {
+        findFirst: delegate.findFirst,
+        findUnique: delegate.findUnique,
+        findMany: delegate.findMany,
+        create: delegate.create,
+        update: delegate.update,
+    };
+    const rows = new Map<string, any>();
+    let nextId = 0;
+    delegate.findFirst = async ({ where }: any) => Array.from(rows.values()).find((row) =>
+        (!where.runId || row.runId === where.runId) &&
+        (!where.status?.notIn || !where.status.notIn.includes(row.status))
+    ) ?? null;
+    delegate.findUnique = async ({ where }: any) => rows.get(where.id) ?? null;
+    delegate.findMany = async ({ where }: any) => Array.from(rows.values()).filter((row) => !where.status || row.status === where.status);
+    delegate.create = async ({ data }: any) => {
+        const now = new Date();
+        const row = { id: `queue-test-${++nextId}`, status: "QUEUED", attempts: 0, error: null, startedAt: null, completedAt: null, createdAt: now, ...data };
+        rows.set(row.id, row);
+        return row;
+    };
+    delegate.update = async ({ where, data }: any) => {
+        const row = rows.get(where.id);
+        if (!row) throw new Error("Queue row not found");
+        const { attempts, ...updates } = data;
+        Object.assign(row, updates);
+        if (attempts?.increment) row.attempts += attempts.increment;
+        else if (attempts !== undefined) row.attempts = attempts;
+        return row;
+    };
+    t.after(() => Object.assign(delegate, originals));
+}
 
 test("Queue and Worker Coordination", async (t) => {
     await t.test("enqueues jobs and prevents duplicate by runId", async () => {
+        installQueueTestStore(t);
         const userId = "test-user-1";
         const job1 = await queueService.enqueueAgentRun({
             userId,
@@ -39,6 +76,7 @@ test("Queue and Worker Coordination", async (t) => {
     });
 
     await t.test("marks queue job statuses and bounded retries", async () => {
+        installQueueTestStore(t);
         const userId = "test-user-retry";
         const job = await queueService.enqueueAgentRun({
             userId,
@@ -63,6 +101,7 @@ test("Queue and Worker Coordination", async (t) => {
     });
 
     await t.test("supports WAITING_FOR_USER and resumeJob", async () => {
+        installQueueTestStore(t);
         const userId = "test-user-wait";
         const job = await queueService.enqueueAgentRun({
             userId,

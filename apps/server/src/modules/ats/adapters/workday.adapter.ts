@@ -61,7 +61,7 @@ export class WorkdayAdapter extends BaseATSAdapter {
             const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
             const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
             const confId = confirmationMatch ? confirmationMatch[1] : (
-                verification.confirmationUrl ? `REF-${Buffer.from(verification.confirmationUrl).toString("base64url").slice(0, 12)}` : undefined
+                undefined
             );
 
             return {

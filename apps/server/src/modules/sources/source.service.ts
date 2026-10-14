@@ -24,6 +24,10 @@ class SourceService {
                 ),
             );
 
+        const failures = results.filter((result) => result.status === "rejected");
+        if (failures.length === results.length && failures.length > 0) {
+            throw new AggregateError(failures.map((result) => result.reason), "All configured job sources failed.");
+        }
         return results.flatMap(
             (result) =>
                 result.status === "fulfilled"

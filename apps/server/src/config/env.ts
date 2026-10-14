@@ -13,7 +13,7 @@ const EnvSchema = z.object({
 
   DATABASE_URL: z.string().default("postgresql://postgres:postgres@localhost:5432/jobpilot?schema=public"),
 
-  JWT_SECRET: z.string().default("jobpilot-super-secret-jwt-key-2026"),
+  JWT_SECRET: z.string().min(32),
   JWT_EXPIRES_IN: z.string().default("7d"),
 
   BCRYPT_ROUNDS: z
@@ -69,7 +69,8 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
 
   RESEND_API_KEY: z.string().optional(),
-  RESEND_FROM_EMAIL: z.string().default("noreply@jobpilot.local"),
+  RESEND_FROM_EMAIL: z.string().optional(),
+  CORS_ORIGINS: z.string().optional(),
 
   ATS_USE_LLM: z
     .string()
@@ -130,6 +131,45 @@ const EnvSchema = z.object({
     .string()
     .default("true")
     .transform((v) => v === "true" || v === "1"),
+
+  REQUIRE_SUBMISSION_APPROVAL: z
+    .string()
+    .default("true")
+    .transform((v) => v === "true" || v === "1"),
+
+  JOB_SOURCE_ENDPOINT: z.string().optional(),
+
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z
+    .string()
+    .default("587")
+    .transform((v) => Number(v))
+    .pipe(z.number().int().min(1).max(65535)),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
+
+  GEMINI_MODEL: z.string().default("gemini-1.5-flash"),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+
+  JWT_ACCESS_SECRET: z.string().optional(),
+  JWT_REFRESH_SECRET: z.string().optional(),
+  JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
+  JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
+}).superRefine((config, ctx) => {
+  if (config.NODE_ENV === "production" && (
+    config.DATABASE_URL.includes("localhost") ||
+    config.DATABASE_URL.includes("user:password") ||
+    config.DATABASE_URL === "postgresql://postgres:postgres@localhost:5432/jobpilot?schema=public"
+  )) {
+    ctx.addIssue({ code: "custom", path: ["DATABASE_URL"], message: "Set a reachable production PostgreSQL DATABASE_URL." });
+  }
+  if (config.NODE_ENV === "production" && ["jobpilot-super-secret-jwt-key-2026", "replace-with-a-secure-random-secret-key-at-least-32-chars"].includes(config.JWT_SECRET)) {
+    ctx.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "Set a unique JWT_SECRET in production." });
+  }
+  if (config.NODE_ENV === "production" && !config.CORS_ORIGINS?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["CORS_ORIGINS"], message: "Set the allowed browser origins in CORS_ORIGINS for production." });
+  }
 });
 
 export type EnvConfig = z.infer<typeof EnvSchema>;

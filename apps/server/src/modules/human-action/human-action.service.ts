@@ -68,12 +68,16 @@ class HumanActionService {
             });
 
             const candidateEmail = appRecord?.user?.profile?.email || appRecord?.user?.email;
-            const jobTitle = appRecord?.job?.title || "Target Role";
-            const companyName = appRecord?.job?.company?.name || "Target Company";
+            const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>\"']/g, (char) => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+            })[char]!);
+            const jobTitle = escapeHtml(appRecord?.job?.title || "");
+            const companyName = escapeHtml(appRecord?.job?.company?.name || "");
 
             if (candidateEmail) {
                 const subject = `[JobPilot Interruption Alert] Human Step / Approval needed for ${jobTitle} at ${companyName}`;
                 const questionSummary = input.questions.map((q) => `• ${q.label || q.selector}`).join("\n");
+                const questionList = input.questions.map((q) => `<li>${escapeHtml(q.label || q.selector)}</li>`).join("");
                 const htmlContent = `
                     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #1e293b;">
                         <h2 style="color: #0f172a; margin-bottom: 8px;">JobPilot Automation Interruption</h2>
@@ -83,15 +87,12 @@ class HumanActionService {
                         <div style="background-color: #f1f5f9; border-left: 4px solid #3b82f6; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
                             <h4 style="margin: 0 0 8px 0; color: #1e293b;">Required Action:</h4>
                             <ul style="margin: 0; padding-left: 20px; color: #334155;">
-                                ${input.questions.map((q) => `<li>${q.label || q.selector}</li>`).join("")}
+                                ${questionList}
                             </ul>
                         </div>
                         <p style="font-size: 14px; color: #64748b;">
                             Please clear this human test step or approve the application submission in your JobPilot dashboard.
                         </p>
-                        <a href="http://localhost:3000" style="display: inline-block; background-color: #2563eb; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500; margin-top: 10px;">
-                            Open JobPilot Dashboard
-                        </a>
                     </div>
                 `;
 
@@ -147,9 +148,8 @@ class HumanActionService {
             );
 
         // Transition application state: WAITING_FOR_USER -> RESUMED
-        try {
-            const { default: ApplicationStateMachine } = await import("../application/application-state-machine.js");
-            await ApplicationStateMachine.transition({
+        const { default: ApplicationStateMachine } = await import("../application/application-state-machine.js");
+        await ApplicationStateMachine.transition({
                 applicationId: humanAction.applicationId,
                 newStatus: "RESUMED",
                 reason: `User completed verification / provided answers for ${Object.keys(answers).length} field(s).`,
@@ -158,19 +158,7 @@ class HumanActionService {
                     answeredFields: Object.keys(answers),
                 },
                 actor: "USER",
-            });
-        } catch (stateErr) {
-            // Fallback direct update if state machine throws
-            await applicationRepository.update(
-                humanAction.applicationId,
-                { status: "RESUMED" },
-            ).catch(() => {
-                return applicationRepository.update(
-                    humanAction.applicationId,
-                    { status: "QUEUED" },
-                );
-            });
-        }
+        });
 
         // Enrich candidate profile with any answered missing fields
         try {

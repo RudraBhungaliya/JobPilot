@@ -411,12 +411,20 @@ test("HITL & Verification Completion Flow Suite", async (t) => {
             return { id: applicationId, status: newStatus } as any;
         };
 
-        atsRateLimiter.waitForSlot = async () => {};
+        let slotPacedProvider = "";
+        atsRateLimiter.waitForSlot = async (provider?: string) => {
+            slotPacedProvider = provider || "";
+        };
         applyAdapterRegistry.tryApiApply = async () => ({
             success: true,
             confirmationId: "CONF-RESUMED-12345",
+            requiresBrowserFallback: false,
         });
-        applicationQueueService.markCompleted = async () => ({} as any);
+        let completedMeta: any = null;
+        applicationQueueService.markCompleted = async (id: string, meta: any) => {
+            completedMeta = meta;
+            return { id, status: "COMPLETED" } as any;
+        };
 
         try {
             const queueJob = {
@@ -429,6 +437,9 @@ test("HITL & Verification Completion Flow Suite", async (t) => {
             assert.equal(result, true, "Execution must succeed");
             // Must NOT contain TAILORING or READY_TO_SUBMIT, only SUBMITTING
             assert.deepEqual(transitions, ["SUBMITTING"]);
+            assert.equal(slotPacedProvider, "greenhouse", "Must wait for rate limiter slot on the detected ATS provider");
+            assert.equal(completedMeta?.confirmationId, "CONF-RESUMED-12345", "Must complete queue job with confirmation ID");
+            assert.equal(completedMeta?.method, "API", "Must indicate API apply execution method");
         } finally {
             (prisma as any).application.findUnique = origFindUnique;
             (prisma as any).user.findUnique = origUserFind;

@@ -6,12 +6,12 @@ export type CompanyTier = "S" | "A" | "B" | "C";
 export interface CompanyDTO {
     id: string;
     name: string;
-    domain: string;
-    logoText: string;
-    location: string;
-    stage: string;
-    verifiedAts: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Custom";
-    tier: CompanyTier;
+    domain?: string;
+    logoText?: string;
+    location?: string;
+    stage?: string;
+    verifiedAts?: string;
+    tier?: string;
     employeeCount?: string;
 }
 
@@ -20,9 +20,9 @@ export interface QuestionAnswerDTO {
     label: string;
     field: string;
     type: "text" | "textarea" | "select" | "boolean";
-    aiProposedValue: string;
+    aiProposedValue?: string;
     userEditedValue?: string;
-    confidence: number;
+    confidence?: number;
     isFlaggedForReview: boolean;
     reviewReason?: string;
 }
@@ -77,12 +77,12 @@ export interface BackendApplicationDTO {
     company: CompanyDTO;
     jobUrl: string;
     location: string;
-    workMode: "Remote" | "Hybrid" | "On-site";
-    salaryRange: string;
+    workMode?: string;
+    salaryRange?: string;
     status: ApplicationStatus;
-    matchScore: number;
-    atsProvider: "Greenhouse" | "Lever" | "Ashby" | "Workday" | "Custom";
-    resumeVersionUsed: string;
+    matchScore?: number;
+    atsProvider?: string;
+    resumeVersionUsed?: string;
     appliedAt?: string;
     lastUpdated: string;
     confirmationCode?: string;
@@ -91,7 +91,7 @@ export interface BackendApplicationDTO {
     scorecard?: GreenhouseScorecardDTO;
     humanActions: HumanActionDTO[];
     questions: QuestionAnswerDTO[];
-    tailoringNotes: TailoringNotesDTO;
+    tailoringNotes?: TailoringNotesDTO;
     telemetryLogs: TelemetryLogDTO[];
 }
 

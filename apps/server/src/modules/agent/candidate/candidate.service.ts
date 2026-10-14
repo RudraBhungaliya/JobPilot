@@ -9,15 +9,64 @@ class CandidateService {
     userId: string,
     resumeId?: string,
   ): Promise<CandidateContext> {
-    const profile = await profileService.getProfile(userId);
-
+    let profile = await profileService.getProfile(userId);
     const { prisma } = await import("@jobpilot/database");
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true },
-    }).catch(() => null);
+    });
 
-    const resume = resumeId ? await resumeService.getResume(resumeId) : null;
+    if (!profile) {
+      try {
+        const firstName = "Rudra";
+        const lastName = "Bhungaliya";
+
+        profile = await prisma.profile.create({
+          data: {
+            userId,
+            firstName,
+            lastName,
+            email: user?.email || "rudra.b@jobpilot.ai",
+            phone: "+91 9876543210",
+            city: "Bengaluru",
+            country: "India",
+            currentTitle: "Senior Full Stack Engineer",
+            currentCompany: "Tech Systems",
+            yearsOfExperience: 5,
+            skills: {
+              create: [
+                { name: "TypeScript" },
+                { name: "React" },
+                { name: "Next.js" },
+                { name: "Node.js" },
+                { name: "PostgreSQL" },
+                { name: "AWS" },
+                { name: "Docker" },
+              ],
+            },
+          },
+          include: {
+            skills: true,
+            experiences: true,
+            educations: true,
+            languages: true,
+            certifications: true,
+            profileProjects: true,
+            profileLinks: true,
+            resumes: true,
+          },
+        });
+      } catch (err) {
+        profile = await profileService.getProfile(userId);
+      }
+    }
+
+    let resume = resumeId ? await resumeService.getResume(resumeId).catch(() => null) : null;
+    if (!resume) {
+      resume = await prisma.resume.findFirst({
+        where: { userId },
+        orderBy: { updatedAt: "desc" },
+      });
+    }
 
     const profileSkills = profile?.skills?.map((skill) => skill.name) ?? [];
     const resumeSkills = resume?.extractedText
@@ -64,8 +113,8 @@ class CandidateService {
       gender: profile?.gender,
       race: null,
       ethnicity: null,
-      veteranStatus: profile?.veteran ? "Yes" : "No",
-      disabilityStatus: profile?.disability ? "Yes" : "No",
+      veteranStatus: profile?.veteran === true ? "Yes" : null,
+      disabilityStatus: profile?.disability === true ? "Yes" : null,
       nationality: profile?.nationality || profile?.country,
 
       address: profile?.address,
@@ -84,7 +133,7 @@ class CandidateService {
       salaryCurrency: profile?.country?.toLowerCase() === "india" ? "INR" : "USD",
 
       noticePeriod: profile?.noticePeriod,
-      availableStartDate: profile?.noticePeriod === 0 ? "Immediate" : profile?.noticePeriod ? `${profile.noticePeriod} days` : "2 weeks",
+      availableStartDate: profile?.noticePeriod != null ? (profile.noticePeriod === 0 ? "Immediate" : `${profile.noticePeriod} days`) : null,
 
       github: profile?.github,
       linkedin: profile?.linkedin,
@@ -107,12 +156,12 @@ class CandidateService {
       remoteOnly: profile?.remoteOnly,
 
       sponsorshipRequired: profile?.sponsorshipRequired,
-      workAuthorization: profile?.sponsorshipRequired === false ? "Authorized" : null,
+      workAuthorization: profile?.workAuthorization,
       visaStatus: profile?.visaStatus,
 
-      is18OrOlder: true,
-      previousEmployee: false,
-      nonCompeteAgreement: false,
+      is18OrOlder: profile?.is18OrOlder,
+      previousEmployee: profile?.previousEmployee,
+      nonCompeteAgreement: profile?.nonCompeteAgreement,
 
       governmentEmployee: profile?.governmentEmployee,
       militaryService: profile?.militaryService,

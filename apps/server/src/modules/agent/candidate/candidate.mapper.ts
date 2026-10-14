@@ -132,24 +132,15 @@ class CandidateMapper {
     }
 
     if (/authorized.?to.?work.*india|are.?you.?authorized.*india|legally.?authorized.*india|work.?eligibility.*india|eligible.?to.?work.*india|can.?you.?work.*india/.test(key)) {
-      if (context.country?.toLowerCase() === "india" || context.nationality?.toLowerCase() === "indian") {
-        return { value: "Yes", source: "PROFILE", confidence: "MEDIUM" };
-      }
-      return { value: "Yes", source: "INFERRED", confidence: "LOW" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/authorized.?to.?work.*(us|usa|united.?states|america)|are.?you.?authorized.*(us|usa|states)|work.?eligibility.*(us|usa)|eligible.?to.?work.*(us|usa)|can.?you.?work.*(us|usa|united.?states)/.test(key)) {
-      if (context.visaStatus || context.country?.toLowerCase().includes("united") || context.country?.toLowerCase() === "usa" || context.country?.toLowerCase() === "us") {
-        return { value: context.visaStatus || "Yes", source: "PROFILE", confidence: "MEDIUM" };
-      }
-      return { value: context.sponsorshipRequired === false ? "Yes" : "No", source: "INFERRED", confidence: "LOW" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/work.?eligibility|eligibility.?to.?work|legal.?to.?work|authorized.?to.?work|eligible.?for.?employment|right.?to.?work/.test(key)) {
-      if (context.workAuthorization || context.visaStatus || context.country || context.nationality) {
-        return { value: context.workAuthorization || context.visaStatus || "Yes", source: "PROFILE", confidence: "MEDIUM" };
-      }
-      return { value: "Yes", source: "INFERRED", confidence: "LOW" };
+      return { value: context.workAuthorization || "", source: context.workAuthorization ? "PROFILE" : "UNKNOWN", confidence: context.workAuthorization ? "HIGH" : "LOW" };
     }
 
     if (/rehire.?eligibility|eligible.?for.?rehire|will.?past.?employer.?rehire|re.?hire|rehireable/.test(key)) {
@@ -423,21 +414,21 @@ class CandidateMapper {
       if (context.is18OrOlder != null) {
         return { value: context.is18OrOlder ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
       }
-      return { value: "Yes", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/previously.?employed|worked.?for.*before|prior.?employee|ever.?worked.?at|former.?employee/i.test(key)) {
       if (context.previousEmployee != null) {
         return { value: context.previousEmployee ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
       }
-      return { value: "No", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/non.?compete|restrictive.?covenant|non.?solicitation|confidentiality.?agreement/i.test(key)) {
       if (context.nonCompeteAgreement != null) {
         return { value: context.nonCompeteAgreement ? "Yes" : "No", source: "PROFILE", confidence: "HIGH" };
       }
-      return { value: "No", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/work.?auth|authorization.*status|legal.*authorization/i.test(key) && context.workAuthorization) {
@@ -470,27 +461,27 @@ class CandidateMapper {
     }
 
     if (/background.*check|background.*authorization|consent.*background/i.test(key)) {
-      return { value: "Yes", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/\bdrug.*test\b|drug.*screen|consent.*drug/i.test(key)) {
-      return { value: "Yes", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/e.?verify|e verify|employment.*eligibility|verify.*eligibility/i.test(key)) {
-      return { value: "Yes", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/terms.*accept|accept.*terms|agree.*terms|terms.*conditions|privacy.*policy.*agree/i.test(key)) {
-      return { value: "Yes", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/\bovertime\b|willing.*overtime|available.*overtime|flexible.*hours|work.*weekends/i.test(key)) {
-      return { value: "Yes", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/email.*opt.*in|marketing.*email|newsletter|receive.*updates|subscribe.*email/i.test(key)) {
-      return { value: "No", source: "INFERRED", confidence: "MEDIUM" };
+      return { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
     if (/\bdiversity\b|\bdei\b|equal.*opportunity|eeo|affirmative.*action.*voluntary/i.test(key)) {

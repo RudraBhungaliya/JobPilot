@@ -1,6 +1,7 @@
 import resumeRepository from "./resume.repository.js";
 import resumeExtractor from "./resume.extractor.js";
 import resumeParser from "./resume.parser.js";
+import resumeParserService from "./resume-parser.service.js";
 
 import type { UploadResumeDTO } from "./resume.validators.js";
 import path from "node:path";
@@ -8,9 +9,16 @@ import path from "node:path";
 class ResumeService {
     async parseFile(filePath: string, originalName: string) {
         const extractedText = await resumeExtractor.extract(filePath, originalName);
+        let aiParsed = null;
+        try {
+            aiParsed = await resumeParserService.parseText(extractedText);
+        } catch {
+            // Keep deterministic fallback if AI encounters issue
+        }
         return {
             extractedText,
             parsed: resumeParser.parse(extractedText),
+            aiParsed,
         };
     }
 
@@ -21,20 +29,9 @@ class ResumeService {
         originalName: string,
         filePath?: string,
     ) {
-        let extractedText = "";
         const targetPath = filePath || fileUrl;
-
-        if (targetPath) {
-            try {
-                extractedText =
-                    await resumeExtractor.extract(
-                        targetPath,
-                        originalName,
-                    );
-            } catch (err) {
-                console.error(`Resume text extraction warning for ${originalName}:`, err);
-            }
-        }
+        const extractedText = targetPath ? await resumeExtractor.extract(targetPath, originalName) : "";
+        if (!extractedText.trim()) throw new Error("Resume parser returned no readable text.");
 
         return resumeRepository.create({
             title: dto.title || path.parse(originalName).name,
@@ -56,11 +53,7 @@ class ResumeService {
     }
 
     async getUserResumes(userId: string) {
-        try {
-            return await resumeRepository.findByUserId(userId);
-        } catch {
-            return [];
-        }
+        return resumeRepository.findByUserId(userId);
     }
 
     async deleteResume(id: string) {

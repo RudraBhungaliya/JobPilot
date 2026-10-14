@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { JobSearchLoop, ResumeVersion, CandidateProfile } from "../lib/mock-data";
+import { JobSearchLoop, ResumeVersion, CandidateProfile } from "../lib/domain-types";
 import {
   Activity,
   Play,
@@ -20,19 +20,42 @@ import {
   Award,
   Globe,
   TrendingUp,
+  AlertTriangle,
 } from "./icons";
 
 interface JobSearchLoopsViewProps {
-  resumes: ResumeVersion[];
-  profile: CandidateProfile;
+  resumes?: ResumeVersion[];
+  profile?: { fullName?: string; email?: string; phone?: string };
   onNavigateToDiscovery?: (keywords: string[]) => void;
+  onSelectLoop?: (loop: JobSearchLoop) => void;
 }
 
 export function JobSearchLoopsView({
-  resumes,
+  resumes = [],
   profile,
   onNavigateToDiscovery,
+  onSelectLoop,
 }: JobSearchLoopsViewProps) {
+  const fallbackResumes: ResumeVersion[] = [
+    {
+      id: "primary-candidate-cv",
+      name: "Primary Candidate CV.pdf",
+      roleFocus: "Full Stack Software Engineer",
+      updatedAt: "Active",
+      fileSize: "184 KB",
+      isDefault: true,
+      topSkills: ["TypeScript", "React", "Next.js", "Node.js", "PostgreSQL"],
+      atsScore: 94,
+    },
+  ];
+
+  const activeResumes = resumes && resumes.length > 0 ? resumes : fallbackResumes;
+  const activeProfile = {
+    fullName: profile?.fullName || "Candidate",
+    email: profile?.email || "candidate@jobpilot.ai",
+    phone: profile?.phone || "+91 9876543210",
+  };
+
   const [loops, setLoops] = useState<JobSearchLoop[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -42,21 +65,20 @@ export function JobSearchLoopsView({
 
   // Form state for creating a loop
   const [formData, setFormData] = useState({
-    name: "Senior Backend & Distributed Systems - India MNCs",
-    targetJobTitles: ["Software Engineer", "Backend Engineer", "Staff Software Engineer"],
-    targetLocations: ["Bengaluru", "Hyderabad", "Pune", "Remote (India)"],
-    targetCountries: ["India"],
-    remotePreference: "HYBRID_OR_REMOTE",
-    experienceLevel: "SENIOR_STAFF",
-    employmentTypes: ["FULL_TIME"],
-    minimumCompensation: 3500000,
-    targetTiers: ["S", "A", "B"],
-    autoApplyEnabled: true,
-    recruiterOutreachEnabled: false,
+    name: "",
+    targetJobTitles: [] as string[],
+    targetLocations: [] as string[],
+    targetCountries: [] as string[],
+    remotePreference: "",
+    experienceLevel: "",
+    employmentTypes: [] as string[],
+    minimumCompensation: undefined as number | undefined,
+    targetTiers: [] as string[],
+    autoApplyEnabled: false,
     dailyApplicationLimit: 12,
     dailyDiscoveryLimit: 50,
-    priorityStrategy: "MNC_FIRST",
-    resumeId: resumes.find((r) => r.isDefault)?.id || resumes[0]?.id || "",
+    priorityStrategy: "RELEVANCE",
+    resumeId: activeResumes.find((r) => r.isDefault)?.id || activeResumes[0]?.id || "primary-candidate-cv",
     excludedCompanies: [] as string[],
     includedCompanies: [] as string[],
   });
@@ -85,13 +107,21 @@ export function JobSearchLoopsView({
 
   const handleCreateLoop = async () => {
     try {
+      if (!formData.name.trim() || formData.targetJobTitles.length === 0) {
+        setRunResultToast({ message: "Add a loop name and at least one target job title.", type: "error" });
+        return;
+      }
+      const targetResumeId = formData.resumeId || activeResumes[0]?.id || "primary-candidate-cv";
       const res = await fetch("/api/v1/loops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          resumeId: targetResumeId,
+        }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setIsCreating(false);
         setActiveStep(1);
         await fetchLoops();
@@ -100,9 +130,12 @@ export function JobSearchLoopsView({
           type: "success",
         });
         setTimeout(() => setRunResultToast(null), 4000);
+      } else {
+        setRunResultToast({ message: data.message || "The loop could not be saved.", type: "error" });
       }
     } catch (err) {
       console.error("Failed to create loop", err);
+      setRunResultToast({ message: "The loop service is unavailable. Nothing was saved.", type: "error" });
     }
   };
 
@@ -391,7 +424,7 @@ export function JobSearchLoopsView({
                 <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-3 text-[11px] text-zinc-300 flex items-center gap-2.5">
                   <Globe size={16} className="text-indigo-400 shrink-0" />
                   <span>
-                    <strong>India-First Policy Enforced:</strong> Live ATS crawler will strictly target India locations and worldwide-compatible remote roles with zero US-only leaks.
+                    <strong>Review source eligibility:</strong> Location and work authorization details depend on job source data and should be verified before applying.
                   </span>
                 </div>
               </div>
@@ -402,7 +435,7 @@ export function JobSearchLoopsView({
               <div className="space-y-4 text-xs">
                 <label className="text-zinc-400 block font-medium">Select Master CV to attach to this loop:</label>
                 <div className="space-y-2.5">
-                  {resumes.map((res) => (
+                  {activeResumes.map((res) => (
                     <div
                       key={res.id}
                       onClick={() => setFormData({ ...formData, resumeId: res.id })}
@@ -444,7 +477,7 @@ export function JobSearchLoopsView({
                     <span className="text-[10px] font-mono text-emerald-400">✓ Ready</span>
                   </div>
                   <p className="text-[11px] text-zinc-400">
-                    Applying as <strong>{profile.fullName}</strong> ({profile.email} &middot; {profile.phone}). All custom ATS questions will be resolved from your verified vault.
+                    Applying as <strong>{activeProfile.fullName}</strong> ({activeProfile.email} &middot; {activeProfile.phone}). All custom ATS questions will be resolved from your verified vault.
                   </p>
                 </div>
               </div>
@@ -467,7 +500,7 @@ export function JobSearchLoopsView({
                       onChange={(e) => setFormData({ ...formData, dailyApplicationLimit: Number(e.target.value) })}
                       className="w-full accent-indigo-500"
                     />
-                    <span className="text-[10px] text-zinc-500">Paced with 4.5s – 11.2s anti-ban jitter</span>
+                    <span className="text-[10px] text-zinc-500">Target applications per day</span>
                   </div>
 
                   <div className="rounded-xl border border-white/[0.08] bg-[#161924] p-3.5 space-y-2">
@@ -504,20 +537,6 @@ export function JobSearchLoopsView({
                     />
                   </label>
 
-                  <label className="flex items-center justify-between rounded-xl border border-white/[0.08] bg-[#161924] p-3 cursor-pointer">
-                    <div>
-                      <span className="font-semibold text-zinc-100 block">Recruiter Email Outreach</span>
-                      <span className="text-[11px] text-zinc-400">
-                        Send verified introduction emails via connected Resend provider when recruiter email is parsed.
-                      </span>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={formData.recruiterOutreachEnabled}
-                      onChange={(e) => setFormData({ ...formData, recruiterOutreachEnabled: e.target.checked })}
-                      className="h-4 w-4 rounded accent-indigo-500"
-                    />
-                  </label>
                 </div>
               </div>
             )}
@@ -539,7 +558,7 @@ export function JobSearchLoopsView({
                     <div>
                       <span className="text-zinc-500 block font-mono">ATTACHED CV</span>
                       <span className="text-zinc-200 font-medium">
-                        {resumes.find((r) => r.id === formData.resumeId)?.name || "Default Resume"}
+                        {activeResumes.find((r) => r.id === formData.resumeId)?.name || activeResumes[0]?.name || "Primary CV"}
                       </span>
                     </div>
                     <div>
@@ -551,10 +570,10 @@ export function JobSearchLoopsView({
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 text-xs text-zinc-300 flex items-center gap-2.5">
-                  <CheckCircle size={16} className="text-emerald-400 shrink-0" />
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 text-xs text-zinc-300 flex items-center gap-2.5">
+                  <AlertTriangle size={16} className="text-amber-400 shrink-0" />
                   <span>
-                    <strong>Verification Passed:</strong> Zero mock dependencies. Ready for continuous PostgreSQL-backed execution.
+                    <strong>Backend verification required:</strong> Save this loop to PostgreSQL, then verify database and provider configuration before enabling it.
                   </span>
                 </div>
               </div>
@@ -678,7 +697,7 @@ export function JobSearchLoopsView({
 
                   <div className="flex flex-wrap gap-1 text-[11px] text-zinc-400">
                     <span className="text-zinc-500">Locations:</span>
-                    <span>{loop.targetLocations.join(", ") || "India (All Hubs)"}</span>
+                    <span>{loop.targetLocations.join(", ") || "Any location"}</span>
                   </div>
                 </div>
 

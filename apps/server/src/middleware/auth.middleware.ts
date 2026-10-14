@@ -37,7 +37,7 @@ export const authenticate: RequestHandler = (
     try {
         const payload = jwt.verify(
             token,
-            process.env.JWT_ACCESS_SECRET!
+            process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || (() => { throw new Error("JWT secret is not configured."); })()
         ) as JwtPayload;
 
         req.user = {

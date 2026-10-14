@@ -110,6 +110,9 @@ class WorkdaySource implements JobSource {
                         const jobUrl = jobPath.startsWith("http")
                             ? jobPath
                             : `https://${hostPart}.myworkdayjobs.com/${boardPart}${jobPath}`;
+                        let parsedJobUrl: URL;
+                        try { parsedJobUrl = new URL(jobUrl); } catch { continue; }
+                        if (parsedJobUrl.protocol !== "https:" || !parsedJobUrl.hostname.endsWith(".myworkdayjobs.com")) continue;
 
                         let description = posting.title;
                         if (Array.isArray(posting.bulletFields)) {
@@ -122,12 +125,18 @@ class WorkdaySource implements JobSource {
                             }
                         }
 
+                        const location = posting.locationsText || "Global / Remote";
+                        const queryTerms = (options.keyword || "").toLowerCase().trim().split(/\s+/).filter((term) => term.length > 1);
+                        const searchable = `${posting.title} ${tenant.company} ${description} ${location}`.toLowerCase();
+                        if (!queryTerms.every((term) => searchable.includes(term))) continue;
+                        if (options.location?.trim() && !location.toLowerCase().includes(options.location.trim().toLowerCase())) continue;
+
                         allJobs.push({
                             externalId: `wd-${hostPart}-${externalId}`,
                             title: posting.title,
                             company: tenant.company,
                             url: jobUrl,
-                            location: posting.locationsText || "Global / Remote",
+                            location,
                             description,
                             source: "workday",
                         });

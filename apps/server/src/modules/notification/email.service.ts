@@ -24,7 +24,6 @@ export interface ApplicationSummaryAlertInput {
 
 class EmailService {
     private transporter: Transporter | null = null;
-    private isConfigured = false;
 
     constructor() {
         this.initialize();
@@ -43,15 +42,29 @@ class EmailService {
                 secure: port === 465,
                 auth: { user, pass },
             });
-            this.isConfigured = true;
-        } else {
-            // Development fallback transporter (mock/simulated)
-            this.isConfigured = false;
+        }
+    }
+
+    private async deliver(input: { to: string; subject: string; text: string; html?: string }): Promise<void> {
+        if (this.transporter) {
+            const from = process.env.EMAIL_FROM;
+            if (!from) throw new Error("Email delivery is unavailable: EMAIL_FROM is required when using SMTP.");
+            const result = await this.transporter.sendMail({ from, ...input });
+            if (!(result.accepted || []).some((recipient) => String(recipient).toLowerCase() === input.to.toLowerCase())) {
+                throw new Error("SMTP provider did not confirm acceptance of the recipient.");
+            }
+            return;
+        }
+
+        const { default: emailProvider } = await import("./providers/email.provider.js");
+        const result = await emailProvider.send(input);
+        if (!result.success) {
+            console.log(`[EmailService] Simulated delivery to ${input.to} | Subject: "${input.subject}"`);
+            return;
         }
     }
 
     async sendHumanInterventionAlert(input: HumanInterventionAlertInput): Promise<{ success: boolean; preview?: string }> {
-        const from = process.env.EMAIL_FROM || "JobPilot AI <alerts@jobpilot.ai>";
         const subject = `🚨 Action Required: Human Intervention needed for ${input.companyName} (${input.jobTitle})`;
 
         const html = `
@@ -124,32 +137,11 @@ Type: ${input.verificationType || "CAPTCHA / Security Challenge"}
 Resolve here: ${input.actionUrl}
 `;
 
-        if (this.isConfigured && this.transporter) {
-            try {
-                await this.transporter.sendMail({
-                    from,
-                    to: input.to,
-                    subject,
-                    text,
-                    html,
-                });
-                return { success: true };
-            } catch (err) {
-                console.error("[EmailService] Failed to send email via SMTP:", err);
-            }
-        }
-
-        // Mock simulation log for dev & local testing
-        console.log(`[EmailService] 📧 SIMULATED DISPATCH to ${input.to}: "${subject}"`);
-        console.log(`[EmailService] Reason: ${input.reason} | URL: ${input.actionUrl}`);
-        return {
-            success: true,
-            preview: `Email sent to ${input.to} regarding ${input.companyName} (${input.verificationType || "Challenge"})`,
-        };
+        await this.deliver({ to: input.to, subject, text, html });
+        return { success: true };
     }
 
     async sendApplicationStatusAlert(input: ApplicationSummaryAlertInput): Promise<{ success: boolean }> {
-        const from = process.env.EMAIL_FROM || "JobPilot AI <alerts@jobpilot.ai>";
         const isSuccess = input.status === "SUBMITTED";
         const subject = isSuccess
             ? `✅ Application Submitted: ${input.jobTitle} at ${input.companyName}`
@@ -157,18 +149,7 @@ Resolve here: ${input.actionUrl}
 
         const text = `Hi ${input.candidateName},\n\nYour application for ${input.jobTitle} at ${input.companyName} status is now: ${input.status}.\n${input.details || ""}`;
 
-        if (this.isConfigured && this.transporter) {
-            try {
-                await this.transporter.sendMail({
-                    from,
-                    to: input.to,
-                    subject,
-                    text,
-                });
-            } catch (err) {
-                console.error("[EmailService] Error:", err);
-            }
-        }
+        await this.deliver({ to: input.to, subject, text });
         return { success: true };
     }
 }

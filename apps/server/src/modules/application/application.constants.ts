@@ -19,33 +19,33 @@ export const PIPELINE_STAGES: readonly ApplicationStatus[] = [
 ] as const;
 
 export const S_TIER_COMPANIES = new Set([
-    "google", "meta", "apple", "microsoft", "amazon", "netflix", "stripe", "nvidia", 
-    "uber", "airbnb", "openai", "anthropic", "databricks", "snowflake", "salesforce", 
+    "google", "meta", "apple", "microsoft", "amazon", "netflix", "stripe", "nvidia",
+    "uber", "airbnb", "openai", "anthropic", "databricks", "snowflake", "salesforce",
     "oracle", "cisco", "adobe", "intel", "ibm", "linkedin", "alphabet"
 ]);
 
 export const A_TIER_COMPANIES = new Set([
-    "spotify", "coinbase", "twilio", "atlassian", "shopify", "palantir", "cloudflare", 
-    "figma", "canva", "pinterest", "snap", "doordash", "instacart", "square", "block", 
-    "servicenow", "workday", "vmware", "paypal", "intuit", "ebay", "dell", "hp", "sap", 
+    "spotify", "coinbase", "twilio", "atlassian", "shopify", "palantir", "cloudflare",
+    "figma", "canva", "pinterest", "snap", "doordash", "instacart", "square", "block",
+    "servicenow", "workday", "vmware", "paypal", "intuit", "ebay", "dell", "hp", "sap",
     "siemens", "goldman sachs", "morgan stanley", "jp morgan", "jpmorgan", "visa", "mastercard"
 ]);
 
 export const B_TIER_COMPANIES = new Set([
-    "razorpay", "swiggy", "zomato", "cred", "postman", "browserstack", "freshworks", 
-    "inmobi", "phonepe", "meesho", "zepto", "flipkart", "ola", "hasura", "vercel", 
-    "supabase", "linear", "notion", "retool", "webflow", "loom", "brex", "ramp", 
+    "razorpay", "swiggy", "zomato", "cred", "postman", "browserstack", "freshworks",
+    "inmobi", "phonepe", "meesho", "zepto", "flipkart", "ola", "hasura", "vercel",
+    "supabase", "linear", "notion", "retool", "webflow", "loom", "brex", "ramp",
     "rippling", "gusto", "deel", "groww", "zerodha", "clevertap", "chargebee"
 ]);
 
 export function inferCompanyTier(name: string, domain?: string): CompanyTier {
     const cleanName = (name || "").toLowerCase().trim();
     const cleanDomain = (domain || "").toLowerCase().replace(/^www\./, "").split(".")[0];
-    
+
     if (S_TIER_COMPANIES.has(cleanName) || (cleanDomain && S_TIER_COMPANIES.has(cleanDomain))) return "S";
     if (A_TIER_COMPANIES.has(cleanName) || (cleanDomain && A_TIER_COMPANIES.has(cleanDomain))) return "A";
     if (B_TIER_COMPANIES.has(cleanName) || (cleanDomain && B_TIER_COMPANIES.has(cleanDomain))) return "B";
-    
+
     for (const s of Array.from(S_TIER_COMPANIES)) {
         if (cleanName.includes(s)) return "S";
     }
@@ -66,7 +66,8 @@ export const VALID_STAGE_TRANSITIONS: Record<ApplicationStatus, ApplicationStatu
     MATCHED: ["TAILORING", "WAITING_FOR_USER", "QUEUED", "REVIEW_REQUIRED", "READY_TO_SUBMIT", "REJECTED", "SKIPPED", "ARCHIVED"],
     TAILORING: ["WAITING_FOR_USER", "QUEUED", "REVIEW_REQUIRED", "READY_TO_SUBMIT", "RUNNING", "REJECTED", "FAILED", "WITHDRAWN"],
     REVIEW_REQUIRED: ["READY_TO_SUBMIT", "QUEUED", "WAITING_FOR_USER", "REJECTED", "SKIPPED", "ARCHIVED", "WITHDRAWN"],
-    WAITING_FOR_USER: ["QUEUED", "READY_TO_SUBMIT", "SUBMITTING", "RUNNING", "REJECTED", "FAILED", "WITHDRAWN"],
+    WAITING_FOR_USER: ["RESUMED", "QUEUED", "READY_TO_SUBMIT", "SUBMITTING", "RUNNING", "REJECTED", "FAILED", "WITHDRAWN"],
+    RESUMED: ["SUBMITTING", "READY_TO_SUBMIT", "QUEUED", "RUNNING", "FAILED", "WITHDRAWN", "REJECTED"],
     QUEUED: ["RUNNING", "SUBMITTING", "TAILORING", "WAITING_FOR_USER", "SUBMITTED", "APPLIED", "REJECTED", "FAILED", "RETRYING", "WITHDRAWN"],
     READY_TO_SUBMIT: ["QUEUED", "SUBMITTING", "RUNNING", "WAITING_FOR_USER", "SUBMITTED", "APPLIED", "REJECTED", "FAILED", "WITHDRAWN"],
     SUBMITTING: ["SUBMITTED", "APPLIED", "VERIFICATION_PENDING", "WAITING_FOR_USER", "FAILED", "RETRYING", "REJECTED"],
@@ -89,4 +90,4 @@ export function isValidStageTransition(currentStatus: ApplicationStatus, nextSta
     const allowed = VALID_STAGE_TRANSITIONS[currentStatus];
     if (!allowed) return false;
     return allowed.includes(nextStatus);
-}
+}

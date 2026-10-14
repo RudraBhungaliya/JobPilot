@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getBackendApiUrl, getBackendHeaders } from "@/lib/api-config";
 
 export async function POST(
   req: Request,
@@ -7,14 +8,15 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
+    const backendUrl = getBackendApiUrl();
 
     // Forward to backend server if running
     try {
-      const backendRes = await fetch(`http://127.0.0.1:8000/api/v1/applications/${id}/resolve-checkpoint`, {
+      const backendRes = await fetch(`${backendUrl}/api/v1/applications/${id}/resolve-checkpoint`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getBackendHeaders(req, { "Content-Type": "application/json" }),
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(5000),
       });
 
       if (backendRes.ok) {

@@ -1,6 +1,5 @@
 import matchingService from "./matching.service.js";
 import scoringService from "./scoring.service.js";
-import { inferCompanyTier } from "../../application/application.constants.js";
 
 import type {
     AgentJob,
@@ -77,14 +76,6 @@ class EvaluationService {
 
             if (score >= 35) {
                 selectedJobIds.push(job.id);
-            }
-        }
-
-        // If no job scored >= 35, select top job to ensure auto-apply pipeline proceeds
-        if (selectedJobIds.length === 0 && jobs.length > 0) {
-            const highest = [...evaluations].sort((a, b) => b.score - a.score)[0];
-            if (highest) {
-                selectedJobIds.push(highest.jobId);
             }
         }
 
@@ -168,7 +159,7 @@ class EvaluationService {
         // 6. Role / Title Match (15% weight)
         const targetRoles = loopCriteria?.targetJobTitles && loopCriteria.targetJobTitles.length > 0
             ? loopCriteria.targetJobTitles
-            : (candidateContext.currentTitle ? [candidateContext.currentTitle] : ["Software Engineer"]);
+            : (candidateContext.currentTitle ? [candidateContext.currentTitle] : []);
 
         const roleRes = matchingService.matchRole(targetRoles, job.title);
 
@@ -181,10 +172,15 @@ class EvaluationService {
             eduRes.score * 0.10
         );
 
-        const matchScore = Math.max(0, Math.min(100, Math.round(rawScore)));
+        let matchScore = Math.max(0, Math.min(100, Math.round(rawScore)));
+
+        // If candidate has a specific target engineering title and job is completely unrelated (e.g. Account Executive, Sales, Ads)
+        if (roleRes.score <= 35 && targetRoles.length > 0) {
+            matchScore = Math.min(45, matchScore);
+        }
 
         // 8. Infer company tier
-        const companyTier = inferCompanyTier(job.company);
+        const companyTier = (job as { companyTier?: JobScorecard["companyTier"] }).companyTier;
 
         // 9. Collect transparent reasons
         const reasons: string[] = [];
@@ -252,8 +248,8 @@ class EvaluationService {
         const tierWeights: Record<string, number> = { S: 4, A: 3, B: 2, C: 1 };
 
         evaluatedList.sort((a, b) => {
-            const tierA = tierWeights[a.scorecard.companyTier] || 1;
-            const tierB = tierWeights[b.scorecard.companyTier] || 1;
+            const tierA = a.scorecard.companyTier ? tierWeights[a.scorecard.companyTier] || 1 : 1;
+            const tierB = b.scorecard.companyTier ? tierWeights[b.scorecard.companyTier] || 1 : 1;
 
             if (strategy === "MNC_FIRST") {
                 // Tier first, then matchScore

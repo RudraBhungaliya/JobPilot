@@ -129,7 +129,7 @@ test("Job Matching & Ranking Module Suite", async (suite) => {
 
     // Scorecard assertions
     assert.ok(scorecard.matchScore >= 80, `Expected high match score, got: ${scorecard.matchScore}`);
-    assert.equal(scorecard.companyTier, "S", "Stripe should be S-tier company");
+    assert.equal(scorecard.companyTier, undefined, "Company tier must remain unavailable without a verified tier source");
     assert.ok(scorecard.matchedSkills.length >= 4, "Should match primary skills");
     assert.equal(scorecard.breakdown.education, 100);
     assert.equal(scorecard.breakdown.experience, 100);
@@ -165,17 +165,17 @@ test("Job Matching & Ranking Module Suite", async (suite) => {
       },
     ];
 
-    // Priority 1: MNC_FIRST strategy (Google S-Tier should be #1)
+    // No tier data was supplied, so MNC_FIRST must not invent company tiers.
     const mncRanked = evaluationService.matchAndRankJobs(sampleCandidateContext, jobs, {
       priorityStrategy: "MNC_FIRST",
       targetJobTitles: ["Full Stack Engineer"],
     });
 
-    assert.equal(mncRanked[0].job.company, "Google", "MNC_FIRST should rank Google #1");
+    assert.equal(mncRanked[0].job.company, "UnknownStartup", "Unknown company tiers preserve stable input order");
     assert.equal(mncRanked[0].rank, 1);
-    assert.equal(mncRanked[1].job.company, "Swiggy", "Tier B should rank before Tier C");
+    assert.equal(mncRanked[1].job.company, "Google");
     assert.equal(mncRanked[1].rank, 2);
-    assert.equal(mncRanked[2].job.company, "UnknownStartup", "Tier C should rank last");
+    assert.equal(mncRanked[2].job.company, "Swiggy");
     assert.equal(mncRanked[2].rank, 3);
 
     // Priority 2: RECENT_FIRST strategy
@@ -279,7 +279,7 @@ test("Job Matching & Ranking Module Suite", async (suite) => {
       assert.ok(updatedJobNotes, "Job notes should be updated with scorecard");
       const parsedNotes = JSON.parse(updatedJobNotes);
       assert.ok(parsedNotes.matchScore >= 70);
-      assert.equal(parsedNotes.companyTier, "S");
+      assert.equal(parsedNotes.companyTier, undefined);
 
       // Verify Application record was created with status MATCHED
       assert.ok(applicationCreated, "Application record should be created");

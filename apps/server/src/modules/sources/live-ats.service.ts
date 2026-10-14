@@ -8,50 +8,6 @@ import {
     getAllLeverCompanies,
 } from "./curated-companies.constants.js";
 
-export type JobCategoryType =
-    | "TIER_1_MNC"
-    | "TIER_2_UNICORN"
-    | "TIER_3_MIDMARKET"
-    | "TIER_4_SERVICES"
-    | "REMOTE"
-    | "MNC"
-    | "SEMI_MNC";
-
-export interface LiveIndianJobOpening {
-    id: string;
-    title: string;
-    department: string;
-    company: string;
-    category: JobCategoryType;
-    categoryLabel: string;
-    tierRank: 1 | 2 | 3 | 4 | 5;
-    tierName: string;
-    location: string;
-    city: string;
-    state?: string;
-    country: string;
-    workMode: "Remote" | "Hybrid" | "Onsite";
-    isRemote: boolean;
-    remoteScope?: string;
-    sourceUrl: string;
-    atsUrl: string;
-    officialCompanyUrl: string;
-    applyUrl: string;
-    canonicalUrl: string;
-    sourceType: "GREENHOUSE" | "ASHBY" | "LEVER" | "WORKDAY" | "DIRECT";
-    url: string;
-    source: "greenhouse" | "ashby" | "lever" | "workday" | "remote";
-    atsProvider: string;
-    salaryINR: string;
-    salaryMinLPA: number;
-    salaryMaxLPA: number;
-    experienceLevel: "Junior (1-3 yrs)" | "Mid-Senior (3-6 yrs)" | "Staff / Lead (6+ yrs)";
-    tags: string[];
-    description: string;
-    postedAt: string;
-    matchScore?: number;
-}
-
 interface GreenhouseJobRaw {
     id: number | string;
     title: string;
@@ -220,10 +176,15 @@ class LiveAtsService {
     }
 
     async searchGreenhouse(input: SourceSearchInput): Promise<SourceJob[]> {
-        const requestedTier = (input.tier === "SEMI_MNC" ? "SEMI_MNC" : input.tier === "ALL" ? "ALL" : "MNC");
+        const requestedTier = (input.tier === "SEMI_MNC" ? "SEMI_MNC" : input.tier === "MNC" ? "MNC" : "ALL");
         const allCompanies = getAllGreenhouseCompanies(requestedTier);
         const specificCompany = this.extractCompanyFromInput(input.keyword, allCompanies);
-        const companiesToFetch = specificCompany ? [specificCompany] : allCompanies.slice(0, 15);
+
+        const prioritizedGreenhouse = [
+            "razorpaysoftwareprivatelimited", "slice", "groww", "inmobi", "thoughtworks",
+            "gitlab", "cloudflare", "elastic", "mongodb"
+        ];
+        const companiesToFetch = specificCompany ? [specificCompany] : Array.from(new Set([...prioritizedGreenhouse, ...allCompanies])).slice(0, 15);
 
         const jobs: SourceJob[] = [];
         const tasks = companiesToFetch.map(async (company) => {
@@ -269,10 +230,14 @@ class LiveAtsService {
     }
 
     async searchAshby(input: SourceSearchInput): Promise<SourceJob[]> {
-        const requestedTier = (input.tier === "SEMI_MNC" ? "SEMI_MNC" : input.tier === "ALL" ? "ALL" : "MNC");
+        const requestedTier = (input.tier === "SEMI_MNC" ? "SEMI_MNC" : input.tier === "MNC" ? "MNC" : "ALL");
         const allCompanies = getAllAshbyCompanies(requestedTier);
         const specificCompany = this.extractCompanyFromInput(input.keyword, allCompanies);
-        const companiesToFetch = specificCompany ? [specificCompany] : allCompanies.slice(0, 15);
+
+        const prioritizedAshby = [
+            "supabase", "posthog", "sentry", "cursor", "linear", "resend"
+        ];
+        const companiesToFetch = specificCompany ? [specificCompany] : Array.from(new Set([...prioritizedAshby, ...allCompanies])).slice(0, 10);
 
         const jobs: SourceJob[] = [];
         const tasks = companiesToFetch.map(async (company) => {
@@ -318,10 +283,15 @@ class LiveAtsService {
     }
 
     async searchLever(input: SourceSearchInput): Promise<SourceJob[]> {
-        const requestedTier = (input.tier === "SEMI_MNC" ? "SEMI_MNC" : input.tier === "ALL" ? "ALL" : "MNC");
+        const requestedTier = (input.tier === "SEMI_MNC" ? "SEMI_MNC" : input.tier === "MNC" ? "MNC" : "ALL");
         const allCompanies = getAllLeverCompanies(requestedTier);
         const specificCompany = this.extractCompanyFromInput(input.keyword, allCompanies);
-        const companiesToFetch = specificCompany ? [specificCompany] : allCompanies.slice(0, 15);
+
+        const prioritizedLever = [
+            "meesho", "zeta", "paytm", "cred", "freshworks",
+            "atlassian", "spotify", "uber"
+        ];
+        const companiesToFetch = specificCompany ? [specificCompany] : Array.from(new Set([...prioritizedLever, ...allCompanies])).slice(0, 15);
 
         const jobs: SourceJob[] = [];
         const tasks = companiesToFetch.map(async (company) => {
@@ -516,7 +486,14 @@ class LiveAtsService {
             if (terms.length === 0) return true;
 
             const text = `${job.title} ${job.company} ${job.description} ${job.location}`.toLowerCase();
-            return terms.some((term) => text.includes(term));
+            const titleLower = (job.title || "").toLowerCase();
+
+            if (terms.length <= 2) {
+                return terms.every((term) => text.includes(term));
+            }
+            const textMatches = terms.filter((term) => text.includes(term)).length;
+            const titleMatches = terms.filter((term) => titleLower.includes(term)).length;
+            return textMatches >= Math.ceil(terms.length * 0.5) || titleMatches >= 2;
         });
     }
 
@@ -531,79 +508,47 @@ class LiveAtsService {
     }
 
     async searchAll(input: SourceSearchInput): Promise<SourceJob[]> {
-        const [greenhouse, ashby, lever, remote] = await Promise.allSettled([
+        const [greenhouse, ashby, lever] = await Promise.allSettled([
             this.searchGreenhouse(input),
             this.searchAshby(input),
             this.searchLever(input),
-            this.searchRemote(input),
         ]);
+
+        const results = [greenhouse, ashby, lever];
+        const failures = results.filter((result) => result.status === "rejected");
+        if (failures.length === results.length) {
+            throw new AggregateError(
+                failures.map((result) => result.reason),
+                "All live job sources failed.",
+            );
+        }
 
         const allJobs: SourceJob[] = [];
         if (greenhouse.status === "fulfilled") allJobs.push(...greenhouse.value);
         if (ashby.status === "fulfilled") allJobs.push(...ashby.value);
         if (lever.status === "fulfilled") allJobs.push(...lever.value);
-        if (remote.status === "fulfilled") allJobs.push(...remote.value);
-
-        return allJobs;
-    }
-
-    async getRealtimeIndianOpenings(filters?: {
-        category?: string;
-        department?: string;
-        city?: string;
-        keyword?: string;
-        minSalaryLPA?: number;
-        remoteOnly?: boolean;
-    }): Promise<LiveIndianJobOpening[]> {
-        const rawJobs = await this.searchAll({
-            keyword: filters?.keyword || "",
-            location: filters?.city || "India",
-            remote: filters?.remoteOnly,
-        });
-
-        return rawJobs.map((j, idx) => {
-            const isRemote = (j.location || "").toLowerCase().includes("remote") || (j.location || "").toLowerCase().includes("global");
-            const exp = (j.title || "").toLowerCase().includes("lead") || (j.title || "").toLowerCase().includes("staff")
-                ? "Staff / Lead (6+ yrs)"
-                : (j.title || "").toLowerCase().includes("senior") || (j.title || "").toLowerCase().includes("sr")
-                ? "Mid-Senior (3-6 yrs)"
-                : "Junior (1-3 yrs)";
-
-            return {
-                id: j.externalId || `live-${idx}`,
-                title: j.title,
-                department: "Engineering",
-                company: j.company,
-                category: (isRemote ? "REMOTE" : "TIER_1_MNC") as JobCategoryType,
-                categoryLabel: isRemote ? "Remote" : "Tier 1 MNC",
-                tierRank: (isRemote ? 3 : 1) as 1 | 2 | 3 | 4 | 5,
-                tierName: isRemote ? "Remote AI / Tech" : "Tier 1: Global Product MNC",
-                location: j.location || "India",
-                city: j.location || "Bengaluru",
-                country: "India",
-                workMode: isRemote ? "Remote" : "Hybrid",
-                isRemote,
-                sourceUrl: j.url,
-                atsUrl: j.url,
-                officialCompanyUrl: j.url,
-                applyUrl: j.url,
-                canonicalUrl: j.url,
-                sourceType: (j.source?.toUpperCase() || "DIRECT") as any,
-                url: j.url,
-                source: (j.source || "greenhouse") as any,
-                atsProvider: j.source || "greenhouse",
-                salaryINR: "₹24 - 48 LPA",
-                salaryMinLPA: 24,
-                salaryMaxLPA: 48,
-                experienceLevel: exp as any,
-                tags: ["TypeScript", "Node.js", "React"],
-                description: j.description || j.title,
-                postedAt: new Date().toISOString(),
-            };
-        });
+        const unique = new Map<string, SourceJob>();
+        for (const job of allJobs) unique.set(job.url.toLowerCase().replace(/\/$/, ""), job);
+        return Array.from(unique.values());
     }
 
     private capitalize(str: string): string {
+        const lower = str.toLowerCase();
+        if (lower === "razorpaysoftwareprivatelimited" || lower === "razorpay") return "Razorpay";
+        if (lower === "thoughtworks") return "Thoughtworks";
+        if (lower === "inmobi") return "InMobi";
+        if (lower === "groww") return "Groww";
+        if (lower === "meesho") return "Meesho";
+        if (lower === "zeta") return "Zeta";
+        if (lower === "paytm") return "Paytm";
+        if (lower === "cred") return "CRED";
+        if (lower === "freshworks") return "Freshworks";
+        if (lower === "postman") return "Postman";
+        if (lower === "browserstack") return "BrowserStack";
+        if (lower === "clevertap") return "CleverTap";
+        if (lower === "hasura") return "Hasura";
+        if (lower === "github") return "GitHub";
+        if (lower === "gitlab") return "GitLab";
         return str.charAt(0).toUpperCase() + str.slice(1);
     }
 
@@ -615,6 +560,29 @@ class LiveAtsService {
             return null;
         }
         return entry.jobs;
+    }
+
+    async getRealtimeIndianOpenings(input: {
+        category?: string;
+        department?: string;
+        city?: string;
+        keyword?: string;
+        minSalaryLPA?: number;
+        remoteOnly?: boolean;
+    } = {}): Promise<Array<SourceJob & { department?: string; tags?: string[] }>> {
+        const kw = input.keyword || "";
+        const [gh, lv, as] = await Promise.all([
+            this.searchGreenhouse({ keyword: kw, location: input.city, remote: input.remoteOnly }),
+            this.searchLever({ keyword: kw, location: input.city, remote: input.remoteOnly }),
+            this.searchAshby({ keyword: kw, location: input.city, remote: input.remoteOnly }),
+        ]);
+        const combined = [...gh, ...lv, ...as];
+        return combined
+            .filter((j) => this.isIndiaOrGlobalCompatible(j.location || "", j.description || ""))
+            .map((j) => ({
+                ...j,
+                tags: ["Engineering", "TypeScript", "Node.js"],
+            }));
     }
 
     private setInCache(key: string, jobs: any[]): void {

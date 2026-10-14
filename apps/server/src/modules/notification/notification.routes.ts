@@ -5,22 +5,24 @@ import emailService from "./email.service.js";
 
 const router = Router();
 
-// Test email dispatch (supports open or authenticated testing)
+router.use(authMiddleware);
+
+// Test email dispatch requires authenticated, caller-supplied content.
 router.post("/test-email", async (req, res) => {
     try {
-        const { email, candidateName, jobTitle, companyName, reason } = req.body;
-        const targetEmail = email || req.user?.email || "candidate@jobpilot.ai";
+        const { candidateName, jobTitle, companyName, reason, actionUrl } = req.body;
+        const targetEmail = req.user.email;
+        if (![candidateName, jobTitle, companyName, reason, actionUrl].every((value) => typeof value === "string" && value.trim())) {
+            return res.status(400).json({ success: false, message: "Candidate name, job title, company, reason, and action URL are required." });
+        }
         
         const result = await emailService.sendHumanInterventionAlert({
             to: targetEmail,
-            candidateName: candidateName || "Developer",
-            jobTitle: jobTitle || "Senior Software Engineer (India Hub)",
-            companyName: companyName || "Stripe",
-            actionUrl: "https://jobpilot.ai/verify/session-live-01",
-            reason: reason || "Security Checkpoint / CAPTCHA verification required",
-            verificationType: "Cloudflare Turnstile / CAPTCHA",
-            jobLocation: "Bengaluru, India",
-            salaryDollar: "$75,000 - $125,000 / yr (62 - 105 LPA)",
+            candidateName,
+            jobTitle,
+            companyName,
+            actionUrl,
+            reason,
         });
 
         return res.status(200).json({
@@ -35,8 +37,6 @@ router.post("/test-email", async (req, res) => {
         });
     }
 });
-
-router.use(authMiddleware);
 
 router.get("/", notificationController.getNotifications.bind(notificationController));
 router.post("/", notificationController.createNotification.bind(notificationController));

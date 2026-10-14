@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import geminiProvider from "../../core/llm/gemini.provider.js";
+import providerFactory from "../../core/llm/provider.factory.js";
 
 export interface ExtractedResumeData {
     firstName?: string;
@@ -119,8 +119,9 @@ class ResumeParserService {
             };
         }
 
-        // 1. Try AI Extraction via Gemini Provider
-        if (geminiProvider.isConfigured()) {
+        // 1. Try AI Extraction via Resilient LLM Provider (Gemini / OpenAI)
+        const provider = providerFactory.getProvider();
+        if (provider.isConfigured()) {
             try {
                 const prompt = `You are an expert technical resume parser for software engineering roles.
 Extract structured candidate profile information from the following resume text.
@@ -151,23 +152,12 @@ Return a JSON object with this exact schema:
   "educations": [{"degree": string, "institution": string, "fieldOfStudy": string or null, "grade": string or null}]
 }`;
 
-                const aiParsed = await geminiProvider.generateJSON<ExtractedResumeData>(prompt);
-                if (aiParsed && (aiParsed.firstName || aiParsed.skills?.length > 0)) {
-                    // Enrich salary estimate based on real extracted years of experience
-                    const expYears = aiParsed.yearsOfExperience || 3;
-                    const minLPA = Math.round(18 + expYears * 10);
-                    const maxLPA = Math.round(30 + expYears * 14);
-
-                    return {
-                        ...aiParsed,
-                        expectedSalaryLPA: maxLPA,
-                        currentSalaryLPA: minLPA,
-                        expectedSalaryINR: `₹${minLPA} - ${maxLPA} LPA`,
-                        currentSalaryINR: `₹${minLPA} LPA`,
-                    };
+                const aiParsed = await provider.generateJSON<ExtractedResumeData>(prompt);
+                if (aiParsed && (aiParsed.firstName || (aiParsed.skills && aiParsed.skills.length > 0))) {
+                    return aiParsed;
                 }
             } catch (aiErr) {
-                console.warn("[ResumeParser] Gemini parser fallback notice:", aiErr);
+                console.warn("[ResumeParser] AI parser fallback notice:", aiErr);
             }
         }
 
@@ -233,7 +223,7 @@ Return a JSON object with this exact schema:
 
         // City & Indian Location detection
         let city: string | undefined = undefined;
-        let country = "India";
+        let country: string | undefined;
         const indianCities = ["Bengaluru", "Bangalore", "Hyderabad", "Pune", "Gurgaon", "Gurugram", "Noida", "Delhi", "Mumbai", "Chennai", "Kolkata", "Ahmedabad"];
         for (const c of indianCities) {
             if (new RegExp(`\\b${c}\\b`, "i").test(cleanText)) {
@@ -254,16 +244,11 @@ Return a JSON object with this exact schema:
                     detectedSkills.push({
                         name: formattedName,
                         category: meta.category,
-                        level: meta.level,
+                        level: "",
                     });
                 }
             }
         }
-
-        // Calculate compensation only if years of experience was found
-        const exp = yearsOfExperience || 3;
-        const minLPA = Math.round(18 + exp * 8);
-        const maxLPA = Math.round(28 + exp * 12);
 
         return {
             firstName,
@@ -273,10 +258,6 @@ Return a JSON object with this exact schema:
             currentTitle: undefined,
             currentCompany: undefined,
             yearsOfExperience,
-            expectedSalaryLPA: maxLPA,
-            currentSalaryLPA: minLPA,
-            expectedSalaryINR: `₹${minLPA} - ${maxLPA} LPA`,
-            currentSalaryINR: `₹${minLPA} LPA`,
             city,
             country,
             github,

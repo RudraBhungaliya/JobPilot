@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getBackendApiUrl, getBackendHeaders } from "@/lib/api-config";
 
-const BACKEND_URL = process.env.BACKEND_API_URL || "http://127.0.0.1:8000";
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/v1/loops`, {
-      headers: { "Content-Type": "application/json" },
+    const backendUrl = getBackendApiUrl();
+    const res = await fetch(`${backendUrl}/api/v1/loops`, {
+      headers: getBackendHeaders(req, { "Content-Type": "application/json" }),
       cache: "no-store",
     });
     const data = await res.json();
@@ -21,9 +21,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const res = await fetch(`${BACKEND_URL}/api/v1/loops`, {
+    const backendUrl = getBackendApiUrl();
+    const res = await fetch(`${backendUrl}/api/v1/loops`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getBackendHeaders(req, { "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     });
     const data = await res.json();

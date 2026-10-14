@@ -12,7 +12,6 @@ export interface CreateLoopDTO {
   maximumCompensation?: number;
   targetTiers?: string[];
   autoApplyEnabled?: boolean;
-  recruiterOutreachEnabled?: boolean;
   dailyApplicationLimit?: number;
   dailyDiscoveryLimit?: number;
   priorityStrategy?: string;

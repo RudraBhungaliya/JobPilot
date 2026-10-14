@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 import { LoopExecutionEngine } from "../modules/loop/loop-execution.engine.js";
 import { prisma } from "@jobpilot/database";
 import liveAtsService from "../modules/sources/live-ats.service.js";
+import jobMatchingService from "../modules/matching/job-matching.service.js";
+
+const testCandidateContext = {
+  firstName: "Test",
+  currentTitle: "Engineer",
+  yearsOfExperience: 5,
+  skills: [{ name: "Node" }, { name: "React" }, { name: "TypeScript" }],
+  experiences: [{ title: "Engineer", company: "Test Org" }],
+  educations: [{ degree: "BSc", institution: "Test University" }],
+};
 
 test("Loop Execution Engine Suite", async (suite) => {
   await suite.test("Executes loop, filters excluded companies, and persists unique jobs", async () => {
@@ -60,6 +70,8 @@ test("Loop Execution Engine Suite", async (suite) => {
 
     // Mock liveAtsService.searchAll
     const origSearchAll = liveAtsService.searchAll;
+    const origCandidateContext = jobMatchingService.getRealCandidateContext;
+    jobMatchingService.getRealCandidateContext = async () => testCandidateContext as any;
     liveAtsService.searchAll = async () => mockDiscoveredJobs as any;
 
     // Track DB operations
@@ -129,6 +141,7 @@ test("Loop Execution Engine Suite", async (suite) => {
       assert.equal(queueCreatedCount, 0);
     } finally {
       liveAtsService.searchAll = origSearchAll;
+      jobMatchingService.getRealCandidateContext = origCandidateContext;
       (prisma as any).jobSearchLoop.findFirst = origFindLoop;
       (prisma as any).jobSearchLoop.update = origUpdateLoop;
       (prisma as any).job.findFirst = origFindJob;
@@ -188,6 +201,8 @@ test("Loop Execution Engine Suite", async (suite) => {
     ];
 
     const origSearchAll = liveAtsService.searchAll;
+    const origCandidateContext = jobMatchingService.getRealCandidateContext;
+    jobMatchingService.getRealCandidateContext = async () => testCandidateContext as any;
     liveAtsService.searchAll = async () => mockJobs as any;
 
     const persistedJobs: any[] = [];
@@ -224,6 +239,7 @@ test("Loop Execution Engine Suite", async (suite) => {
       assert.equal(persistedJobs[0].url, "https://uber.com/jobs/new-1");
     } finally {
       liveAtsService.searchAll = origSearchAll;
+      jobMatchingService.getRealCandidateContext = origCandidateContext;
       (prisma as any).jobSearchLoop.findFirst = origFindLoop;
       (prisma as any).jobSearchLoop.update = origUpdateLoop;
       (prisma as any).job.findFirst = origFindJob;
@@ -248,6 +264,8 @@ test("Loop Execution Engine Suite", async (suite) => {
     };
 
     const origSearchAll = liveAtsService.searchAll;
+    const origCandidateContext = jobMatchingService.getRealCandidateContext;
+    jobMatchingService.getRealCandidateContext = async () => testCandidateContext as any;
     liveAtsService.searchAll = async () => {
       throw new Error("Network timeout contacting live ATS cluster");
     };
@@ -295,6 +313,7 @@ test("Loop Execution Engine Suite", async (suite) => {
       assert.equal(updatedStatus, "ERROR");
     } finally {
       liveAtsService.searchAll = origSearchAll;
+      jobMatchingService.getRealCandidateContext = origCandidateContext;
       (prisma as any).jobSearchLoop.findFirst = origFindLoop;
       (prisma as any).jobSearchLoop.update = origUpdateLoop;
       (prisma as any).job.findFirst = origFindJob;

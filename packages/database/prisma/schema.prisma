@@ -152,7 +152,7 @@ model Application {
   rejectionReason  String?
   interviewRound   String?
   confirmationCode String?
-  matchScore       Int?    @default(85)
+  matchScore       Int?
   scorecard        Json?
   /// Company identifier used for per-company rate limiting
   companyKey String?
@@ -331,7 +331,7 @@ model Profile {
 
   expectedSalary       Int?
   currentSalary        Int?
-  compensationCurrency String @default("INR")
+  compensationCurrency String?
 
   noticePeriod     Int?
   noticePeriodDays Int?
@@ -344,32 +344,35 @@ model Profile {
   leetcode   String?
   codeforces String?
 
-  workMode           WorkMode       @default(HYBRID)
-  preferredWorkMode  WorkMode       @default(HYBRID)
+  workMode           WorkMode?
+  preferredWorkMode  WorkMode?
   preferredLocations String[]       @default([])
-  employmentType     EmploymentType @default(FULL_TIME)
+  employmentType     EmploymentType?
 
-  willingToRelocate Boolean @default(false)
-  willingToTravel   Boolean @default(false)
+  willingToRelocate Boolean?
+  willingToTravel   Boolean?
 
-  remoteOnly Boolean @default(false)
+  remoteOnly Boolean?
 
   workAuthorization   String?
-  sponsorshipRequired Boolean @default(false)
+  sponsorshipRequired Boolean?
+  is18OrOlder Boolean?
+  previousEmployee Boolean?
+  nonCompeteAgreement Boolean?
 
   visaStatus String?
 
-  governmentEmployee Boolean @default(false)
+  governmentEmployee Boolean?
 
-  militaryService Boolean @default(false)
+  militaryService Boolean?
 
-  veteran Boolean @default(false)
+  veteran Boolean?
 
-  criminalRecord Boolean @default(false)
+  criminalRecord Boolean?
 
-  securityClearance Boolean @default(false)
+  securityClearance Boolean?
 
-  disability Boolean @default(false)
+  disability Boolean?
 
   summary String?
 
@@ -768,23 +771,22 @@ model JobSearchLoop {
   name                     String
   status                   LoopStatus @default(ACTIVE)
 
-  targetCountries          String[]   @default(["India"])
+  targetCountries          String[]   @default([])
   targetLocations          String[]   @default([])
   targetJobTitles          String[]   @default([])
   excludedCompanies        String[]   @default([])
   includedCompanies        String[]   @default([])
   remotePreference         String?    @default("HYBRID_OR_REMOTE")
-  experienceLevel          String?    @default("MID_SENIOR")
-  employmentTypes          String[]   @default(["FULL_TIME"])
-  minimumCompensation      Int?       @default(0)
+  experienceLevel          String?
+  employmentTypes          String[]   @default([])
+  minimumCompensation      Int?
   maximumCompensation      Int?
-  targetTiers              String[]   @default(["S", "A", "B"])
+  targetTiers              String[]   @default([])
 
-  autoApplyEnabled         Boolean    @default(true)
-  recruiterOutreachEnabled  Boolean    @default(false)
+  autoApplyEnabled         Boolean    @default(false)
   dailyApplicationLimit    Int        @default(10)
   dailyDiscoveryLimit      Int        @default(50)
-  priorityStrategy         String     @default("MNC_FIRST")
+  priorityStrategy         String     @default("RELEVANCE")
 
   appliedCount             Int        @default(0)
   discoveredCount          Int        @default(0)

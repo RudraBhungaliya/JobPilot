@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Application, PIPELINE_STAGES, getTierColor, getTierLabel, sortByTier, getStatusLabel } from "../lib/mock-data";
+import { Application, PIPELINE_STAGES, getTierColor, getTierLabel, sortByTier, getStatusLabel } from "../lib/domain-types";
 import {
   MapPin,
   Clock,

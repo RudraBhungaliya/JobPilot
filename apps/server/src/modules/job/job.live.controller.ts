@@ -25,10 +25,10 @@ class JobLiveController {
                 }
             }
 
-            const enrichedJobs = jobs.map((job) => {
+            const enrichedJobs = jobs.map((job: any) => {
                 let matchScore = 80;
-                if (userSkills.length > 0) {
-                    const matchedTags = job.tags.filter((t) =>
+                if (userSkills.length > 0 && Array.isArray(job.tags)) {
+                    const matchedTags = job.tags.filter((t: string) =>
                         userSkills.some((us) => us.includes(t.toLowerCase()) || t.toLowerCase().includes(us))
                     );
                     matchScore = Math.min(99, Math.max(65, 65 + Math.round((matchedTags.length / Math.max(1, job.tags.length)) * 34)));

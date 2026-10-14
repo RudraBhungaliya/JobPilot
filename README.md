@@ -50,8 +50,8 @@ JobPilot is an end-to-end, production-grade autonomous job application engine. I
 
 3. **Database Migration & Generation**:
    ```bash
-   pnpm --filter @jobpilot/database prisma db push
-   pnpm --filter @jobpilot/database prisma generate
+   pnpm db:migrate:deploy
+   pnpm db:generate
    ```
 
 4. **Environment Variables**:
@@ -99,3 +99,14 @@ npx tsc --noEmit
 | `POST` | `/api/v1/agent/run/:threadId/resume` | Resumes an agent run after human action completion |
 | `GET`  | `/api/v1/applications` | Lists all applications with match scores, scorecard, and status |
 | `GET`  | `/api/v1/sources/jobs` | Queries aggregated job boards with location and keyword filtering |
+
+## Production database and health checks
+
+- Set `NODE_ENV=production`, a reachable managed PostgreSQL `DATABASE_URL`, and a unique random `JWT_SECRET` of at least 32 characters. The server rejects the checked-in development defaults in production.
+- Apply schema changes with `pnpm db:migrate:deploy` during the release. `pnpm db:push` is for local development and should not be used as the production migration process.
+- New databases can apply the initial migration directly. If a database already has this schema from `db push`, first compare it with `packages/database/prisma/schema.prisma`; baseline the initial migration with `prisma migrate resolve --applied 20261013000000_init` only after confirming the existing schema matches.
+- Use `GET /health/live` for process liveness and `GET /health/ready` for readiness (including PostgreSQL connectivity). `GET /health` also reports database latency, queue worker/scheduler state, uptime, and memory use.
+- The server writes structured Pino logs to stdout. Collect stdout/stderr and alert on readiness failures, queue error/retry volume, and sustained resource growth in the chosen hosting platform.
+- Human-intervention emails use Resend (`RESEND_API_KEY` and `RESEND_FROM_EMAIL` or `EMAIL_FROM`) or SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_FROM`). Configure one provider to receive application checkpoint alerts.
+
+JobPilot has no hosting provider or production database target configured in this repository. Deployment still requires choosing a host, provisioning PostgreSQL, setting secrets there, and adding the migration and readiness checks to that host's release process.

@@ -392,9 +392,10 @@ describe("CandidateMapper", () => {
     assert.ok(Number.isFinite(val) && val > 0, "hourly should be a positive number");
   });
 
-  it("should return Yes for authorized to work in India when country/nationality matches", () => {
+  it("should not infer work authorization from country or nationality", () => {
     const ans = mapper.resolve("workEligibilityIndia", "Are you authorized to work in India?", richContext);
-    assert.equal(ans.value, "Yes");
+    assert.equal(ans.value, "");
+    assert.equal(ans.source, "UNKNOWN");
   });
 
   it("should not invent values when context lacks data", () => {

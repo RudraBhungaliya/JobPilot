@@ -3,7 +3,7 @@ import logger from "../logger/logger.js";
 
 class GeminiProvider implements LLMProvider {
     private apiKey: string | null = null;
-    private model: string = "gemini-1.5-flash";
+    private model: string = "gemini-3.5-flash";
 
     constructor() {
         this.initialize();
@@ -11,7 +11,7 @@ class GeminiProvider implements LLMProvider {
 
     private initialize() {
         this.apiKey = process.env.GEMINI_API_KEY || null;
-        this.model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+        this.model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
         if (this.apiKey && this.apiKey !== "your_gemini_api_key_here") {
             logger.info(`[LLM Diagnostic] Provider: Gemini | Model: ${this.model} | Status: Configured`);
@@ -46,7 +46,7 @@ class GeminiProvider implements LLMProvider {
     async generate(prompt: string, options?: GenerateOptions): Promise<string> {
         const apiKey = this.apiKey || process.env.GEMINI_API_KEY;
         if (!apiKey || apiKey === "your_gemini_api_key_here") {
-            return this.fallbackExtraction(prompt);
+            throw new Error("Gemini provider is not configured.");
         }
 
         const model = process.env.GEMINI_MODEL || this.model;
@@ -74,9 +74,22 @@ class GeminiProvider implements LLMProvider {
             });
 
             if (!response.ok) {
-                const errText = await response.text();
-                logger.warn("Gemini API call returned non-200 status, using fallback extraction", { errorText: errText, status: response.status });
-                return this.fallbackExtraction(prompt);
+                logger.warn("Gemini API primary request failed", { status: response.status, model });
+                // Fallback to gemini-3.1-flash-lite if different from current
+                if (model !== "gemini-3.1-flash-lite") {
+                    const fallbackEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`;
+                    const fallbackRes = await fetch(fallbackEndpoint, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload),
+                    });
+                    if (fallbackRes.ok) {
+                        const fbData = (await fallbackRes.json()) as any;
+                        const fbText = fbData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                        if (fbText.trim()) return fbText.trim();
+                    }
+                }
+                throw new Error(`Gemini provider returned HTTP ${response.status}.`);
             }
 
             const data = (await response.json()) as {
@@ -89,10 +102,11 @@ class GeminiProvider implements LLMProvider {
 
             const candidate = data.candidates?.[0];
             const text = candidate?.content?.parts?.[0]?.text || "";
-            return text.trim() || this.fallbackExtraction(prompt);
+            if (!text.trim()) throw new Error("Gemini provider returned an empty response.");
+            return text.trim();
         } catch (error) {
             logger.error("Error invoking Gemini LLM API", { error });
-            return this.fallbackExtraction(prompt);
+            throw error;
         }
     }
 
@@ -117,37 +131,6 @@ class GeminiProvider implements LLMProvider {
         }
     }
 
-    private fallbackExtraction(prompt: string): string {
-        if (prompt.includes("firstName") || prompt.includes("Required JSON structure")) {
-            return JSON.stringify({
-                firstName: "Rudra",
-                lastName: "Bhungaliya",
-                headline: "Software Development Engineer II",
-                summary: "Full stack engineer specializing in distributed systems, high throughput backend microservices, TypeScript, Golang, and PostgreSQL.",
-                skills: [
-                    { name: "TypeScript", category: "technical" },
-                    { name: "Golang", category: "technical" },
-                    { name: "PostgreSQL", category: "technical" },
-                    { name: "Docker", category: "technical" },
-                    { name: "AWS", category: "technical" },
-                    { name: "Redis", category: "technical" },
-                    { name: "React", category: "technical" }
-                ],
-                experiences: [
-                    { company: "Tech Systems", title: "Software Engineer II", description: "Built scalable backend services and distributed transaction pipelines.", current: true }
-                ],
-                educations: [
-                    { institution: "University of Technology", degree: "Bachelor of Technology in Computer Science" }
-                ],
-                projects: [
-                    { title: "JobPilot", description: "Autonomous AI Job Application Agent & Live ATS Ingestion Engine", technologies: ["TypeScript", "Next.js", "PostgreSQL"] }
-                ],
-                certifications: [],
-                languages: [{ name: "English", proficiency: "fluent" }]
-            });
-        }
-        return "Not specified in candidate profile.";
-    }
 }
 
 export const geminiProvider = new GeminiProvider();

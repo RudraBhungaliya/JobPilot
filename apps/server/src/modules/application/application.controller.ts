@@ -306,34 +306,71 @@ class ApplicationController {
         req: Request,
         res: Response,
     ) {
-        const { keyword = "software engineer", location = "Bengaluru", limit = 5 } = req.body || {};
+        const { keyword, location, limit = 5 } = req.body || {};
+        if (typeof keyword !== "string" || !keyword.trim()) {
+            return res.status(400).json({ success: false, message: "A search keyword is required." });
+        }
+        if (location !== undefined && typeof location !== "string") {
+            return res.status(400).json({ success: false, message: "Location must be text when provided." });
+        }
+        const requestedLimit = Number(limit);
+        if (!Number.isInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 25) {
+            return res.status(400).json({ success: false, message: "Limit must be an integer between 1 and 25." });
+        }
         const { sourceService } = await import("../sources/index.js");
 
-        const jobs = await sourceService.search({ keyword, location });
-        const selectedJobs = jobs.slice(0, Number(limit) || 5);
+        const jobs = await sourceService.search({ keyword: keyword.trim(), location: location?.trim() || undefined });
+        const selectedJobs = jobs.slice(0, requestedLimit);
 
         const enqueued: any[] = [];
+        const failures: Array<{ url?: string; reason: string }> = [];
         for (const job of selectedJobs) {
             try {
+                const parsedUrl = new URL(job.url);
+                if (parsedUrl.protocol !== "https:" || !job.title?.trim() || !job.company?.trim()) {
+                    throw new Error("Source job is missing a verified HTTPS URL, title, or company.");
+                }
+                const { prisma } = await import("@jobpilot/database");
+                const savedJob = await prisma.$transaction(async (tx) => {
+                    const company = await tx.company.upsert({
+                        where: { userId_name: { userId: req.user.id, name: job.company } },
+                        update: {},
+                        create: { userId: req.user.id, name: job.company, domain: parsedUrl.hostname, website: `${parsedUrl.protocol}//${parsedUrl.host}` },
+                    });
+                    const existing = await tx.job.findFirst({ where: { userId: req.user.id, url: job.url } });
+                    if (existing) return existing;
+                    return tx.job.create({
+                        data: {
+                            userId: req.user.id,
+                            companyId: company.id,
+                            title: job.title,
+                            location: job.location || "",
+                            url: job.url,
+                            description: job.description || null,
+                            atsProvider: job.source,
+                        },
+                    });
+                });
                 const app = await applicationService.createApplication(req.user.id, {
-                    jobTitle: job.title,
-                    companyName: job.company,
-                    companyDomain: `${job.company.toLowerCase().replace(/\s+/g, "")}.com`,
-                    jobUrl: job.url,
-                    location: job.location || location,
-                    workMode: "Remote",
-                    atsProvider: "Greenhouse",
+                    jobId: savedJob.id,
                     status: "QUEUED",
                 });
-                enqueued.push(app);
-            } catch {
-                // Ignore duplicate ingest
+                const { default: applicationQueueService } = await import("../queue/application-queue.service.js");
+                const queueRecord = await applicationQueueService.enqueue({ applicationId: app.id, userId: req.user.id });
+                if (!queueRecord) throw new Error("Persistent application queue is unavailable.");
+                const { default: queueWorker } = await import("../queue/queue.worker.js");
+                void queueWorker.processBatch();
+                enqueued.push({ applicationId: app.id, jobId: savedJob.id, title: job.title, company: job.company, queueJobId: queueRecord.id });
+            } catch (error) {
+                failures.push({ url: job.url, reason: error instanceof Error ? error.message : String(error) });
             }
         }
 
-        return res.status(200).json({
-            success: true,
-            enqueuedCount: Math.max(enqueued.length, selectedJobs.length),
+        return res.status(enqueued.length > 0 ? 202 : 422).json({
+            success: enqueued.length > 0,
+            enqueuedCount: enqueued.length,
+            discoveredCount: selectedJobs.length,
+            failures,
             data: enqueued,
         });
     }

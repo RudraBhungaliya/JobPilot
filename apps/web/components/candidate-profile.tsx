@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { CandidateProfile } from "../lib/mock-data";
+import { CandidateProfile } from "../lib/domain-types";
 import {
   User,
   ShieldCheck,

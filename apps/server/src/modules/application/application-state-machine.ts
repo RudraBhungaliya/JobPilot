@@ -33,7 +33,7 @@ const VALID_TRANSITIONS: Record<ApplicationStatus, ApplicationStatus[]> = {
     INTERVIEW: ["OFFER", "REJECTED", "ARCHIVED"],
     OFFER: ["ARCHIVED"],
     ARCHIVED: ["SAVED", "QUEUED"],
-    RUNNING: ["SUBMITTED", "WAITING_FOR_USER", "FAILED", "APPLIED"],
+    RUNNING: ["SUBMITTED", "WAITING_FOR_USER", "FAILED", "APPLIED", "QUEUED", "RETRYING", "READY_TO_SUBMIT", "SUBMITTING"],
     SKIPPED: ["ARCHIVED", "QUEUED"],
 };
 
@@ -98,6 +98,52 @@ export class ApplicationStateMachine {
                 },
             }),
         ]);
+
+        // 1b. Synchronize persistent ApplicationQueue record to prevent state drift
+        try {
+            if (req.newStatus === "SUBMITTED" || req.newStatus === "APPLIED" || req.newStatus === "OFFER") {
+                await prisma.applicationQueue.updateMany({
+                    where: { applicationId: req.applicationId },
+                    data: {
+                        status: "COMPLETED",
+                        completedAt: new Date(),
+                        lockedAt: null,
+                        lockedBy: null,
+                    },
+                });
+            } else if (req.newStatus === "FAILED" || req.newStatus === "REJECTED") {
+                await prisma.applicationQueue.updateMany({
+                    where: { applicationId: req.applicationId },
+                    data: {
+                        status: "FAILED",
+                        lastError: req.reason || "Application execution failed",
+                        lockedAt: null,
+                        lockedBy: null,
+                    },
+                });
+            } else if (req.newStatus === "WAITING_FOR_USER" || req.newStatus === "REVIEW_REQUIRED") {
+                await prisma.applicationQueue.updateMany({
+                    where: { applicationId: req.applicationId },
+                    data: {
+                        status: "WAITING_FOR_USER",
+                        lastError: req.reason || "Human intervention required",
+                        lockedAt: null,
+                        lockedBy: null,
+                    },
+                });
+            } else if (req.newStatus === "QUEUED" || req.newStatus === "RESUMED") {
+                await prisma.applicationQueue.updateMany({
+                    where: { applicationId: req.applicationId },
+                    data: {
+                        status: "QUEUED",
+                        lockedAt: null,
+                        lockedBy: null,
+                    },
+                });
+            }
+        } catch {
+            // Queue record sync non-blocking
+        }
 
         // 2. Realtime SSE event emission to connected web clients
         try {

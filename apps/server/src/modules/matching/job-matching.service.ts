@@ -18,11 +18,15 @@ export class JobMatchingService {
   async getRealCandidateContext(userId: string, resumeId?: string | null): Promise<CandidateContext> {
     try {
       const context = await candidateService.buildContext(userId, resumeId || undefined);
+      if (!context.currentTitle || context.yearsOfExperience == null || !Array.isArray(context.skills) || context.skills.length === 0) {
+        throw new Error("Candidate profile needs a current title, experience duration, and at least one saved skill before job matching.");
+      }
 
       // If resumeId is supplied, ensure the resume's parsed skills & extracted text are included
       if (resumeId) {
         try {
           const resume = await resumeService.getResume(resumeId);
+          if (resume && resume.userId !== userId) throw new Error("Resume does not belong to this candidate.");
           if (resume?.extractedText) {
             context.resumeText = resume.extractedText;
             const parsed = (await import("../resume/resume.parser.js")).default.parse(resume.extractedText);
@@ -34,22 +38,19 @@ export class JobMatchingService {
             context.skills = combined.map((name) => ({ name }));
           }
         } catch (resErr) {
-          logger.debug({ resErr }, "JobMatchingService: could not load specific resume");
+          logger.warn({ error: resErr instanceof Error ? resErr.message : String(resErr) }, "Could not load the selected resume for matching.");
+          throw resErr;
         }
       }
 
       return context;
     } catch (err) {
-      logger.warn("JobMatchingService: failed to build complete candidate context, using empty fallback context", {
+      logger.warn("JobMatchingService: failed to build candidate context", {
         userId,
         error: err instanceof Error ? err.message : String(err),
       });
 
-      return {
-        skills: [],
-        experiences: [],
-        educations: [],
-      };
+      throw err;
     }
   }
 
@@ -60,6 +61,8 @@ export class JobMatchingService {
     candidateContext: CandidateContext,
     job: {
       id?: string;
+      externalId?: string;
+      source?: string;
       title: string;
       company: string;
       description?: string | null;
@@ -78,6 +81,8 @@ export class JobMatchingService {
    */
   matchAndRankJobs<T extends {
     id?: string;
+    externalId?: string;
+    source?: string;
     title: string;
     company: string;
     description?: string | null;
@@ -179,7 +184,7 @@ export class JobMatchingService {
           tags: Array.from(new Set([
             ...dbJob.tags,
             `score:${match.scorecard.matchScore}`,
-            `tier:${match.scorecard.companyTier}`,
+            ...(match.scorecard.companyTier ? [`tier:${match.scorecard.companyTier}`] : []),
             `rank:${match.rank}`,
           ])),
         },

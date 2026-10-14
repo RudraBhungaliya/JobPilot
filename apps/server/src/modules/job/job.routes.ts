@@ -1,7 +1,6 @@
 import { Router } from "express";
 import authMiddlewares from "../auth/auth.middleware.js";
 import jobController from "./job.controller.js";
-import jobLiveController from "./job.live.controller.js";
 
 const router = Router();
 
@@ -9,13 +8,8 @@ const router = Router();
 // Keep them unauthenticated so the web client can show real-time feeds without sign-in block.
 router.get(
     "/live",
-    (req, res, next) => {
-        const authHeader = req.headers.authorization;
-        if (authHeader) {
-            return authMiddlewares(req, res, () => jobController.liveJobs(req, res));
-        }
-        return jobController.liveJobs(req, res);
-    }
+    authMiddlewares,
+    jobController.liveJobs.bind(jobController)
 );
 router.get(
     "/discover",
@@ -23,6 +17,7 @@ router.get(
 );
 
 router.post("/", authMiddlewares, jobController.create.bind(jobController));
+router.post("/ingest", authMiddlewares, jobController.ingest.bind(jobController));
 router.get("/", authMiddlewares, jobController.getAll.bind(jobController));
 router.get("/:id", authMiddlewares, jobController.getOne.bind(jobController));
 router.patch("/:id", authMiddlewares, jobController.update.bind(jobController));

@@ -9,7 +9,7 @@ class DiscoverNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        const queries: string[] = state.query ? [state.query] : [];
+        const queries: string[] = state.query?.trim() ? [state.query.trim()] : [];
         let remoteOnly = false;
         const candidateSkills: string[] = [];
 
@@ -47,7 +47,7 @@ class DiscoverNode {
                 } else if (candidateSkills.length > 0) {
                     queries.push(`${candidateSkills[0]} developer`);
                 } else {
-                    queries.push("software engineer");
+                    throw new Error("Add a job search query or candidate role/skills before discovery.");
                 }
             }
 
@@ -59,11 +59,8 @@ class DiscoverNode {
                     queries.push(combined);
                 }
             }
-        } catch {
-            // Gracefully proceed with base query
-            if (queries.length === 0) {
-                queries.push(state.query || "software engineer");
-            }
+        } catch (error) {
+            if (queries.length === 0 || !state.query?.trim()) throw error;
         }
 
         // 2. Perform live search across queries
@@ -75,6 +72,9 @@ class DiscoverNode {
                 }),
             ),
         );
+        if (searchResults.every((result) => result.status === "rejected")) {
+            throw new Error("All configured job sources failed to return results.");
+        }
 
         const seenUrls = new Set<string>();
         const allJobs = [];
@@ -101,24 +101,10 @@ class DiscoverNode {
         }
 
         // 3. Filter out jobs the user already has a SUBMITTED application for
-        const filtered = await Promise.all(
-            allJobs.map(async (job) => {
-                try {
-                    const existing = await applicationRepository.findByUserAndJob(
-                        state.userId,
-                        job.id,
-                    );
-
-                    if (existing && existing.status === "SUBMITTED") {
-                        return null;
-                    }
-                } catch {
-                    // Ignore DB lookup error in unit/mocked runs
-                }
-
-                return job;
-            }),
-        );
+        const filtered = await Promise.all(allJobs.map(async (job) => {
+            const existing = await applicationRepository.findByUserAndJob(state.userId, job.id);
+            return existing && existing.status === "SUBMITTED" ? null : job;
+        }));
 
         const jobs = filtered.filter((j): j is NonNullable<typeof j> => j !== null);
 

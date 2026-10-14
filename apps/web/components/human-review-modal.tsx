@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Application, QuestionAnswer } from "../lib/mock-data";
+import { Application, QuestionAnswer } from "../lib/domain-types";
 import {
   X,
   ShieldCheck,

@@ -92,7 +92,9 @@ export class LeverDomAdapter implements DomAtsAdapter {
         try {
           const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
           if (/thanks for applying|thank you.*apply|application.*submitted|we have received your application/i.test(bodyText) || /apply\/thanks/.test(page.url())) {
-            return { success: true, requiresBrowserFallback: false, confirmationId: `lever-dom-${Date.now()}` };
+            const { default: verificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+            const verification = await verificationTool.verify(page);
+            if (verification.verified) return { success: true, requiresBrowserFallback: false };
           }
         } catch {}
       } else {
@@ -103,7 +105,9 @@ export class LeverDomAdapter implements DomAtsAdapter {
     try {
       const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
       if (/thanks for applying|thank you.*apply|application.*submitted/i.test(bodyText) || /apply\/thanks/.test(page.url())) {
-        return { success: true, requiresBrowserFallback: false, confirmationId: `lever-dom-${Date.now()}` };
+        const { default: verificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+        const verification = await verificationTool.verify(page);
+        if (verification.verified) return { success: true, requiresBrowserFallback: false };
       }
     } catch {}
 

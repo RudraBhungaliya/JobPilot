@@ -7,11 +7,7 @@ import {
   getTierColor,
   getTierLabel,
   TIER_PRIORITY,
-  inferCompanyTier,
-  calculateSelectionChance,
-  CandidateProfile,
-  INITIAL_CANDIDATE_PROFILE,
-} from "../lib/mock-data";
+} from "../lib/domain-types";
 import {
   Compass,
   Search,
@@ -33,7 +29,6 @@ import {
 
 interface JobDiscoveryProps {
   jobs: DiscoveredJob[];
-  candidateProfile?: CandidateProfile;
   onRefresh: (keyword: string, location: string) => Promise<void>;
   onDispatchApply: (job: DiscoveredJob) => void;
   onSaveJob: (job: DiscoveredJob) => void;
@@ -41,7 +36,6 @@ interface JobDiscoveryProps {
 
 export function JobDiscovery({
   jobs,
-  candidateProfile = INITIAL_CANDIDATE_PROFILE,
   onRefresh,
   onDispatchApply,
   onSaveJob,
@@ -76,18 +70,7 @@ export function JobDiscovery({
   }, []);
 
   // Compute selection chance deterministically for each job
-  const enrichedJobs = useMemo(() => {
-    return jobs.map((job) => {
-      const tier = job.companyTier || inferCompanyTier(job.companyName, job.companyDomain);
-      const chance = job.selectionChance || calculateSelectionChance({ ...job, companyTier: tier }, candidateProfile);
-      return {
-        ...job,
-        companyTier: tier,
-        selectionChance: chance,
-        matchScore: chance.overallPercentage,
-      };
-    });
-  }, [jobs, candidateProfile]);
+  const enrichedJobs = jobs;
 
   // Filter & sort jobs
   const processedJobs = useMemo(() => {
@@ -125,7 +108,8 @@ export function JobDiscovery({
         return (b.selectionChance?.overallPercentage ?? 0) - (a.selectionChance?.overallPercentage ?? 0);
       }
       if (sortBy === "TIER") {
-        return TIER_PRIORITY[a.companyTier!] - TIER_PRIORITY[b.companyTier!];
+        if (!a.companyTier || !b.companyTier) return a.companyTier ? -1 : b.companyTier ? 1 : 0;
+        return TIER_PRIORITY[a.companyTier] - TIER_PRIORITY[b.companyTier];
       }
       // NEWEST
       return 0;
@@ -133,9 +117,10 @@ export function JobDiscovery({
   }, [enrichedJobs, query, location, workMode, tierFilter, chanceFilter, sortBy]);
 
   const tierCounts = useMemo(() => {
-    const counts: Record<CompanyTier, number> = { S: 0, A: 0, B: 0, C: 0 };
+    const counts: Partial<Record<CompanyTier, number>> = {};
     enrichedJobs.forEach((job) => {
-      const tier = job.companyTier || "C";
+      const tier = job.companyTier;
+      if (!tier) return;
       counts[tier] = (counts[tier] || 0) + 1;
     });
     return counts;
@@ -421,10 +406,10 @@ export function JobDiscovery({
       {/* Openings Cards List with Selection Probability Engine */}
       <div className="space-y-3.5">
         {processedJobs.map((job) => {
-          const tier = job.companyTier || "C";
-          const tierColors = getTierColor(tier);
-          const chance = job.selectionChance || calculateSelectionChance(job, candidateProfile);
-          const chanceBadge = getChanceBadge(chance.overallPercentage);
+          const tier = job.companyTier;
+          const tierColors = tier ? getTierColor(tier) : null;
+          const chance = job.selectionChance;
+          const chanceBadge = chance ? getChanceBadge(chance.overallPercentage) : null;
           const isExpanded = expandedJobId === job.id;
           const isSaved = savedJobIds.has(job.id);
 
@@ -439,7 +424,7 @@ export function JobDiscovery({
                   <div className="flex gap-3.5 items-start">
                     {/* Company Logo Icon */}
                     <div
-                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border font-mono text-sm font-bold text-zinc-100 ${tierColors.bg} ${tierColors.border} ${tierColors.glow}`}
+                      className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border font-mono text-sm font-bold text-zinc-100 ${tierColors?.bg || "bg-zinc-500/10"} ${tierColors?.border || "border-zinc-500/20"} ${tierColors?.glow || ""}`}
                     >
                       {job.logoText}
                     </div>
@@ -451,11 +436,11 @@ export function JobDiscovery({
                           {job.jobTitle}
                         </h2>
                         <span className="text-xs text-zinc-400">&bull; {job.companyName}</span>
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-mono font-bold border ${tierColors.bg} ${tierColors.text} ${tierColors.border}`}
+                        {tier && <span
+                          className={`rounded-md px-2 py-0.5 text-[10px] font-mono font-bold border ${tierColors?.bg} ${tierColors?.text} ${tierColors?.border}`}
                         >
-                          {tier}-Tier &middot; {tier === "S" ? "Big Tech MNC" : tier === "A" ? "Major MNC" : tier === "B" ? "Scaleup" : "Startup"}
-                        </span>
+                          {getTierLabel(tier)}
+                        </span>}
                         <span className="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
                           {job.atsProvider} Verified
                         </span>
@@ -486,6 +471,8 @@ export function JobDiscovery({
 
                   {/* Selection Chance Gauge & Shortlist Odds */}
                   <div className="flex flex-col items-start lg:items-end gap-1.5 shrink-0 bg-[#090a0f] p-2.5 rounded-xl border border-white/[0.06]">
+                    {!chance && <span className="text-xs text-zinc-500">Match evaluation unavailable</span>}
+                    {chance && chanceBadge && <>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-mono uppercase text-zinc-500 font-semibold">Selection Odds:</span>
                       <div
@@ -515,6 +502,7 @@ export function JobDiscovery({
                         style={{ width: `${chance.overallPercentage}%` }}
                       />
                     </div>
+                    </>}
                   </div>
                 </div>
 
@@ -527,7 +515,7 @@ export function JobDiscovery({
                   {/* Skills Alignment Tags */}
                   <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                     <span className="text-[10px] font-mono text-zinc-500 uppercase mr-1">Matched Skills:</span>
-                    {chance.matchedSkills.map((skill) => (
+                    {(chance?.matchedSkills || []).map((skill) => (
                       <span
                         key={skill}
                         className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 font-mono text-[10px] font-medium text-emerald-300"
@@ -537,7 +525,7 @@ export function JobDiscovery({
                       </span>
                     ))}
 
-                    {chance.missingOrBonusSkills.slice(0, 3).map((skill) => (
+                    {(chance?.missingOrBonusSkills || []).slice(0, 3).map((skill) => (
                       <span
                         key={skill}
                         className="inline-flex items-center gap-1 rounded-md bg-[#161924] border border-white/[0.06] px-2 py-0.5 font-mono text-[10px] text-zinc-400"
@@ -549,7 +537,7 @@ export function JobDiscovery({
                 </div>
 
                 {/* Expanded Deep Dive Fit Details (Toggleable) */}
-                {isExpanded && (
+                {isExpanded && chance && (
                   <div className="mt-2 rounded-xl border border-white/[0.08] bg-[#0c0e15] p-3.5 space-y-2.5 text-xs text-zinc-300">
                     <div className="flex items-center gap-2 font-semibold text-zinc-200">
                       <ShieldCheck size={14} className="text-blue-400" />
@@ -565,7 +553,7 @@ export function JobDiscovery({
                       <div className="bg-[#10121a] p-2.5 rounded-lg border border-white/[0.05]">
                         <span className="text-[10px] font-mono text-zinc-500 uppercase block">Experience & Seniority</span>
                         <span className="font-mono text-sm font-bold text-blue-400">{chance.experienceFitScore}% Fit</span>
-                        <p className="text-[10px] text-zinc-400 mt-0.5">{candidateProfile.yearsOfExperience} yrs satisfies role requirements</p>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Experience fit from candidate and job records</p>
                       </div>
                       <div className="bg-[#10121a] p-2.5 rounded-lg border border-white/[0.05]">
                         <span className="text-[10px] font-mono text-zinc-500 uppercase block">Work Mode & Location</span>

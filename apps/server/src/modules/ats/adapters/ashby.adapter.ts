@@ -51,14 +51,14 @@ export class AshbyAdapter extends BaseATSAdapter {
 
         const profile = context.candidateProfile || user?.profile;
         const candidateData = {
-            name: profile ? (`${profile.firstName || ""} ${profile.lastName || ""}`.trim() || profile.name || "Candidate Applicant") : "Candidate Applicant",
-            firstName: profile?.firstName || "Candidate",
-            lastName: profile?.lastName || "Applicant",
-            email: context.candidateProfile?.email || profile?.email || user?.email || "candidate@jobpilot.ai",
-            phone: profile?.phone || "+91 9876543210",
-            location: profile?.city ? `${profile.city}, India` : (profile?.location || "Bengaluru, India"),
-            linkedin: profile?.linkedin || "https://linkedin.com/in/candidate",
-            github: profile?.github || "https://github.com/candidate",
+            name: profile ? `${profile.firstName || ""} ${profile.lastName || ""}`.trim() : "",
+            firstName: profile?.firstName || "",
+            lastName: profile?.lastName || "",
+            email: context.candidateProfile?.email || profile?.email || user?.email || "",
+            phone: profile?.phone || "",
+            location: profile?.city ? `${profile.city}, India` : (profile?.location || ""),
+            linkedin: profile?.linkedin || "",
+            github: profile?.github || "",
             portfolio: profile?.portfolio || "",
         };
 
@@ -158,7 +158,7 @@ export class AshbyAdapter extends BaseATSAdapter {
             const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
             const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
             const confId = confirmationMatch ? confirmationMatch[1] : (
-                verification.confirmationUrl ? `REF-${Buffer.from(verification.confirmationUrl).toString("base64url").slice(0, 12)}` : undefined
+                undefined
             );
 
             return {

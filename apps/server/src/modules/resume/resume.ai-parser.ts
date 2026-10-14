@@ -155,24 +155,8 @@ Required JSON structure:
         try {
             const parsed = JSON.parse(cleaned);
             return ParsedResumeSchema.parse(parsed);
-        } catch {
-            return {
-                firstName: "Rudra",
-                lastName: "Bhungaliya",
-                headline: "Software Development Engineer II",
-                summary: "Full stack engineer specializing in distributed systems and backend architecture.",
-                skills: [
-                    { name: "TypeScript", category: "technical" },
-                    { name: "React", category: "technical" },
-                    { name: "Golang", category: "technical" },
-                    { name: "PostgreSQL", category: "technical" }
-                ],
-                experiences: [],
-                educations: [],
-                projects: [],
-                certifications: [],
-                languages: [{ name: "English", proficiency: "fluent" }]
-            };
+        } catch (error) {
+            throw new Error("Resume AI returned invalid structured data.", { cause: error });
         }
     }
 }

@@ -78,4 +78,4 @@ export default async function authMiddleware(
         role: "USER",
     };
     next();
-}
+}

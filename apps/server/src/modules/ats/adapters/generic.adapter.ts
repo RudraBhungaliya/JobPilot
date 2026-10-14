@@ -33,16 +33,23 @@ export class GenericATSAdapter extends BaseATSAdapter {
         });
 
         const profile = user?.profile;
+        if (!user || !profile?.firstName || !profile?.lastName || !user.email || !profile.phone) {
+            return {
+                success: false,
+                status: "FAILED",
+                failureReason: "A saved candidate name, account email, and phone number are required for form filling.",
+            };
+        }
         const candidateData = {
-            name: profile ? `${profile.firstName} ${profile.lastName}`.trim() : "Candidate Applicant",
-            firstName: profile?.firstName || "Candidate",
-            lastName: profile?.lastName || "Applicant",
-            email: user?.email || "candidate@jobpilot.ai",
-            phone: profile?.phone || "+91 9876543210",
-            location: profile?.city ? `${profile.city}, India` : "Bengaluru, India",
-            linkedin: profile?.linkedin || "https://linkedin.com/in/candidate",
-            github: profile?.github || "https://github.com/candidate",
-            portfolio: profile?.portfolio || "",
+            name: `${profile.firstName} ${profile.lastName}`.trim(),
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            email: profile.email || user.email,
+            phone: profile.phone,
+            location: [profile.city, profile.state, profile.country].filter(Boolean).join(", "),
+            linkedin: profile.linkedin || "",
+            github: profile.github || "",
+            portfolio: profile.portfolio || "",
         };
 
         const fields = await this.discoverFormFields(page);
@@ -72,9 +79,8 @@ export class GenericATSAdapter extends BaseATSAdapter {
                 } else if (/github/i.test(label)) {
                     await locator.fill(candidateData.github);
                 } else if (field.type === "checkbox" || field.type === "radio") {
-                    if (/authorized|consent|agree/i.test(label)) {
-                        await locator.check().catch(() => null);
-                    }
+                    // Consent and authorization require an explicit saved answer or user action.
+                    continue;
                 } else if (field.type === "textarea" || field.type === "text") {
                     const answer = tailoredAnswers[field.label] || tailoredAnswers[field.name];
                     if (answer) {
@@ -97,9 +103,10 @@ export class GenericATSAdapter extends BaseATSAdapter {
         }
 
         const submitBtn = page.locator('button[type="submit"], input[type="submit"], button:has-text("Submit"), button:has-text("Apply")').first();
-        if (await submitBtn.isVisible({ timeout: 3000 })) {
-            await submitBtn.click().catch(() => null);
+        if (!(await submitBtn.isVisible({ timeout: 3000 }))) {
+            return { success: false, status: "FAILED", failureReason: "No supported submit control was found." };
         }
+        await submitBtn.click();
 
         await page.waitForTimeout(3000);
         const { default: submissionVerificationTool } = await import("../../agent/tools/submission-verification.tool.js");
@@ -109,7 +116,7 @@ export class GenericATSAdapter extends BaseATSAdapter {
             const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
             const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
             const confId = confirmationMatch ? confirmationMatch[1] : (
-                verification.confirmationUrl ? `REF-${Buffer.from(verification.confirmationUrl).toString("base64url").slice(0, 12)}` : undefined
+                undefined
             );
 
             return {

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-
-const BACKEND_API_URL = process.env.JOBPILOT_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { getBackendApiUrl, getBackendHeaders } from "@/lib/api-config";
 
 export async function POST(
   req: Request,
@@ -9,42 +8,20 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
-    const authHeader = req.headers.get("authorization") || "";
+    const backendUrl = getBackendApiUrl();
 
-    // Forward to backend server if running
-    try {
-      const backendRes = await fetch(`${BACKEND_API_URL}/api/v1/applications/${id}/resume`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-          ...(authHeader ? { "Authorization": authHeader } : {}),
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(4000),
-      });
-
-      if (backendRes.ok) {
-        const json = await backendRes.json();
-        return NextResponse.json(json);
-      }
-    } catch {
-      // Standalone Next.js fallback
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Application resumed.",
-      data: {
-        applicationId: id,
-        status: "RESUMED",
-        updatedAt: new Date().toISOString(),
-      },
+    const backendRes = await fetch(`${backendUrl}/api/v1/applications/${id}/resume`, {
+      method: "POST",
+      headers: getBackendHeaders(req, { "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
     });
+    const json = await backendRes.json();
+    return NextResponse.json(json, { status: backendRes.status });
   } catch (err: any) {
     return NextResponse.json(
-      { success: false, message: err.message || "Failed to resume application." },
-      { status: 400 }
+      { success: false, message: err.message || "Application service is unavailable." },
+      { status: 502 }
     );
   }
 }

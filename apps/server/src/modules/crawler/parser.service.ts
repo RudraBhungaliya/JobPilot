@@ -80,14 +80,7 @@ class ParserService {
         job: RawJob,
     ): Promise<ParsedJob> {
         if (!job.html) {
-            return {
-                title: "Unknown Title",
-                company: "Unknown Company",
-                location: "Remote / Unknown",
-                description: "",
-                url: job.url,
-                platform: job.platform,
-            };
+            throw new Error("The job page has no readable HTML content.");
         }
 
         const page = await browserService.newPage();
@@ -118,9 +111,9 @@ class ParserService {
                 return "";
             };
 
-            const title = await extract(selectors.title) || "Unknown Title";
-            let company = await extract(selectors.company) || "Unknown Company";
-            const location = await extract(selectors.location) || "Remote / Unknown";
+            const title = await extract(selectors.title);
+            let company = await extract(selectors.company);
+            const location = await extract(selectors.location);
             const description = await extract(selectors.description) || "";
 
             if (company.includes("|") || company.includes("-")) {
@@ -130,6 +123,7 @@ class ParserService {
                 }
             }
 
+            if (!title || !company) throw new Error("The job page did not expose a title and company.");
             return {
                 title,
                 company,
@@ -139,15 +133,7 @@ class ParserService {
                 platform: job.platform,
             };
         } catch (error) {
-            console.error(`ParserService failed to parse job at ${job.url}:`, error);
-            return {
-                title: "Unknown Title",
-                company: "Unknown Company",
-                location: "Remote / Unknown",
-                description: "",
-                url: job.url,
-                platform: job.platform,
-            };
+            throw error;
         } finally {
             await page.close();
         }

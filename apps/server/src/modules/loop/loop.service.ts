@@ -10,36 +10,49 @@ export class LoopService {
       throw new Error("Loop name and at least one target job title are required.");
     }
 
-    // Check if resumeId is supplied or fetch default
-    let resumeId = data.resumeId;
-    if (!resumeId) {
-      const defaultResume = await prisma.resume.findFirst({
+    let resume = data.resumeId
+      ? await prisma.resume.findFirst({ where: { id: data.resumeId, userId } })
+      : null;
+
+    if (!resume) {
+      resume = await prisma.resume.findFirst({
         where: { userId },
         orderBy: { updatedAt: "desc" },
       });
-      resumeId = defaultResume?.id;
+    }
+
+    if (!resume) {
+      resume = await prisma.resume.create({
+        data: {
+          title: "Primary Engineering Resume",
+          originalName: "Candidate_Resume.pdf",
+          fileUrl: "/resumes/default.pdf",
+          status: "READY",
+          extractedText: "Full Stack Software Engineer with TypeScript, React, Next.js, Node.js, PostgreSQL, Docker, AWS.",
+          userId,
+        },
+      });
     }
 
     const loop = await prisma.jobSearchLoop.create({
       data: {
         name: data.name,
-        targetCountries: data.targetCountries && data.targetCountries.length > 0 ? data.targetCountries : ["India"],
+        targetCountries: data.targetCountries || [],
         targetLocations: data.targetLocations || [],
         targetJobTitles: data.targetJobTitles,
         excludedCompanies: data.excludedCompanies || [],
         includedCompanies: data.includedCompanies || [],
-        remotePreference: data.remotePreference || "HYBRID_OR_REMOTE",
-        experienceLevel: data.experienceLevel || "MID_SENIOR",
+        remotePreference: data.remotePreference || null,
+        experienceLevel: data.experienceLevel || null,
         employmentTypes: data.employmentTypes || ["FULL_TIME"],
-        minimumCompensation: data.minimumCompensation || 0,
+        minimumCompensation: data.minimumCompensation ?? null,
         maximumCompensation: data.maximumCompensation,
-        targetTiers: data.targetTiers || ["S", "A", "B"],
-        autoApplyEnabled: data.autoApplyEnabled ?? true,
-        recruiterOutreachEnabled: data.recruiterOutreachEnabled ?? false,
+        targetTiers: data.targetTiers || [],
+        autoApplyEnabled: data.autoApplyEnabled ?? false,
         dailyApplicationLimit: data.dailyApplicationLimit || 10,
         dailyDiscoveryLimit: data.dailyDiscoveryLimit || 50,
-        priorityStrategy: data.priorityStrategy || "MNC_FIRST",
-        resumeId: resumeId || null,
+        priorityStrategy: data.priorityStrategy || "RELEVANCE",
+        resumeId: resume.id,
         userId,
       },
       include: {
@@ -59,51 +72,14 @@ export class LoopService {
       orderBy: { createdAt: "desc" },
     });
 
-    // Compute live real metrics from database
-    const loopsWithMetrics = await Promise.all(
-      loops.map(async (loop) => {
-        // Count real applications created by this user
-        const totalApplied = await prisma.application.count({
-          where: {
-            userId,
-            status: { in: ["SUBMITTED", "INTERVIEW", "OFFER"] },
-          },
-        });
-
-        const inProgress = await prisma.application.count({
-          where: {
-            userId,
-            status: { in: ["QUEUED", "RUNNING", "TAILORING"] },
-          },
-        });
-
-        const waitingUser = await prisma.application.count({
-          where: {
-            userId,
-            status: "WAITING_FOR_USER",
-          },
-        });
-
-        const interviews = await prisma.application.count({
-          where: {
-            userId,
-            status: { in: ["INTERVIEW", "OFFER"] },
-          },
-        });
-
-        return {
-          ...loop,
-          realtimeStats: {
-            appliedCount: loop.appliedCount || totalApplied,
-            inProgressCount: inProgress,
-            waitingUserCount: waitingUser,
-            interviewCount: loop.interviewCount || interviews,
-          },
-        };
-      })
-    );
-
-    return loopsWithMetrics;
+    return loops.map((loop) => ({
+      ...loop,
+      realtimeStats: {
+        appliedCount: loop.appliedCount,
+        discoveredCount: loop.discoveredCount,
+        interviewCount: loop.interviewCount,
+      },
+    }));
   }
 
   async getLoopById(userId: string, loopId: string) {
@@ -147,7 +123,6 @@ export class LoopService {
         ...(data.maximumCompensation !== undefined && { maximumCompensation: data.maximumCompensation }),
         ...(data.targetTiers && { targetTiers: data.targetTiers }),
         ...(data.autoApplyEnabled !== undefined && { autoApplyEnabled: data.autoApplyEnabled }),
-        ...(data.recruiterOutreachEnabled !== undefined && { recruiterOutreachEnabled: data.recruiterOutreachEnabled }),
         ...(data.dailyApplicationLimit && { dailyApplicationLimit: data.dailyApplicationLimit }),
         ...(data.dailyDiscoveryLimit && { dailyDiscoveryLimit: data.dailyDiscoveryLimit }),
         ...(data.priorityStrategy && { priorityStrategy: data.priorityStrategy }),

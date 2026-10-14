@@ -23,6 +23,10 @@ import crawlerRoutes from "./modules/crawler/crawler.routes.js";
 import sourceBootstrap from "./modules/sources/source.bootstrap.js";
 import domAdapterBootstrap from "./modules/browser/dom-adapter.bootstrap.js";
 import applyBootstrap from "./modules/application/adapters/apply.bootstrap.js";
+import aiRoutes from "./modules/ai/index.js";
+import { analyticsRouter } from "./modules/analytics/index.js";
+import healthRoutes from "./modules/health/health.routes.js";
+import { getEnv } from "./config/env.js";
 
 sourceBootstrap.initialize();
 domAdapterBootstrap.initialize();
@@ -35,12 +39,14 @@ if (process.env.NODE_ENV !== "test") {
 
 const app = express();
 
-app.use(cors());
+const corsOrigins = getEnv().CORS_ORIGINS?.split(",").map((origin) => origin.trim()).filter(Boolean)
+    ?? ["http://localhost:3000"];
+app.use(cors({ origin: corsOrigins, credentials: true }));
 app.use(helmet());
 app.use(compression());
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 app.use("/api/v1", routes);
 app.use("/api/v1/auth", authRoutes);
@@ -54,10 +60,14 @@ app.use("/api/v1/applications", applicationRoutes);
 app.use("/api/v1/agent", agentRoutes);
 app.use("/api/v1/queue", queueRoutes);
 app.use("/api/v1/loops", loopRoutes);
+app.use("/api/v1/ai", aiRoutes);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/audit", auditRouter);
 app.use("/api/v1/events", eventsRouter);
 app.use("/api/v1/crawler", crawlerRoutes);
+app.use("/api/v1/analytics", analyticsRouter);
+app.use("/api/v1/health", healthRoutes);
+app.use("/health", healthRoutes);
 
 
 app.get("/", (req, res) => {

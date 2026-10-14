@@ -1,4 +1,4 @@
-import { geminiProvider } from "../../core/llm/gemini.provider.js";
+import providerFactory from "../../core/llm/provider.factory.js";
 import { prisma } from "@jobpilot/database";
 
 export interface TailoringInput {
@@ -36,9 +36,7 @@ export class TailoringService {
             include: { profile: true },
         });
 
-        if (!user) {
-            throw new Error(`User ${input.userId} not found.`);
-        }
+        if (!user) throw new Error("Candidate account was not found.");
 
         const profile = user.profile;
 
@@ -48,12 +46,13 @@ export class TailoringService {
             const resume = await prisma.resume.findUnique({
                 where: { id: input.resumeId },
             });
+            if (resume && resume.userId !== input.userId) throw new Error("The selected resume does not belong to this candidate.");
             if (resume?.extractedText) {
                 resumeText = resume.extractedText;
             }
         }
 
-        if (!resumeText) {
+        if (!resumeText && !input.resumeId) {
             const defaultResume = await prisma.resume.findFirst({
                 where: { userId: input.userId },
                 orderBy: { updatedAt: "desc" },
@@ -64,30 +63,31 @@ export class TailoringService {
         }
 
         // Build candidate context
-        const candidateSkills: string[] = (profile as any)?.skills || ["TypeScript", "JavaScript", "React", "Node.js", "PostgreSQL"];
+        const candidateSkills: string[] = Array.isArray((profile as any)?.skills)
+            ? (profile as any).skills.filter((skill: unknown): skill is string => typeof skill === "string" && skill.trim().length > 0)
+            : [];
+        if (!profile || !resumeText) throw new Error("A saved candidate profile and parsed resume are required for resume tailoring.");
+        if (candidateSkills.length === 0) throw new Error("Candidate profile has no verified skills to use for tailoring.");
         const candidateContext = {
-            name: profile ? `${profile.firstName} ${profile.lastName}` : user.email,
+            name: `${profile.firstName} ${profile.lastName}`.trim(),
             email: user.email,
-            currentTitle: profile?.currentTitle || "Software Engineer",
-            yearsOfExperience: profile?.yearsOfExperience || 3,
+            currentTitle: profile.currentTitle,
+            yearsOfExperience: profile.yearsOfExperience,
             skills: candidateSkills,
-            workMode: profile?.workMode || "HYBRID",
-            extractedResume: resumeText.slice(0, 3000),
+            extractedResume: resumeText.slice(0, 12000),
         };
 
-        // If Gemini is not configured, generate rule-based truthful fallback
-        if (!geminiProvider.isConfigured()) {
-            return this.generateTruthfulFallback(candidateContext, input);
-        }
+        const provider = providerFactory.getProvider();
+        if (!provider.isConfigured()) throw new Error("Selected AI provider is not configured.");
 
         const prompt = `
 You are the JobPilot AI Career Copilot tailoring assistant.
-LLM Provider: Gemini.
+The configured AI provider.
 
 TARGET JOB OPENING:
 - Title: ${input.jobTitle}
 - Company: ${input.companyName}
-- Description / Context: ${input.jobDescription || "Software Engineering opening"}
+- Description / Context: ${input.jobDescription || "Not provided by the job source."}
 
 REAL VERIFIED CANDIDATE DATA:
 - Name: ${candidateContext.name}
@@ -97,7 +97,7 @@ REAL VERIFIED CANDIDATE DATA:
 - Verified Skills: ${JSON.stringify(candidateContext.skills)}
 - Resume Excerpt:
 """
-${candidateContext.extractedResume || "Software development background, building scalable web applications."}
+${candidateContext.extractedResume}
 """
 
 CUSTOM APPLICATION QUESTIONS (IF ANY):
@@ -128,10 +128,14 @@ Return a valid JSON object matching this exact structure:
 `;
 
         try {
-            const result = await geminiProvider.generateJSON<TailoringResult>(prompt, {
+            const result = await provider.generateJSON<TailoringResult>(prompt, {
                 temperature: 0.1,
                 maxTokens: 2048,
             });
+
+            if (!result || typeof result.tailoredSummary !== "string" || !Array.isArray(result.relevantSkills) || !Array.isArray(result.tailoredBullets) || !result.questionAnswers || typeof result.questionAnswers !== "object" || !["HIGH", "MEDIUM", "LOW"].includes(result.confidence)) {
+                throw new Error("AI provider returned an invalid tailoring response.");
+            }
 
             // Filter out any skills not in candidate's original skills
             const allowedSkills = new Set(candidateContext.skills.map((s: string) => s.toLowerCase()));
@@ -140,49 +144,16 @@ Return a valid JSON object matching this exact structure:
             );
 
             return {
-                tailoredSummary: result.tailoredSummary || `${candidateContext.currentTitle} with ${candidateContext.yearsOfExperience} years of experience in modern software engineering.`,
-                relevantSkills: safeSkills.length > 0 ? safeSkills : candidateContext.skills.slice(0, 8),
-                tailoredBullets: result.tailoredBullets || [],
-                questionAnswers: result.questionAnswers || {},
-                confidence: "HIGH",
+                tailoredSummary: result.tailoredSummary,
+                relevantSkills: safeSkills,
+                tailoredBullets: result.tailoredBullets,
+                questionAnswers: result.questionAnswers,
+                confidence: result.confidence,
             };
-        } catch (error: any) {
-            console.warn(`[TailoringService] Gemini tailoring fallback due to: ${error.message}`);
-            return this.generateTruthfulFallback(candidateContext, input);
+        } catch (error) {
+            console.warn("AI resume tailoring failed.", error);
+            throw error;
         }
-    }
-
-    private generateTruthfulFallback(candidateContext: any, input: TailoringInput): TailoringResult {
-        const matchingSkills = candidateContext.skills.slice(0, 6);
-        const questionAnswers: Record<string, string> = {};
-
-        if (input.customQuestions) {
-            for (const q of input.customQuestions) {
-                const label = (q.label || q.question).toLowerCase();
-                if (label.includes("experience") || label.includes("years")) {
-                    questionAnswers[q.label || q.question] = `${candidateContext.yearsOfExperience} years`;
-                } else if (label.includes("sponsor") || label.includes("visa")) {
-                    questionAnswers[q.label || q.question] = "No sponsorship required; legally authorized to work.";
-                } else if (label.includes("notice")) {
-                    questionAnswers[q.label || q.question] = "30 days";
-                } else if (label.includes("location") || label.includes("relocat")) {
-                    questionAnswers[q.label || q.question] = "Yes, open to hybrid / remote work in India.";
-                } else {
-                    questionAnswers[q.label || q.question] = `Experienced in ${matchingSkills.join(", ")} with focus on building performant systems.`;
-                }
-            }
-        }
-
-        return {
-            tailoredSummary: `${candidateContext.currentTitle} with ${candidateContext.yearsOfExperience} years of experience specializing in ${matchingSkills.slice(0, 4).join(", ")}.`,
-            relevantSkills: matchingSkills,
-            tailoredBullets: [
-                `Developed scalable software solutions using ${matchingSkills.slice(0, 3).join(", ")}.`,
-                `Collaborated on architecture, testing, and continuous deployment workflows.`,
-            ],
-            questionAnswers,
-            confidence: "MEDIUM",
-        };
     }
 }
 

@@ -35,6 +35,10 @@ export class ShutdownService {
       try {
         this.phase = "stopping-queue";
         queueWorker.stop();
+        try {
+          const { default: loopExecutionEngine } = await import("../loop/loop-execution.engine.js");
+          loopExecutionEngine.stopScheduler();
+        } catch {}
         logger.info(`ShutdownService: queue stopped (${Date.now() - start}ms)`);
 
         this.phase = "draining-workers";

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Application, ResumeVersion, inferCompanyTier } from "../lib/mock-data";
+import { ResumeVersion } from "../lib/domain-types";
 import {
   X,
   Plus,
@@ -20,7 +20,7 @@ interface AddJobModalProps {
   isOpen: boolean;
   onClose: () => void;
   resumes: ResumeVersion[];
-  onAddJob: (newApp: Partial<Application>) => void;
+  onAddJob: (job: { id: string; title: string; companyName: string; url: string }) => void;
 }
 
 export function AddJobModal({
@@ -32,9 +32,10 @@ export function AddJobModal({
   const [url, setUrl] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [location, setLocation] = useState("San Francisco, CA / Remote");
-  const [salaryRange, setSalaryRange] = useState("$220,000 – $290,000");
-  const [selectedResume, setSelectedResume] = useState(resumes[0]?.name || "Staff_Distributed_Systems_2026.pdf");
+  const [location, setLocation] = useState("");
+  const [salaryRange, setSalaryRange] = useState("");
+  const [selectedResume, setSelectedResume] = useState(resumes[0]?.name || "");
+  const [ingestedJob, setIngestedJob] = useState<{ id: string; title: string; companyName: string; url: string } | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionStatus, setExtractionStatus] = useState<string | null>(null);
 
@@ -71,60 +72,34 @@ export function AddJobModal({
         const json = await res.json();
         if (json.success && json.data) {
           const d = json.data;
-          setCompanyName(d.company?.name || companyName);
-          setJobTitle(d.jobTitle || jobTitle);
-          setLocation(d.location || location);
-          setSalaryRange(d.salaryRange || salaryRange);
-          setExtractionStatus(`Extracted 100% verified ${d.atsProvider} job posting!`);
+          const persistedJob = d.data || d;
+          const title = persistedJob.title || "";
+          const company = persistedJob.company?.name || "";
+          if (!persistedJob.id || !title || !company || !persistedJob.url) throw new Error("The provider response did not contain a persisted job record.");
+          setIngestedJob({ id: persistedJob.id, title, companyName: company, url: persistedJob.url });
+          setCompanyName(company);
+          setJobTitle(title);
+          setLocation(persistedJob.location || "");
+          setSalaryRange(persistedJob.salaryRange || "");
+          setExtractionStatus("Job was read from the source and saved to your account.");
+        } else {
+          throw new Error(json.message || "Job ingestion failed.");
         }
+      } else {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.message || "Job ingestion failed.");
       }
-    } catch {
-      setExtractionStatus("Crawled schema locally. You can verify and submit.");
+    } catch (error) {
+      setIngestedJob(null);
+      setExtractionStatus(error instanceof Error ? error.message : "Job ingestion failed.");
     } finally {
       setIsExtracting(false);
     }
   };
 
-  const handleSubmit = (status: "SAVED" | "QUEUED") => {
-    if (!companyName || !jobTitle) return;
-
-    onAddJob({
-      jobTitle,
-      company: {
-        id: `c-${Date.now()}`,
-        name: companyName,
-        domain: `${companyName.toLowerCase().replace(/\s+/g, "")}.com`,
-        logoText: companyName.slice(0, 2).toUpperCase(),
-        location,
-        stage: "Growth / Tier 1",
-        verifiedAts: detectedAts,
-        tier: inferCompanyTier(companyName),
-      },
-      jobUrl: url || "https://example.com/careers/job",
-      location,
-      workMode: location.toLowerCase().includes("remote") ? "Remote" : "Hybrid",
-      salaryRange,
-      status,
-      matchScore: 95,
-      atsProvider: detectedAts,
-      resumeVersionUsed: selectedResume,
-      humanActions: [],
-      questions: [],
-      tailoringNotes: {
-        highlightedSkills: ["Distributed Systems", "TypeScript", "Node.js", "Performance"],
-        customExecutiveSummary: `Tailored application profile aligned with ${companyName}'s engineering culture.`,
-        gapAnalysis: ["Fully matched candidate profile requirements."],
-      },
-      telemetryLogs: [
-        {
-          timestamp: new Date().toLocaleTimeString().slice(0, 5),
-          level: "INFO",
-          step: "INGEST",
-          detail: `Ingested live opening. Detected ${detectedAts} ATS schema for ${companyName}.`,
-        },
-      ],
-    });
-
+  const handleSubmit = () => {
+    if (!ingestedJob) return;
+    onAddJob(ingestedJob);
     onClose();
   };
 
@@ -270,15 +245,15 @@ export function AddJobModal({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => handleSubmit("SAVED")}
-              disabled={!companyName || !jobTitle}
+              onClick={handleSubmit}
+              disabled={!ingestedJob}
               className="rounded-lg border border-white/[0.08] bg-[#10121a] px-3.5 py-1.5 text-xs font-medium text-zinc-200 hover:bg-[#1f2434] transition-colors disabled:opacity-50"
             >
               Save to Board
             </button>
             <button
-              onClick={() => handleSubmit("QUEUED")}
-              disabled={!companyName || !jobTitle}
+              onClick={handleSubmit}
+              disabled={!ingestedJob}
               className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500 active:scale-[0.98] shadow-glow-blue transition-all disabled:opacity-50"
             >
               <Zap size={13} />

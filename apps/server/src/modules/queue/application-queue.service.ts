@@ -76,6 +76,36 @@ export class ApplicationQueueService {
     }
 
     /**
+     * Reclaims stale / orphaned locks from crashed or restarted worker instances.
+     */
+    async reclaimStaleLocks(maxAgeMs = this.DEFAULT_LEASE_DURATION_MS): Promise<number> {
+        try {
+            const staleThreshold = new Date(Date.now() - maxAgeMs);
+            const result = await prisma.applicationQueue.updateMany({
+                where: {
+                    status: "PROCESSING",
+                    OR: [
+                        { lockedAt: null },
+                        { lockedAt: { lt: staleThreshold } },
+                    ],
+                },
+                data: {
+                    status: "QUEUED",
+                    lockedAt: null,
+                    lockedBy: null,
+                },
+            });
+            if (result.count > 0) {
+                logger.info(`[ApplicationQueueService] Reclaimed ${result.count} stale queue lock(s)`);
+            }
+            return result.count;
+        } catch (err) {
+            logger.debug({ err }, "Error in reclaimStaleLocks");
+            return 0;
+        }
+    }
+
+    /**
      * Transactionally claim the next available job for processing.
      * Reclaims stale locks automatically to ensure crash-recovery.
      */

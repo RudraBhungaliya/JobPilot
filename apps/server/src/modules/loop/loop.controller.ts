@@ -4,20 +4,9 @@ import loopExecutionEngine from "./loop-execution.engine.js";
 import { prisma } from "@jobpilot/database";
 
 export class LoopController {
-  private async getUserId(req: Request): Promise<string> {
-    const headerUserId = req.headers["x-user-id"] as string;
-    if (headerUserId) return headerUserId;
-    const user = await prisma.user.findFirst();
-    if (!user) {
-      const newUser = await prisma.user.create({
-        data: {
-          email: "candidate@jobpilot.io",
-          password: "password123",
-        },
-      });
-      return newUser.id;
-    }
-    return user.id;
+  private getUserId(req: Request): string {
+    if (req.user?.id) return req.user.id;
+    throw new Error("Authentication required.");
   }
 
   create = async (req: Request, res: Response) => {

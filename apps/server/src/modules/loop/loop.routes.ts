@@ -1,7 +1,10 @@
 import { Router } from "express";
+import authMiddleware from "../auth/auth.middleware.js";
 import loopController from "./loop.controller.js";
 
 const router = Router();
+
+router.use(authMiddleware);
 
 router.post("/", loopController.create);
 router.get("/", loopController.getAll);

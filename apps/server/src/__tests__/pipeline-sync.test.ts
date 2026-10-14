@@ -32,10 +32,15 @@ test("Application Pipeline Sync Module Suite", async (suite) => {
   const origFindFirstResume = prisma.resume.findFirst;
   const origFindFirstLoop = prisma.jobSearchLoop.findFirst;
   const origFindUniqueLoop = prisma.jobSearchLoop.findUnique;
+  const origFindManyLoop = prisma.jobSearchLoop.findMany;
+  const origCountJob = prisma.job.count;
+  const origCountResume = prisma.resume.count;
+  const origCountNotification = prisma.notification.count;
   const origUpdateLoop = prisma.jobSearchLoop.update;
   const origCreateQueue = prisma.applicationQueue.create;
   const origFindUniqueQueue = prisma.applicationQueue.findUnique;
   const origUpdateQueue = prisma.applicationQueue.update;
+  const origCountQueue = prisma.applicationQueue.count;
   const origCreateTransition = prisma.applicationStatusTransition.create;
   const origTransaction = prisma.$transaction;
   const origEmit = eventEmitter.emit;
@@ -58,6 +63,11 @@ test("Application Pipeline Sync Module Suite", async (suite) => {
       return true;
     });
   };
+  (prisma.job as any).count = async ({ where }: any) => Array.from(mockJobs.values()).filter((j) => !where?.userId || j.userId === where.userId).length;
+  (prisma.jobSearchLoop as any).findMany = async () => [];
+  (prisma.applicationQueue as any).count = async () => 0;
+  (prisma.resume as any).count = async () => 0;
+  (prisma.notification as any).count = async () => 0;
 
   (prisma.profile as any).findUnique = async () => ({ id: profileId, userId });
   (prisma.resume as any).findFirst = async () => ({ id: resumeId, userId });
@@ -356,10 +366,13 @@ test("Application Pipeline Sync Module Suite", async (suite) => {
   });
 
   await suite.test("6. getPipelineStats aggregates real pipeline states and quota remaining", async () => {
-    (prisma.jobSearchLoop as any).findUnique = async () => ({
+    (prisma.jobSearchLoop as any).findFirst = async ({ where }: any) => {
+      assert.equal(where.userId, userId, "loop lookup must be user scoped");
+      return {
       dailyApplicationLimit: 15,
       autoApplyEnabled: true,
-    });
+      };
+    };
 
     const stats = await syncService.getPipelineStats(userId, "loop-200");
 
@@ -458,6 +471,7 @@ test("Application Pipeline Sync Module Suite", async (suite) => {
   // Restore Prisma and Event Emitter methods
   (prisma.job as any).findUnique = origFindUniqueJob;
   (prisma.job as any).findMany = origFindManyJob;
+  (prisma.job as any).count = origCountJob;
   (prisma.application as any).findUnique = origFindUniqueApp;
   (prisma.application as any).create = origCreateApp;
   (prisma.application as any).update = origUpdateApp;
@@ -467,6 +481,10 @@ test("Application Pipeline Sync Module Suite", async (suite) => {
   (prisma.resume as any).findFirst = origFindFirstResume;
   (prisma.jobSearchLoop as any).findFirst = origFindFirstLoop;
   (prisma.jobSearchLoop as any).findUnique = origFindUniqueLoop;
+  (prisma.jobSearchLoop as any).findMany = origFindManyLoop;
+  (prisma.applicationQueue as any).count = origCountQueue;
+  (prisma.resume as any).count = origCountResume;
+  (prisma.notification as any).count = origCountNotification;
   (prisma.jobSearchLoop as any).update = origUpdateLoop;
   (prisma.applicationQueue as any).create = origCreateQueue;
   (prisma.applicationQueue as any).findUnique = origFindUniqueQueue;

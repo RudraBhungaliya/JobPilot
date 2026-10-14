@@ -76,13 +76,16 @@ export const GREENHOUSE_COMPANIES_MNC = [
 ] as const;
 
 export const GREENHOUSE_COMPANIES_SEMI_MNC_INDIA = [
+  "razorpaysoftwareprivatelimited",
+  "groww",
+  "inmobi",
+  "thoughtworks",
   "zeta",
   "postman",
   "freshworks",
   "zoho",
   "chargebee",
   "gainsight",
-  "razorpay",
   "phonepe",
   "swiggy",
   "zomato",
@@ -183,8 +186,13 @@ export const LEVER_COMPANIES_MNC = [
 ] as const;
 
 export const LEVER_COMPANIES_SEMI_MNC_INDIA = [
-  "upstox",
+  "meesho",
+  "zeta",
+  "paytm",
+  "cred",
   "groww",
+  "freshworks",
+  "upstox",
   "phonepe",
   "zomato",
   "dream11",
@@ -237,11 +245,7 @@ export const LEVER_COMPANIES_SEMI_MNC_INDIA = [
 ] as const;
 
 export const ASHBY_COMPANIES_MNC = [
-  "openai",
   "linear",
-  "ramp",
-  "retool",
-  "notion",
   "vercel",
   "cursor",
   "supabase",
@@ -250,22 +254,8 @@ export const ASHBY_COMPANIES_MNC = [
   "posthog",
   "glean",
   "monzo",
-  "anthropic",
-  "stripe",
-  "figma",
-  "datadog",
-  "airbnb",
-  "shopify",
-  "atlassian",
-  "slack",
-  "asana",
-  "intercom",
-  "dropbox",
-  "hubspot",
-  "zapier",
-  "mercury",
-  "brex",
   "clerk",
+  "zapier",
 ] as const;
 
 export type WorkdayTier = 'MNC' | 'SEMI_MNC' | 'STARTUP';

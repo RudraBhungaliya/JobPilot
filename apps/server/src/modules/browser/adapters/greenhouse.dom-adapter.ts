@@ -123,6 +123,9 @@ export class GreenhouseDomAdapter implements DomAtsAdapter {
         try {
           const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
           if (/thank you|application submitted|application received|we have received your application|confirmation/i.test(bodyText)) {
+            const { default: verificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+            const verification = await verificationTool.verify(page);
+            if (!verification.verified) continue;
             // Extract genuine confirmation reference if present
             const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
             const confirmationId = confirmationMatch ? confirmationMatch[1] : undefined;
@@ -142,6 +145,9 @@ export class GreenhouseDomAdapter implements DomAtsAdapter {
     try {
       const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
       if (/thank you|application submitted|application received|we have received your application|confirmation/i.test(bodyText)) {
+        const { default: verificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+        const verification = await verificationTool.verify(page);
+        if (!verification.verified) throw new Error(verification.reason);
         const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
         const confirmationId = confirmationMatch ? confirmationMatch[1] : undefined;
         return { success: true, requiresBrowserFallback: false, confirmationId };

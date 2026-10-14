@@ -1,5 +1,31 @@
 import { z } from "zod";
 
+export const APPLICATION_STATUS_VALUES = [
+    "DISCOVERED",
+    "SAVED",
+    "TAILORING",
+    "PENDING",
+    "MATCHED",
+    "REVIEW_REQUIRED",
+    "WAITING_FOR_USER",
+    "RESUMED",
+    "QUEUED",
+    "READY_TO_SUBMIT",
+    "SUBMITTING",
+    "RUNNING",
+    "SUBMITTED",
+    "VERIFICATION_PENDING",
+    "APPLIED",
+    "INTERVIEW",
+    "OFFER",
+    "REJECTED",
+    "FAILED",
+    "RETRYING",
+    "WITHDRAWN",
+    "ARCHIVED",
+    "SKIPPED",
+] as const;
+
 export const createApplicationSchema = z.object({
     jobId: z.string().optional(),
     resumeId: z.string().optional(),
@@ -13,43 +39,11 @@ export const createApplicationSchema = z.object({
     atsProvider: z.string().optional(),
     matchScore: z.number().int().optional(),
     notes: z.string().optional(),
-    status: z
-        .enum([
-            "SAVED",
-            "TAILORING",
-            "PENDING",
-            "MATCHED",
-            "WAITING_FOR_USER",
-            "QUEUED",
-            "RUNNING",
-            "SUBMITTED",
-            "INTERVIEW",
-            "OFFER",
-            "REJECTED",
-            "FAILED",
-            "SKIPPED",
-        ])
-        .optional(),
+    status: z.enum(APPLICATION_STATUS_VALUES).optional(),
 });
 
 export const updateApplicationSchema = z.object({
-    status: z
-        .enum([
-            "SAVED",
-            "TAILORING",
-            "PENDING",
-            "MATCHED",
-            "WAITING_FOR_USER",
-            "QUEUED",
-            "RUNNING",
-            "SUBMITTED",
-            "INTERVIEW",
-            "OFFER",
-            "REJECTED",
-            "FAILED",
-            "SKIPPED",
-        ])
-        .optional(),
+    status: z.enum(APPLICATION_STATUS_VALUES).optional(),
     attempts: z.number().int().optional(),
     appliedAt: z.coerce.date().optional(),
     failureReason: z.string().nullable().optional(),
@@ -65,4 +59,4 @@ export const updateApplicationSchema = z.object({
 });
 
 export type CreateApplicationDTO = z.infer<typeof createApplicationSchema>;
-export type UpdateApplicationDTO = z.infer<typeof updateApplicationSchema>;
+export type UpdateApplicationDTO = z.infer<typeof updateApplicationSchema>;

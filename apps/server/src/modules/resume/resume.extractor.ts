@@ -7,11 +7,25 @@ class ResumeExtractor {
 
     if (extension === ".pdf") {
       const pdfParseModule: any = await import("pdf-parse");
-      const pdfParse = pdfParseModule.default || pdfParseModule;
-
       const buffer = await fs.readFile(filePath);
-      const result = await pdfParse(buffer);
-      return (result.text || "").trim();
+
+      let text = "";
+      if (typeof pdfParseModule === "function") {
+        const res = await pdfParseModule(buffer);
+        text = res.text || "";
+      } else if (typeof pdfParseModule.default === "function") {
+        const res = await pdfParseModule.default(buffer);
+        text = res.text || "";
+      } else if (pdfParseModule.PDFParse) {
+        const parser = new pdfParseModule.PDFParse({ data: buffer });
+        const res = await parser.getText();
+        text = (typeof res === "string" ? res : res?.text) || "";
+      } else if (pdfParseModule.default?.PDFParse) {
+        const parser = new pdfParseModule.default.PDFParse({ data: buffer });
+        const res = await parser.getText();
+        text = (typeof res === "string" ? res : res?.text) || "";
+      }
+      return text.trim();
     }
 
     if (extension === ".docx" || extension === ".doc") {

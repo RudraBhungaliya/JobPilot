@@ -1,3 +1,23 @@
+import "dotenv/config";
+import path from "node:path";
+import fs from "node:fs";
+import dotenv from "dotenv";
+
+if (!process.env.DATABASE_URL) {
+    // Search monorepo root and current working directory
+    const candidates = [
+        path.resolve(process.cwd(), ".env"),
+        path.resolve(process.cwd(), "../../.env"),
+        path.resolve(process.cwd(), "../.env"),
+    ];
+    for (const cand of candidates) {
+        if (fs.existsSync(cand)) {
+            dotenv.config({ path: cand });
+            if (process.env.DATABASE_URL) break;
+        }
+    }
+}
+
 import { PrismaClient } from "../generated/prisma/index.js";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
@@ -9,7 +29,8 @@ declare global {
 
 const connectionString =
     process.env.DATABASE_URL ||
-    "postgresql://postgres:qwerty@localhost:5432/jobpilot?schema=public";
+    "postgresql://postgres:postgres@localhost:5432/jobpilot?schema=public";
+
 
 const pool = new pg.Pool({ connectionString });
 pool.on("error", (err) => {

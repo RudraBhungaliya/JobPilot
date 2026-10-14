@@ -19,7 +19,7 @@ export interface JobScorecard {
     educationScore: number;
     locationScore: number;
     preferenceScore: number;
-    companyTier: "S" | "A" | "B" | "C";
+    companyTier?: "S" | "A" | "B" | "C";
     rank: number;
     reasons: string[];
     breakdown: {

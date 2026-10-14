@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Application, PIPELINE_STAGES, getTierColor, getStatusLabel, getStatusColor, sortByTier } from "../lib/mock-data";
+import { Application, PIPELINE_STAGES, getTierColor, getStatusLabel, getStatusColor, sortByTier } from "../lib/domain-types";
 import {
   ExternalLink,
   ShieldCheck,

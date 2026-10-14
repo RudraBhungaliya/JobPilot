@@ -7,14 +7,14 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "tsx --test src/__tests__/**/*.test.ts",
+    "test": "NODE_ENV=test JWT_SECRET=jobpilot-test-only-secret-not-for-production REQUIRE_SUBMISSION_APPROVAL=false node --import tsx --test src/__tests__/*.test.ts",
     "install:browsers": "playwright install chromium"
   },
   "dependencies": {
     "@jobpilot/database": "workspace:*",
     "@langchain/core": "^1.2.5",
     "@langchain/langgraph": "^1.4.9",
-    "@prisma/client": "^7.9.1",
+    "@prisma/client": "^7.10.0",
     "@types/nodemailer": "^8.0.2",
     "bcrypt": "^6.0.0",
     "bottleneck": "^2.19.5",

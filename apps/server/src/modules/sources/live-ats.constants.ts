@@ -37,15 +37,11 @@ export const GREENHOUSE_GLOBAL_MNC = [
 ] as const;
 
 export const ASHBY_GLOBAL_MNC = [
-    "openai",
     "vercel",
     "supabase",
     "sentry",
     "posthog",
     "linear",
-    "ramp",
-    "notion",
-    "retool",
     "cursor",
     "resend",
     "glean",

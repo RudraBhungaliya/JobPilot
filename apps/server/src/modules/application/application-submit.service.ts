@@ -94,7 +94,7 @@ class ApplicationSubmitService {
         }
 
         // Pre-submission Approval Gate (when configured)
-        const requireApproval = process.env.REQUIRE_SUBMISSION_APPROVAL === "true";
+        const requireApproval = process.env.REQUIRE_SUBMISSION_APPROVAL !== "false";
         if (requireApproval) {
             const { default: humanActionRepository } = await import("../human-action/human-action.repository.js");
             const existingActions = await humanActionRepository.findByApplication(applicationId, userId).catch(() => []);
@@ -266,11 +266,7 @@ class ApplicationSubmitService {
                     confirmationUrl: "",
                 }));
             if (verification.verified) {
-                const confId = verification.confirmationUrl
-                    ? `REF-${Buffer.from(verification.confirmationUrl)
-                          .toString("base64url")
-                          .slice(0, 12)}`
-                    : browserResult?.confirmationId;
+                const confId = browserResult?.confirmationId;
                 await this._transitionSubmitted(
                     userId,
                     applicationId,
@@ -324,7 +320,7 @@ class ApplicationSubmitService {
                 throw new Error(`Human verification required: ${hv.message}`);
             }
 
-            const fields = await formTool.detectFields(page).catch(() => []);
+            const fields = await formTool.detectFields(page);
             if (fields.length === 0) {
                 return {
                     success: false,
@@ -333,9 +329,7 @@ class ApplicationSubmitService {
                 };
             }
 
-            const fillResults = await formTool
-                .fillFields(page, fields, adapterInput.userId, raw.resumeId)
-                .catch(() => []);
+            const fillResults = await formTool.fillFields(page, fields, adapterInput.userId, raw.resumeId);
 
             const missing = formTool.detectOutsiderRequiredFields(
                 fields,
@@ -366,17 +360,18 @@ class ApplicationSubmitService {
                 };
             }
 
-            await resumeUploadTool
-                .upload(page, {
+            await resumeUploadTool.upload(page, {
                     fileUrl: raw.resume.fileUrl,
                     originalName: raw.resume.originalName || "resume.pdf",
-                })
-                .catch((e: Error) =>
-                    logger.debug("resume upload skipped", { error: e.message }),
-                );
+                });
 
-            await formTool.submit(page).catch(() => {});
-            return { success: true, requiresBrowserFallback: false };
+            await formTool.submit(page);
+            const verification = await submissionVerificationTool.verify(page);
+            return {
+                success: verification.verified,
+                requiresBrowserFallback: false,
+                reason: verification.verified ? undefined : verification.reason,
+            };
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             if (
@@ -572,7 +567,7 @@ class ApplicationSubmitService {
                     candidateName: raw.profile?.firstName ? `${raw.profile.firstName} ${raw.profile.lastName || ""}` : "Candidate",
                     jobTitle,
                     companyName,
-                    actionUrl: raw.job?.url || "http://localhost:3000",
+                    actionUrl: raw.job?.url,
                     reason: captchaMsg,
                     verificationType: challengeType,
                 });

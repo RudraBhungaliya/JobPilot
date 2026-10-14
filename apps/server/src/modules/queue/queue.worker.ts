@@ -15,11 +15,7 @@ class QueueWorker {
   private pollingIntervalMs = 4000;
 
   get concurrency(): number {
-    try {
-      return getEnv().QUEUE_CONCURRENCY || 3;
-    } catch {
-      return 3;
-    }
+    return getEnv().QUEUE_CONCURRENCY;
   }
 
   get activeCount(): number {
@@ -34,6 +30,8 @@ class QueueWorker {
     this.isRunningLoop = true;
     this.stopping = false;
     logger.info(`[QueueWorker] 🚀 Persistent Queue Worker started [${this.workerId}]`);
+    // Immediately unlock any abandoned queue locks from previous crashed process
+    applicationQueueService.reclaimStaleLocks(0).catch(() => {});
     this.scheduleNextPoll();
   }
 

@@ -115,7 +115,9 @@ export class WorkdayDomAdapter implements DomAtsAdapter {
               bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
             }
             if (/thank you|application.*submitted|successfully.*applied|confirmation/i.test(bodyText)) {
-              return { success: true, requiresBrowserFallback: false, confirmationId: `wd-dom-${Date.now()}` };
+              const { default: verificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+              const verification = await verificationTool.verify(page);
+              if (verification.verified) return { success: true, requiresBrowserFallback: false };
             }
           } catch {}
         } else {
@@ -129,7 +131,9 @@ export class WorkdayDomAdapter implements DomAtsAdapter {
     try {
       const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
       if (/thank you|application.*submitted|applied.*successfully/i.test(bodyText)) {
-        return { success: true, requiresBrowserFallback: false, confirmationId: `wd-dom-${Date.now()}` };
+        const { default: verificationTool } = await import("../../agent/tools/submission-verification.tool.js");
+        const verification = await verificationTool.verify(page);
+        if (verification.verified) return { success: true, requiresBrowserFallback: false };
       }
     } catch {}
     return { success: false, requiresBrowserFallback: true, reason: `Workday DOM apply ${this.lastFillCount} fills; no final confirmation` };

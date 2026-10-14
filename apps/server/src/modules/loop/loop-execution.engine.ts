@@ -45,7 +45,7 @@ export class LoopExecutionEngine {
    * - Deduplicates jobs and persists new real jobs in PostgreSQL.
    * - Updates lastRunAt, nextRunAt, discoveredCount.
    * - Sets status to ERROR if a fatal failure occurs.
-   * - Does NOT trigger Auto-Apply or Recruiter Outreach.
+   * - Does NOT submit applications without explicit candidate approval.
    */
   async executeLoop(
     loopId: string,
@@ -71,14 +71,13 @@ export class LoopExecutionEngine {
       });
 
       // 1. Gather search keywords from targetJobTitles
-      const targetTitles = loop.targetJobTitles && loop.targetJobTitles.length > 0
-        ? loop.targetJobTitles
-        : ["Software Engineer"];
+      const targetTitles = loop.targetJobTitles;
+      if (targetTitles.length === 0) throw new Error("This loop has no target job titles.");
 
       // 2. Gather locations from targetLocations or targetCountries
-      const targetLocations = loop.targetLocations && loop.targetLocations.length > 0
+      const targetLocations = loop.targetLocations.length > 0
         ? loop.targetLocations
-        : (loop.targetCountries && loop.targetCountries.length > 0 ? loop.targetCountries : ["India"]);
+        : loop.targetCountries;
 
       // 3. Determine remote constraint
       const remote = loop.remotePreference === "REMOTE_ONLY"
@@ -89,9 +88,13 @@ export class LoopExecutionEngine {
 
       // 4. Query live ATS sources (reusing existing LiveAtsService)
       const discoveredJobsMap = new Map<string, SourceJob>();
+      let sourceSearchCount = 0;
+      let sourceSearchFailures = 0;
 
       for (const title of targetTitles) {
-        for (const loc of targetLocations) {
+        const locations: (string | undefined)[] = targetLocations.length > 0 ? targetLocations : [undefined];
+        for (const loc of locations) {
+          sourceSearchCount += 1;
           try {
             const results = await liveAtsService.searchAll({
               keyword: title,
@@ -106,6 +109,7 @@ export class LoopExecutionEngine {
               }
             }
           } catch (searchErr) {
+            sourceSearchFailures += 1;
             logger.warn("LoopExecutionEngine: live ATS search error for title/location", {
               loopId: loop.id,
               title,
@@ -114,6 +118,9 @@ export class LoopExecutionEngine {
             });
           }
         }
+      }
+      if (sourceSearchCount > 0 && sourceSearchFailures === sourceSearchCount) {
+        throw new Error("All live job source searches failed for this loop.");
       }
 
       // 5. Filter out excluded companies and apply included companies
@@ -156,7 +163,7 @@ export class LoopExecutionEngine {
           title: j.title,
           company: j.company,
           description: j.description,
-          location: j.location || "Remote",
+          location: j.location || "",
           url: j.url,
         })),
         loopCriteria,
@@ -208,7 +215,7 @@ export class LoopExecutionEngine {
             data: {
               name: companyName,
               domain: `${companySlug || "company"}.com`,
-              location: job.location || "Remote",
+              location: job.location || null,
               verifiedAts: job.source,
               tier: scorecard.companyTier,
               userId: loop.userId,
@@ -223,7 +230,7 @@ export class LoopExecutionEngine {
         const createdJob = await prisma.job.create({
           data: {
             title: job.title,
-            location: job.location || "Remote",
+            location: job.location || "",
             url: job.url,
             atsProvider: job.source,
             description: job.description || null,
@@ -330,13 +337,13 @@ export class LoopExecutionEngine {
         dispatchedCount: pipelineSyncSummary?.newlyQueuedCount || 0,
         pipelineSync: pipelineSyncSummary,
         jobs: rankedCandidateJobs.slice(0, 20).map((r) => ({
-          externalId: r.job.externalId || "",
+          externalId: r.job.externalId,
           title: r.job.title,
           company: r.job.company,
           url: r.job.url || "",
-          location: r.job.location || "Remote",
+          location: r.job.location || "",
           description: r.job.description || "",
-          source: r.job.source || "ats",
+          source: r.job.source,
           matchScore: r.scorecard.matchScore,
           matchedSkills: r.scorecard.matchedSkills,
           missingSkills: r.scorecard.missingSkills,

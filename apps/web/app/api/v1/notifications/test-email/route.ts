@@ -1,33 +1,16 @@
 import { NextResponse } from "next/server";
+import { getBackendApiUrl, getBackendHeaders } from "@/lib/api-config";
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    const body = await req.json();
-
-    // 1. Try forwarding to backend server
-    try {
-      const backendRes = await fetch("http://127.0.0.1:8000/api/v1/notifications/test-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(2000),
-      });
-      if (backendRes.ok) {
-        const json = await backendRes.json();
-        return NextResponse.json(json);
-      }
-    } catch {
-      // Continue
-    }
-
-    // Direct simulated/logged email dispatch
-    console.log(`[JobPilot Mailer] 📧 Email Alert sent to: ${body.email} | Job: ${body.jobTitle} at ${body.companyName}`);
-
-    return NextResponse.json({
-      success: true,
-      message: `Alert email dispatched to ${body.email}`,
+    const response = await fetch(`${getBackendApiUrl()}/api/v1/notifications/test-email`, {
+      method: "POST",
+      headers: getBackendHeaders(request, { "Content-Type": "application/json" }),
+      body: JSON.stringify(await request.json()),
+      cache: "no-store",
     });
-  } catch (err: any) {
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    return NextResponse.json(await response.json(), { status: response.status });
+  } catch {
+    return NextResponse.json({ success: false, message: "Email provider is unavailable." }, { status: 502 });
   }
 }

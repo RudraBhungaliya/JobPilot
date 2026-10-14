@@ -1,32 +1,20 @@
-import promptService from "./prompt.service.js";
+import providerFactory from "../../core/llm/provider.factory.js";
 import type { CoverLetterInput } from "./ai.types.js";
 
 class CoverLetterService {
     async generate(input: CoverLetterInput): Promise<{ prompt: string; coverLetter: string }> {
-        const prompt = promptService.buildCoverLetterPrompt(input);
-
-        const company = input.companyName || "the team";
-        const role = input.jobTitle || "Software Engineer";
-        const candidate = input.candidateName || "Candidate";
-
-        const coverLetter = `Dear Hiring Team at ${company},
-
-I am writing to express my strong interest in the ${role} position. With my extensive hands-on experience architecting and delivering high-performance, scalable distributed systems, I am confident in my ability to make an immediate, meaningful impact on your engineering initiatives.
-
-Throughout my career, I have specialized in building resilient services, optimizing high-throughput data pipelines, and driving operational excellence across cloud infrastructure. The mission and engineering challenges at ${company} align directly with my technical background and passion for building robust software solutions.
-
-I look forward to discussing how my experience and problem-solving skills will contribute to the continued success of your team. Thank you for your time and consideration.
-
-Sincerely,
-${candidate}`;
-
-        return {
-            prompt,
-            coverLetter,
-        };
+        const company = input.companyName || input.company;
+        const role = input.jobTitle || input.role;
+        if (!input.resumeText?.trim() || !input.jobDescription?.trim() || !company?.trim() || !role?.trim()) {
+            throw new Error("Resume text, job description, company, and role are required.");
+        }
+        const prompt = `Write a concise cover letter for ${role} at ${company}. Ground every candidate claim in the supplied resume. Do not invent experience, skills, accomplishments, or interest in a company mission that is not evidenced. If evidence is insufficient, leave that claim out. Return only the letter.\n\nRESUME:\n${input.resumeText}\n\nJOB DESCRIPTION:\n${input.jobDescription}`;
+        const coverLetter = (await providerFactory.getProvider().generate(prompt, { temperature: 0.2 })).trim();
+        if (!coverLetter) throw new Error("The configured AI provider returned no cover letter.");
+        return { prompt, coverLetter };
     }
 }
 
 const coverLetterService = new CoverLetterService();
 export default coverLetterService;
-export { coverLetterService };
+export { coverLetterService };
