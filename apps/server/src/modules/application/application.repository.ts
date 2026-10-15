@@ -31,6 +31,13 @@ class ApplicationRepository {
         resume: true,
         humanActions: true,
         auditLogs: { orderBy: { createdAt: "desc" } },
+        user: {
+          include: {
+            profile: {
+              include: { educations: true, experiences: true },
+            },
+          },
+        },
       },
     });
   }
@@ -43,6 +50,13 @@ class ApplicationRepository {
         resume: true,
         humanActions: true,
         auditLogs: { orderBy: { createdAt: "desc" } },
+        user: {
+          include: {
+            profile: {
+              include: { educations: true, experiences: true },
+            },
+          },
+        },
       },
       orderBy: { updatedAt: "desc" },
     });

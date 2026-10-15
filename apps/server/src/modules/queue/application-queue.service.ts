@@ -275,8 +275,15 @@ export class ApplicationQueueService {
                     lockedAt: null,
                     lockedBy: null,
                     lastError: null,
+                    attempts: 0,
                 },
             });
+
+            // Also clear failureReason on Application table
+            await prisma.application.update({
+                where: { id: applicationId },
+                data: { failureReason: null },
+            }).catch(() => null);
 
             try {
                 await ApplicationStateMachine.transition({

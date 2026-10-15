@@ -25,9 +25,20 @@ import {
 
 interface JobSearchLoopsViewProps {
   resumes?: ResumeVersion[];
-  profile?: { fullName?: string; email?: string; phone?: string };
+  profile?: {
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    institution?: string;
+    highestDegree?: string;
+    currentCompany?: string;
+    currentTitle?: string;
+    educations?: any[];
+    experiences?: any[];
+  };
   onNavigateToDiscovery?: (keywords: string[]) => void;
   onSelectLoop?: (loop: JobSearchLoop) => void;
+  onOpenPreApplyModal?: () => void;
 }
 
 export function JobSearchLoopsView({
@@ -35,6 +46,7 @@ export function JobSearchLoopsView({
   profile,
   onNavigateToDiscovery,
   onSelectLoop,
+  onOpenPreApplyModal,
 }: JobSearchLoopsViewProps) {
   const activeResumes = resumes || [];
   const activeProfile = {
@@ -458,14 +470,87 @@ export function JobSearchLoopsView({
                   ))}
                 </div>
 
-                <div className="rounded-xl border border-white/[0.08] bg-[#161924] p-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-zinc-200">Candidate Vault Sync</span>
-                    <span className="text-[10px] font-mono text-emerald-400">✓ Ready</span>
+                {/* Candidate Profile & ATS Autofill Vault Status */}
+                <div className="rounded-xl border border-white/[0.08] bg-[#161924] p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck size={16} className="text-emerald-400" />
+                      <span className="font-semibold text-zinc-100">Candidate Vault Completeness</span>
+                    </div>
+                    {((profile?.institution || (profile?.educations && profile.educations.length > 0)) &&
+                      (profile?.currentCompany || (profile?.experiences && profile.experiences.length > 0))) ? (
+                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        ✓ 100% Loop Ready (No Checkpoints)
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={onOpenPreApplyModal}
+                        className="text-[10px] font-medium text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 transition cursor-pointer"
+                      >
+                        ⚠️ Action Required: Complete Vault
+                      </button>
+                    )}
                   </div>
-                  <p className="text-[11px] text-zinc-400">
-                    Applying as <strong>{activeProfile.fullName}</strong> ({activeProfile.email} &middot; {activeProfile.phone}). All custom ATS questions will be resolved from your verified vault.
-                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+                    <div className="rounded-lg bg-black/30 p-2.5 border border-white/[0.04]">
+                      <span className="text-zinc-400 block text-[10px] uppercase font-mono">Candidate Identity</span>
+                      <strong className="text-zinc-200 block truncate">{activeProfile.fullName}</strong>
+                      <span className="text-zinc-400 text-[10px]">{activeProfile.email}</span>
+                    </div>
+
+                    <div className="rounded-lg bg-black/30 p-2.5 border border-white/[0.04]">
+                      <span className="text-zinc-400 block text-[10px] uppercase font-mono">Education History</span>
+                      {profile?.institution || (profile?.educations && profile.educations.length > 0) ? (
+                        <>
+                          <strong className="text-emerald-300 block truncate">
+                            {profile.institution || profile.educations?.[0]?.institution}
+                          </strong>
+                          <span className="text-zinc-400 text-[10px] truncate block">
+                            {profile.highestDegree || profile.educations?.[0]?.degree || "B.Tech / Degree"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-amber-400 font-medium">Missing — Required before applying</span>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg bg-black/30 p-2.5 border border-white/[0.04]">
+                      <span className="text-zinc-400 block text-[10px] uppercase font-mono">Work Experience</span>
+                      {profile?.currentCompany || (profile?.experiences && profile.experiences.length > 0) ? (
+                        <>
+                          <strong className="text-emerald-300 block truncate">
+                            {profile.currentCompany || profile.experiences?.[0]?.company}
+                          </strong>
+                          <span className="text-zinc-400 text-[10px] truncate block">
+                            {profile.currentTitle || profile.experiences?.[0]?.title || "Software Engineer"}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-amber-400 font-medium">Missing — Required before applying</span>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg bg-black/30 p-2.5 border border-white/[0.04] flex flex-col justify-between">
+                      <span className="text-zinc-400 block text-[10px] uppercase font-mono">Loop Autonomy</span>
+                      <p className="text-[10px] text-zinc-400">
+                        Zero checkpoint interruptions: all ATS employer fields resolve automatically from this vault.
+                      </p>
+                    </div>
+                  </div>
+
+                  {onOpenPreApplyModal && (
+                    <div className="pt-1 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={onOpenPreApplyModal}
+                        className="text-[11px] text-indigo-400 hover:text-indigo-300 font-medium underline inline-flex items-center gap-1"
+                      >
+                        Edit or Update Candidate Vault Details ↗
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

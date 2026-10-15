@@ -44,7 +44,23 @@ async function defaultCreateBrowserCtx(): Promise<{
   const headless = env.HEADLESS !== "false";
   const proxy = env.PROXY_URL ? { server: env.PROXY_URL } : undefined;
 
-  const browser = await chromium.launch({ headless, proxy });
+  let browser: Browser;
+  try {
+    browser = await chromium.launch({ headless, proxy });
+  } catch (err: any) {
+    if (err.message && (err.message.includes("Executable doesn't exist") || err.message.includes("playwright install"))) {
+      console.log("[BrowserPool] Chromium binary missing. Running playwright install chromium...");
+      const { execSync } = await import("node:child_process");
+      try {
+        execSync("npx playwright install chromium", { stdio: "inherit" });
+        browser = await chromium.launch({ headless, proxy });
+      } catch (installErr: any) {
+        throw new Error(`Playwright browser not available: ${err.message}`);
+      }
+    } else {
+      throw err;
+    }
+  }
 
   const width = 1280 + Math.floor(Math.random() * 640);
   const height = 720 + Math.floor(Math.random() * 360);

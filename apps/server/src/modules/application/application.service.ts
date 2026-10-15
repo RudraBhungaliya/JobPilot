@@ -42,17 +42,44 @@ class ApplicationService {
         const firstAction = raw.humanActions?.[0];
         const answers = (firstAction?.answers && typeof firstAction.answers === "object") ? firstAction.answers : {};
         const questions: QuestionAnswerDTO[] = Array.isArray(firstAction?.questions)
-            ? firstAction.questions.map((question: any, index: number) => ({
-                id: question.id || question.field || question.selector || `question-${index + 1}`,
-                label: question.label || question.field || question.selector || "",
-                field: question.field || question.selector || "",
-                type: ["text", "textarea", "select", "boolean"].includes(question.type) ? question.type : "text",
-                aiProposedValue: typeof answers[question.field || question.selector] === "string" ? answers[question.field || question.selector] : undefined,
-                userEditedValue: typeof answers[question.field || question.selector] === "string" ? answers[question.field || question.selector] : undefined,
-                confidence: typeof question.confidence === "number" ? question.confidence : undefined,
-                isFlaggedForReview: question.isFlaggedForReview === true,
-                reviewReason: typeof question.reviewReason === "string" ? question.reviewReason : undefined,
-            }))
+            ? firstAction.questions.map((question: any, index: number) => {
+                const qKey = question.field || question.selector || "";
+                const qLabel = question.label || "";
+                let resolvedAnswer = answers[qKey] || answers[qLabel];
+                if (!resolvedAnswer) {
+                    for (const [k, v] of Object.entries(answers)) {
+                        if (typeof v === "string" && (k.toLowerCase() === qLabel.toLowerCase() || k.toLowerCase() === qKey.toLowerCase())) {
+                            resolvedAnswer = v;
+                            break;
+                        }
+                    }
+                }
+                if (!resolvedAnswer && raw.user?.profile) {
+                    const prof = raw.user.profile;
+                    if (/education/i.test(qLabel) || /education/i.test(qKey)) {
+                        const edu = prof.educations?.[0];
+                        if (edu) {
+                            resolvedAnswer = `${edu.institution}${edu.degree ? `, ${edu.degree}` : ""}`;
+                        }
+                    } else if (/experience/i.test(qLabel) || /experience/i.test(qKey)) {
+                        const exp = prof.experiences?.[0];
+                        if (exp) {
+                            resolvedAnswer = `${exp.title || "Software Engineer"} at ${exp.company || ""}`;
+                        }
+                    }
+                }
+                return {
+                    id: question.id || question.field || question.selector || `question-${index + 1}`,
+                    label: question.label || question.field || question.selector || "",
+                    field: question.field || question.selector || "",
+                    type: ["text", "textarea", "select", "boolean"].includes(question.type) ? question.type : "text",
+                    aiProposedValue: typeof resolvedAnswer === "string" ? resolvedAnswer : undefined,
+                    userEditedValue: typeof resolvedAnswer === "string" ? resolvedAnswer : undefined,
+                    confidence: typeof question.confidence === "number" ? question.confidence : undefined,
+                    isFlaggedForReview: question.isFlaggedForReview === true,
+                    reviewReason: typeof question.reviewReason === "string" ? question.reviewReason : undefined,
+                };
+            })
             : [];
         const logs: TelemetryLogDTO[] = (raw.auditLogs || []).map((log: any) => ({
             timestamp: new Date(log.createdAt).toISOString(),

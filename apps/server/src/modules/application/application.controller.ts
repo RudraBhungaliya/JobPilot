@@ -240,6 +240,114 @@ class ApplicationController {
                 // Fallback
             }
 
+            // 2.5 Auto-sync user responses (Education, Experience, Contact info) to candidate profile in PostgreSQL
+            try {
+                const { prisma } = await import("@jobpilot/database");
+                const profile = await prisma.profile.findUnique({
+                    where: { userId: req.user.id },
+                    include: { educations: true, experiences: true },
+                });
+                if (profile) {
+                    const profileUpdates: any = {};
+
+                    // Education History
+                    const eduVal =
+                        answers["missing-field-education-history"] ||
+                        answers["Education History"] ||
+                        answers["education"] ||
+                        answers["highestDegree"];
+                    if (eduVal && typeof eduVal === "string" && eduVal.trim()) {
+                        let inst = eduVal.trim();
+                        let deg = "Undergraduate Degree";
+                        let field = "Computer Science & Engineering";
+                        if (inst.includes(".")) {
+                            const parts = inst.split(".");
+                            inst = parts[0]?.trim() || inst;
+                            deg = parts.slice(1).join(".").trim() || deg;
+                        } else if (inst.includes(",")) {
+                            const parts = inst.split(",");
+                            inst = parts[0]?.trim() || inst;
+                            deg = parts.slice(1).join(",").trim() || deg;
+                        }
+                        if (profile.educations.length === 0) {
+                            await prisma.profileEducation.create({
+                                data: {
+                                    profileId: profile.id,
+                                    institution: inst,
+                                    degree: deg,
+                                    fieldOfStudy: field,
+                                    currentlyStudying: true,
+                                },
+                            });
+                        } else {
+                            await prisma.profileEducation.update({
+                                where: { id: profile.educations[0]!.id },
+                                data: { institution: inst, degree: deg },
+                            });
+                        }
+                    }
+
+                    // Work Experience
+                    const expVal =
+                        answers["missing-field-work-experience"] ||
+                        answers["Work Experience"] ||
+                        answers["experience"];
+                    if (expVal && typeof expVal === "string" && expVal.trim()) {
+                        let comp = expVal.trim();
+                        let title = profile.currentTitle || "Software Engineer";
+                        if (comp.includes("@")) {
+                            const parts = comp.split("@");
+                            title = parts[0]?.trim() || title;
+                            comp = parts[1]?.trim() || comp;
+                        } else if (comp.includes(" at ")) {
+                            const parts = comp.split(" at ");
+                            title = parts[0]?.trim() || title;
+                            comp = parts[1]?.trim() || comp;
+                        }
+                        if (profile.experiences.length === 0) {
+                            await prisma.profileExperience.create({
+                                data: {
+                                    profileId: profile.id,
+                                    company: comp,
+                                    title: title,
+                                    description: expVal.trim(),
+                                    currentlyWorking: true,
+                                },
+                            });
+                        } else {
+                            await prisma.profileExperience.update({
+                                where: { id: profile.experiences[0]!.id },
+                                data: { company: comp, title: title, description: expVal.trim() },
+                            });
+                        }
+                        profileUpdates.currentCompany = comp;
+                        profileUpdates.currentTitle = title;
+                    }
+
+                    if (answers["Phone Number"] || answers["phone"]) {
+                        profileUpdates.phone = answers["Phone Number"] || answers["phone"];
+                    }
+                    if (answers["First Name"] || answers["firstName"]) {
+                        profileUpdates.firstName = answers["First Name"] || answers["firstName"];
+                    }
+                    if (answers["Last Name"] || answers["lastName"]) {
+                        profileUpdates.lastName = answers["Last Name"] || answers["lastName"];
+                    }
+                    if (answers["Email Address"] || answers["email"]) {
+                        profileUpdates.email = answers["Email Address"] || answers["email"];
+                    }
+
+                    if (Object.keys(profileUpdates).length > 0) {
+                        await prisma.profile.update({
+                            where: { id: profile.id },
+                            data: profileUpdates,
+                        });
+                    }
+                }
+            } catch (syncErr) {
+                console.warn("[ApplicationController] Failed to auto-sync checkpoint answers to candidate profile:", syncErr);
+            }
+
             const { applicationQueueService } = await import("../queue/application-queue.service.js");
             const updatedQueue = await applicationQueueService.resumeWaitingJob(
                 id,

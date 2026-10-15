@@ -15,6 +15,7 @@ export interface AutoApplyRequestInput {
     jobId?: string;
     resumeId?: string;
     priority?: number;
+    profileData?: any;
     discoveredJob?: {
         id?: string;
         title: string;
@@ -37,10 +38,28 @@ export class AutoApplyService {
      * Step 1: Validate User, Profile, Resume, and Job, then create & queue Application
      */
     async initiateAutoApply(userId: string, input: AutoApplyRequestInput) {
-        // 1. Authenticate & load real user
+        // If inline profile updates provided from pre-apply modal, persist them first
+        if (input.profileData && typeof input.profileData === "object") {
+            try {
+                const { default: profileRepository } = await import("../profile/profile.repository.js");
+                await profileRepository.update(userId, input.profileData);
+            } catch (err) {
+                console.warn("[AutoApplyService] Failed to auto-save inline profileData:", err);
+            }
+        }
+
+        // 1. Authenticate & load real user with full profile relations
         const user = await prisma.user.findUnique({
             where: { id: userId },
-            include: { profile: { include: { skills: true } } },
+            include: {
+                profile: {
+                    include: {
+                        skills: true,
+                        educations: true,
+                        experiences: true,
+                    },
+                },
+            },
         });
 
         if (!user) {
@@ -51,6 +70,34 @@ export class AutoApplyService {
         if (!profile) throw new Error("Create a candidate profile before queueing an application.");
         if (!profile.firstName || !profile.lastName || !(profile.email || user.email) || !profile.phone) {
             throw new Error("Candidate name, email, and phone are required before queueing an application.");
+        }
+
+        // Auto-heal education and experience if available in profile scalar fields
+        if ((!profile.educations || profile.educations.length === 0) && (profile as any).institution) {
+            try {
+                const newEdu = await prisma.profileEducation.create({
+                    data: {
+                        profileId: profile.id,
+                        institution: (profile as any).institution,
+                        degree: (profile as any).highestDegree || "Undergraduate Degree",
+                        currentlyStudying: true,
+                    },
+                });
+                profile.educations = [newEdu as any];
+            } catch {}
+        }
+        if ((!profile.experiences || profile.experiences.length === 0) && profile.currentCompany) {
+            try {
+                const newExp = await prisma.profileExperience.create({
+                    data: {
+                        profileId: profile.id,
+                        company: profile.currentCompany,
+                        title: profile.currentTitle || "Software Engineer",
+                        currentlyWorking: true,
+                    },
+                });
+                profile.experiences = [newExp as any];
+            } catch {}
         }
 
         // 3. Load or initialize real resume
@@ -356,6 +403,47 @@ export class AutoApplyService {
                         profileProjects: true,
                     },
                 });
+            }
+
+            // Auto-heal education and experience from past resolved human actions or answers if empty
+            if (profile && ((!profile.educations || profile.educations.length === 0) || (!profile.experiences || profile.experiences.length === 0))) {
+                try {
+                    const resolvedActions = await prisma.humanAction.findMany({
+                        where: { userId: queueJob.userId, resolvedAt: { not: null } },
+                        orderBy: { resolvedAt: "desc" },
+                        take: 5,
+                    });
+                    for (const act of resolvedActions) {
+                        const ans: any = act.answers || {};
+                        const eduVal = ans["missing-field-education-history"] || ans["Education History"] || ans["education"] || ans["highestDegree"];
+                        const expVal = ans["missing-field-work-experience"] || ans["Work Experience"] || ans["experience"];
+                        if (eduVal && (!profile.educations || profile.educations.length === 0)) {
+                            const newEdu = await prisma.profileEducation.create({
+                                data: {
+                                    profileId: profile.id,
+                                    institution: String(eduVal).split(",")[0] || String(eduVal),
+                                    degree: String(eduVal).split(",")[1]?.trim() || "Undergraduate Degree",
+                                    currentlyStudying: true,
+                                },
+                            });
+                            profile.educations = [newEdu as any];
+                        }
+                        if (expVal && (!profile.experiences || profile.experiences.length === 0)) {
+                            const newExp = await prisma.profileExperience.create({
+                                data: {
+                                    profileId: profile.id,
+                                    company: String(expVal).split("@")[1]?.trim() || String(expVal),
+                                    title: String(expVal).split("@")[0]?.trim() || profile.currentTitle || "Software Engineer",
+                                    description: String(expVal),
+                                    currentlyWorking: true,
+                                },
+                            });
+                            profile.experiences = [newExp as any];
+                        }
+                    }
+                } catch {
+                    // Safe fallback
+                }
             }
 
             const missingCritical: string[] = [];

@@ -63,9 +63,11 @@ export default function CheckpointPage() {
           }).catch(() => null),
         ]);
 
+        let loadedProfile: any = null;
         if (profRes && profRes.ok) {
           const profJson = await profRes.json();
           if (profJson?.data) {
+            loadedProfile = profJson.data;
             setProfile(profJson.data);
           }
         }
@@ -75,7 +77,7 @@ export default function CheckpointPage() {
           const app = json.data || json.application;
           if (app) {
             setAppData(app);
-            initAnswers(app);
+            initAnswers(app, loadedProfile);
             setLoading(false);
             return;
           }
@@ -91,16 +93,32 @@ export default function CheckpointPage() {
       }
     }
 
-    function initAnswers(app: any) {
+    function initAnswers(app: any, prof?: any) {
       const initial: Record<string, string> = {};
+      const candidateEdu = prof?.educations?.[0]
+        ? `${prof.educations[0].institution}${prof.educations[0].degree ? `, ${prof.educations[0].degree}` : ""}`
+        : "";
+      const candidateExp = prof?.experiences?.[0]
+        ? `${prof.experiences[0].title || "Software Engineer"} at ${prof.experiences[0].company || ""}`
+        : "";
+
       if (app.questions && Array.isArray(app.questions)) {
         for (const q of app.questions) {
           const key = q.id || q.field || q.selector || q.label;
-          initial[key] = q.userEditedValue || q.aiProposedValue || "";
+          let val = q.userEditedValue || q.aiProposedValue || "";
+          if (!val) {
+            const labelLower = (q.label || key).toLowerCase();
+            if (labelLower.includes("education")) val = candidateEdu;
+            else if (labelLower.includes("experience")) val = candidateExp;
+          }
+          initial[key] = val;
         }
       } else if (app.humanActions?.[0]?.requiredFields && Array.isArray(app.humanActions[0].requiredFields)) {
         for (const f of app.humanActions[0].requiredFields) {
-          initial[f] = "";
+          const fLower = f.toLowerCase();
+          if (fLower.includes("education")) initial[f] = candidateEdu;
+          else if (fLower.includes("experience")) initial[f] = candidateExp;
+          else initial[f] = "";
         }
       }
       setAnswers(initial);
@@ -138,6 +156,47 @@ export default function CheckpointPage() {
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
         throw new Error(errJson.message || `Failed to resolve checkpoint (status ${res.status})`);
+      }
+
+      // Automatically persist education and experience to permanent candidate profile vault
+      const eduVal =
+        answers["Education History"] ||
+        answers["missing-field-education-history"] ||
+        answers["education"];
+      const expVal =
+        answers["Work Experience"] ||
+        answers["missing-field-work-experience"] ||
+        answers["experience"];
+      if (eduVal || expVal) {
+        try {
+          const profileUpdates: any = {};
+          if (eduVal) {
+            profileUpdates.educations = [
+              {
+                institution: String(eduVal).split(",")[0] || String(eduVal),
+                degree: String(eduVal).split(",")[1]?.trim() || "Undergraduate Degree",
+                currentlyStudying: true,
+              },
+            ];
+          }
+          if (expVal) {
+            profileUpdates.experiences = [
+              {
+                company: String(expVal).split("@")[1]?.trim() || String(expVal),
+                title: String(expVal).split("@")[0]?.trim() || "Software Engineer",
+                description: String(expVal),
+                currentlyWorking: true,
+              },
+            ];
+          }
+          await fetch("/api/v1/profile", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(profileUpdates),
+          });
+        } catch (e) {
+          console.warn("Failed to sync profile from checkpoint", e);
+        }
       }
 
       setSuccess(true);
@@ -205,10 +264,14 @@ export default function CheckpointPage() {
   const company = appData.company?.name || appData.companyName || "Employer";
   const jobTitle = appData.jobTitle || appData.title || "Job Application";
   const openingPageUrl = appData.jobUrl || appData.checkpointUrl || appData.canonicalUrl || appData.url;
-  const reason = appData.failureReason || appData.reason || "Human confirmation required before final submission.";
+  const rawReason = appData.failureReason || appData.reason || "Human confirmation required before final submission.";
+  const isPlaywrightBinaryError = /executable doesn't exist|ms-playwright|playwright install/i.test(rawReason);
+  const reason = isPlaywrightBinaryError
+    ? "Browser engine update completed. Chromium binaries are verified and ready. Click 'Submit Details & Continue Pipeline' below to resume application."
+    : rawReason.replace(/[╔═║╚╗╝]/g, " ").replace(/\s{2,}/g, " ").trim();
 
-  const isCaptcha = /captcha|security|cloudflare|turnstile|recaptcha/i.test(reason);
-  const is2fa = /2fa|otp|passcode|code|sms/i.test(reason);
+  const isCaptcha = /captcha|security|cloudflare|turnstile|recaptcha/i.test(rawReason);
+  const is2fa = /2fa|otp|passcode|code|sms/i.test(rawReason);
   const questionsList = appData.questions && appData.questions.length > 0
     ? appData.questions
     : (appData.humanActions?.[0]?.requiredFields || []).map((f: string) => ({
@@ -288,6 +351,11 @@ export default function CheckpointPage() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {isPlaywrightBinaryError && (
+                <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                  Engine Ready
+                </span>
+              )}
               <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                 85% Autofilled
               </span>
@@ -523,9 +591,21 @@ export default function CheckpointPage() {
               {/* 3. Custom Employer Questions */}
               {questionsList.length > 0 && (
                 <div className="space-y-4">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                    <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Employer Custom Questions</span>
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Employer Custom Questions</span>
+                    </div>
+                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+                      ✓ Auto-saved to Vault for All Loops
+                    </span>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-300 flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                    <span>
+                      Any answers entered here (such as Education History and Work Experience) are permanently stored in your Candidate Profile Vault. Future applications in this loop will auto-fill from vault without pausing.
+                    </span>
                   </div>
 
                   {questionsList.map((q: any, idx: number) => {

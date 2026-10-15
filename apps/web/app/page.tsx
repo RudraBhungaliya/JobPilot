@@ -41,10 +41,12 @@ import {
   Filter,
   Globe,
   Code2,
+  GraduationCap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { JobSearchLoopsView } from "../components/job-search-loops";
 import { InterventionsHub } from "../components/interventions-hub";
+import { PreApplyProfileModal } from "../components/pre-apply-profile-modal";
 
 export interface JobOpening {
   id: string;
@@ -93,6 +95,33 @@ export interface CandidateProfile {
   sponsorshipRequired?: boolean;
   willingToRelocate?: boolean;
   skills: string[];
+  // Education fields
+  institution?: string;
+  highestDegree?: string;
+  fieldOfStudy?: string;
+  graduationYear?: string;
+  educations?: Array<{
+    id?: string;
+    institution: string;
+    degree: string;
+    fieldOfStudy?: string;
+    grade?: string;
+    startDate?: string;
+    endDate?: string;
+    currentlyStudying?: boolean;
+  }>;
+  // Experience fields
+  experienceDescription?: string;
+  experiences?: Array<{
+    id?: string;
+    company: string;
+    title: string;
+    location?: string;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+    currentlyWorking?: boolean;
+  }>;
 }
 
 export interface ApplicationTrackerItem {
@@ -133,6 +162,13 @@ const EMPTY_PROFILE: CandidateProfile = {
   sponsorshipRequired: false,
   willingToRelocate: true,
   skills: [],
+  institution: "",
+  highestDegree: "",
+  fieldOfStudy: "",
+  graduationYear: "",
+  educations: [],
+  experienceDescription: "",
+  experiences: [],
 };
 
 export default function Home() {
@@ -195,6 +231,8 @@ export default function Home() {
   const [verificationAnswers, setVerificationAnswers] = useState<Record<string, any>>({});
   const [directCheckpointId, setDirectCheckpointId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [preApplyModalOpen, setPreApplyModalOpen] = useState(false);
+  const [preApplyTargetJob, setPreApplyTargetJob] = useState<JobOpening | null>(null);
 
   // Backend Stats & Notifications
   const [pipelineStats, setPipelineStats] = useState<{
@@ -536,6 +574,8 @@ export default function Home() {
         const json = await res.json();
         if (json?.data) {
           const d = json.data;
+          const firstEdu = Array.isArray(d.educations) && d.educations.length > 0 ? d.educations[0] : null;
+          const firstExp = Array.isArray(d.experiences) && d.experiences.length > 0 ? d.experiences[0] : null;
           setProfile((prev) => ({
             ...prev,
             firstName: d.firstName || prev.firstName,
@@ -545,8 +585,8 @@ export default function Home() {
             city: d.city || prev.city,
             state: d.state || prev.state,
             country: d.country || prev.country,
-            currentTitle: d.currentTitle || prev.currentTitle,
-            currentCompany: d.currentCompany || prev.currentCompany,
+            currentTitle: firstExp?.title || d.currentTitle || prev.currentTitle,
+            currentCompany: firstExp?.company || d.currentCompany || prev.currentCompany,
             yearsOfExperience: typeof d.yearsOfExperience === "number" ? d.yearsOfExperience : prev.yearsOfExperience,
             expectedSalaryLPA: typeof d.expectedSalary === "number" ? Math.round(d.expectedSalary / 100000) : prev.expectedSalaryLPA,
             currentSalaryLPA: typeof d.currentSalary === "number" ? Math.round(d.currentSalary / 100000) : prev.currentSalaryLPA,
@@ -561,6 +601,12 @@ export default function Home() {
             skills: Array.isArray(d.skills) && d.skills.length > 0
               ? d.skills.map((s: any) => (typeof s === "string" ? s : s.name)).filter(Boolean)
               : prev.skills,
+            institution: firstEdu?.institution || prev.institution,
+            highestDegree: firstEdu?.degree || prev.highestDegree,
+            fieldOfStudy: firstEdu?.fieldOfStudy || prev.fieldOfStudy,
+            educations: d.educations || prev.educations || [],
+            experienceDescription: firstExp?.description || prev.experienceDescription,
+            experiences: d.experiences || prev.experiences || [],
           }));
         }
       }
@@ -573,6 +619,38 @@ export default function Home() {
     const prof = customProfile || profile;
     setIsSavingProfile(true);
     try {
+      const eduPayload = prof.educations && prof.educations.length > 0
+        ? prof.educations.map((e) => ({
+            institution: e.institution,
+            degree: e.degree,
+            fieldOfStudy: e.fieldOfStudy || "Engineering / Science",
+            currentlyStudying: true,
+          }))
+        : prof.institution && prof.highestDegree
+        ? [{
+            institution: prof.institution,
+            degree: prof.highestDegree,
+            fieldOfStudy: prof.fieldOfStudy || "Computer Science & Engineering",
+            currentlyStudying: true,
+          }]
+        : undefined;
+
+      const expPayload = prof.experiences && prof.experiences.length > 0
+        ? prof.experiences.map((e) => ({
+            company: e.company,
+            title: e.title,
+            description: e.description || `${e.title} at ${e.company}`,
+            currentlyWorking: true,
+          }))
+        : prof.currentCompany && prof.currentTitle
+        ? [{
+            company: prof.currentCompany,
+            title: prof.currentTitle,
+            description: prof.experienceDescription || `${prof.currentTitle} at ${prof.currentCompany}`,
+            currentlyWorking: true,
+          }]
+        : undefined;
+
       const res = await fetch("/api/v1/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -599,6 +677,8 @@ export default function Home() {
           sponsorshipRequired: prof.sponsorshipRequired,
           willingToRelocate: prof.willingToRelocate,
           skills: prof.skills.map((name) => ({ name })),
+          educations: eduPayload,
+          experiences: expPayload,
         }),
       });
       if (res.ok) {
@@ -1121,8 +1201,33 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
     }
   };
 
-  // Apply Action via Real Persistent Auto-Apply Queue
+  // Helper to check if candidate profile is completely configured before applying
+  const isProfileIncomplete = (prof: CandidateProfile) => {
+    if (!prof) return true;
+    if (!prof.firstName?.trim() || !prof.lastName?.trim()) return true;
+    if (!prof.email?.trim() || !prof.phone?.trim()) return true;
+    const hasEdu =
+      (prof.educations && prof.educations.length > 0 && Boolean(prof.educations[0]?.institution)) ||
+      Boolean(prof.institution?.trim() && prof.highestDegree?.trim());
+    const hasExp =
+      (prof.experiences && prof.experiences.length > 0 && Boolean(prof.experiences[0]?.company)) ||
+      Boolean(prof.currentCompany?.trim() && prof.currentTitle?.trim());
+    return !hasEdu || !hasExp;
+  };
+
+  // Pre-Apply Gate: Ensures all candidate details (education, experience, contact)
+  // are collected upfront BEFORE applying, so no checkpoint loops occur!
   const handleApply = async (job: JobOpening) => {
+    if (isProfileIncomplete(profile)) {
+      setPreApplyTargetJob(job);
+      setPreApplyModalOpen(true);
+      return;
+    }
+    await executeApply(job);
+  };
+
+  // Apply Action via Real Persistent Auto-Apply Queue
+  const executeApply = async (job: JobOpening, customProfileData?: any) => {
     setIsApplying(true);
     const tempId = job.id;
     const initialApp: ApplicationTrackerItem = {
@@ -1146,6 +1251,7 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           jobId: job.id,
+          profileData: customProfileData,
           discoveredJob: {
             id: job.id,
             title: job.title,
@@ -2453,7 +2559,14 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                 fullName: `${profile.firstName} ${profile.lastName}`.trim(),
                 email: profile.email,
                 phone: profile.phone,
+                institution: profile.institution,
+                highestDegree: profile.highestDegree,
+                currentCompany: profile.currentCompany,
+                currentTitle: profile.currentTitle,
+                educations: profile.educations,
+                experiences: profile.experiences,
               }}
+              onOpenPreApplyModal={() => setPreApplyModalOpen(true)}
               onSelectLoop={() => {
                 setCurrentTab("jobs");
               }}
@@ -2630,11 +2743,44 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                   </div>
                 </div>
 
-                {/* Section 3: Compensation (INR LPA) */}
+                {/* Section 3: Education History (ATS Required) */}
+                <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      <span>3. Education History (ATS Required)</span>
+                    </h3>
+                    <span className="text-[10px] text-emerald-400 font-mono">Autofills Greenhouse & Lever Degrees</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                    <div className="md:col-span-2">
+                      <label className="block text-slate-400 mb-1 font-medium">Institution / University *</label>
+                      <input
+                        type="text"
+                        value={profile.institution || ""}
+                        onChange={(e) => setProfile({ ...profile, institution: e.target.value })}
+                        placeholder="e.g. Pandit Deendayal Energy University, Gandhinagar"
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Degree Program *</label>
+                      <input
+                        type="text"
+                        value={profile.highestDegree || ""}
+                        onChange={(e) => setProfile({ ...profile, highestDegree: e.target.value })}
+                        placeholder="e.g. B.Tech Computer Science (CSE '28)"
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Compensation (INR LPA) */}
                 <div className="space-y-3 pt-2 border-t border-white/[0.06]">
                   <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>3. Compensation Details (₹ LPA)</span>
+                    <span>4. Compensation Details (₹ LPA)</span>
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div>
@@ -3359,6 +3505,45 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
           </div>
         </div>
       )}
+      {/* MODAL: PRE-APPLY CANDIDATE PROFILE SETUP */}
+      <PreApplyProfileModal
+        isOpen={preApplyModalOpen}
+        onClose={() => setPreApplyModalOpen(false)}
+        profile={profile}
+        targetJob={preApplyTargetJob}
+        onConfirmApply={async (updatedData) => {
+          setProfile((prev) => ({
+            ...prev,
+            ...updatedData,
+            institution: updatedData.institution,
+            highestDegree: updatedData.highestDegree,
+            fieldOfStudy: updatedData.fieldOfStudy,
+            currentCompany: updatedData.currentCompany,
+            currentTitle: updatedData.currentTitle,
+            experienceDescription: updatedData.experienceDescription,
+            educations: [
+              {
+                institution: updatedData.institution,
+                degree: updatedData.highestDegree,
+                fieldOfStudy: updatedData.fieldOfStudy,
+                currentlyStudying: true,
+              },
+            ],
+            experiences: [
+              {
+                company: updatedData.currentCompany,
+                title: updatedData.currentTitle,
+                description: updatedData.experienceDescription,
+                currentlyWorking: true,
+              },
+            ],
+          }));
+
+          if (preApplyTargetJob) {
+            await executeApply(preApplyTargetJob, updatedData);
+          }
+        }}
+      />
     </div>
   );
 }
