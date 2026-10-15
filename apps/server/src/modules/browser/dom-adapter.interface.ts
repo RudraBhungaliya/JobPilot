@@ -11,4 +11,4 @@ export interface DomAtsAdapter {
   lastFillCount?: number;
 }
 
-export type DomAtsDetectorName = "greenhouse" | "lever" | "workday" | "ashby" | "successfactors";
+export type DomAtsDetectorName = "greenhouse" | "lever" | "workday" | "ashby" | "successfactors" | "universal";

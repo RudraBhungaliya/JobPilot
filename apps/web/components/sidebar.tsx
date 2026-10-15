@@ -18,7 +18,7 @@ import {
   Building,
 } from "./icons";
 
-export type NavTab = "pipeline" | "loops" | "reviews" | "discovery" | "resumes" | "telemetry" | "profile";
+export type NavTab = "pipeline" | "loops" | "reviews" | "interventions" | "discovery" | "resumes" | "telemetry" | "profile";
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -60,7 +60,7 @@ export function Sidebar({
     },
     {
       id: "reviews" as NavTab,
-      label: "Review required",
+      label: "Interventions required",
       icon: ShieldCheck,
       badge: pendingReviewCount > 0 ? `${pendingReviewCount}` : null,
       badgeColor: "bg-amber-500/15 text-amber-400 border border-amber-500/30",

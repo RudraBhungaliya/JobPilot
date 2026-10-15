@@ -1,5 +1,6 @@
 import type { SourceJob, SourceSearchInput } from "./source.types.js";
 import workdaySource from "./workday.source.js";
+import webScraperSource from "./web-scraper.source.js";
 import {
     INDIAN_LOCATION_ALIASES,
     canonicalizeLocation,
@@ -816,14 +817,15 @@ class LiveAtsService {
     }
 
     async searchAll(input: SourceSearchInput): Promise<SourceJob[]> {
-        const [greenhouse, ashby, lever, workday] = await Promise.allSettled([
+        const [greenhouse, ashby, lever, workday, webScraped] = await Promise.allSettled([
             this.searchGreenhouse(input),
             this.searchAshby(input),
             this.searchLever(input),
             workdaySource.search(input),
+            webScraperSource.search(input),
         ]);
 
-        const results = [greenhouse, ashby, lever, workday];
+        const results = [greenhouse, ashby, lever, workday, webScraped];
         const failures = results.filter((result) => result.status === "rejected");
         if (failures.length === results.length) {
             throw new AggregateError(
@@ -837,6 +839,7 @@ class LiveAtsService {
         if (ashby.status === "fulfilled") allJobs.push(...ashby.value);
         if (lever.status === "fulfilled") allJobs.push(...lever.value);
         if (workday.status === "fulfilled") allJobs.push(...workday.value);
+        if (webScraped.status === "fulfilled") allJobs.push(...webScraped.value);
         allJobs.push(...BENGALURU_SDE_INTERN_OPENINGS);
         const unique = new Map<string, SourceJob>();
         for (const job of allJobs) unique.set(job.url.toLowerCase().replace(/\/$/, ""), job);
@@ -882,11 +885,12 @@ class LiveAtsService {
         remoteOnly?: boolean;
     } = {}): Promise<Array<SourceJob & { department?: string; tags?: string[]; category?: string; categoryLabel?: string; salaryINR?: string }>> {
         const kw = input.keyword || "";
-        const [gh, lv, as, wd] = await Promise.allSettled([
+        const [gh, lv, as, wd, ws] = await Promise.allSettled([
             this.searchGreenhouse({ keyword: kw, location: input.city, remote: input.remoteOnly }),
             this.searchLever({ keyword: kw, location: input.city, remote: input.remoteOnly }),
             this.searchAshby({ keyword: kw, location: input.city, remote: input.remoteOnly }),
             workdaySource.search({ keyword: kw, location: input.city }),
+            webScraperSource.search({ keyword: kw, location: input.city, remote: input.remoteOnly }),
         ]);
 
         const rawJobs: SourceJob[] = [];
@@ -894,6 +898,7 @@ class LiveAtsService {
         if (lv.status === "fulfilled") rawJobs.push(...lv.value);
         if (as.status === "fulfilled") rawJobs.push(...as.value);
         if (wd.status === "fulfilled") rawJobs.push(...wd.value);
+        if (ws.status === "fulfilled") rawJobs.push(...ws.value);
 
         const verifiedMatched = this.filterJobs(BENGALURU_SDE_INTERN_OPENINGS, {
             keyword: kw,

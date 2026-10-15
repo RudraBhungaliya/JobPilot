@@ -42,7 +42,9 @@ import {
   Globe,
   Code2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { JobSearchLoopsView } from "../components/job-search-loops";
+import { InterventionsHub } from "../components/interventions-hub";
 
 export interface JobOpening {
   id: string;
@@ -97,7 +99,7 @@ export interface ApplicationTrackerItem {
   id: string;
   title: string;
   company: string;
-  status: "QUEUED" | "RUNNING" | "NEEDS_INTERVENTION" | "SUBMITTED" | "FAILED";
+  status: "QUEUED" | "RUNNING" | "NEEDS_INTERVENTION" | "WAITING_FOR_USER" | "RESUMED" | "SUBMITTED" | "FAILED";
   time: string;
   atsProvider: string;
   salaryINR: string;
@@ -144,8 +146,9 @@ const INITIAL_PROFILE: CandidateProfile = {
 };
 
 export default function Home() {
-  // Navigation Tabs: dashboard | jobs | pipeline | loops | profile
-  const [currentTab, setCurrentTab] = useState<"dashboard" | "jobs" | "pipeline" | "loops" | "profile">("dashboard");
+  const router = useRouter();
+  // Navigation Tabs: dashboard | jobs | pipeline | loops | profile | reviews | interventions
+  const [currentTab, setCurrentTab] = useState<"dashboard" | "jobs" | "pipeline" | "loops" | "profile" | "reviews" | "interventions">("dashboard");
 
   // Candidate & Resume State
   const [file, setFile] = useState<{ name: string; size: string } | null>({
@@ -635,6 +638,8 @@ export default function Home() {
       const checkpointParam = params.get("checkpointId");
       if (tabParam === "pipeline") {
         setCurrentTab("pipeline");
+      } else if (tabParam === "reviews" || tabParam === "interventions") {
+        setCurrentTab("interventions");
       }
       if (checkpointParam) {
         setDirectCheckpointId(checkpointParam);
@@ -1425,6 +1430,25 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
             </button>
 
             <button
+              onClick={() => setCurrentTab("interventions")}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition cursor-pointer text-left ${
+                currentTab === "interventions" || currentTab === "reviews"
+                  ? "bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30 shadow-sm"
+                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ShieldAlert className={`w-4 h-4 ${currentTab === "interventions" || currentTab === "reviews" ? "text-amber-400" : "text-amber-500/80"}`} />
+                <span>Interventions</span>
+              </div>
+              {applications.filter((a) => a.status === "WAITING_FOR_USER" || a.status === "NEEDS_INTERVENTION").length > 0 && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/25 text-amber-300 border border-amber-500/40 font-bold animate-pulse">
+                  {applications.filter((a) => a.status === "WAITING_FOR_USER" || a.status === "NEEDS_INTERVENTION").length} Action{applications.filter((a) => a.status === "WAITING_FOR_USER" || a.status === "NEEDS_INTERVENTION").length > 1 ? "s" : ""}
+                </span>
+              )}
+            </button>
+
+            <button
               onClick={() => setCurrentTab("profile")}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition cursor-pointer text-left ${
                 currentTab === "profile"
@@ -1682,6 +1706,35 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
           {/* TAB 1: DASHBOARD */}
           {currentTab === "dashboard" && (
             <div className="space-y-6">
+              {/* INTERVENTIONS REQUIRED BANNER */}
+              {applications.some((a) => a.status === "WAITING_FOR_USER" || a.status === "NEEDS_INTERVENTION") && (
+                <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-[#161a29] to-[#0f1322] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                      <ShieldAlert className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white">Action Required: Applications Paused at Checkpoints</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                          {applications.filter((a) => a.status === "WAITING_FOR_USER" || a.status === "NEEDS_INTERVENTION").length} Pending
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Playwright automation requires your confirmation for security challenges, CAPTCHAs, or screening answers to continue the pipeline.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setCurrentTab("interventions")}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 shadow-md shadow-amber-600/25 transition cursor-pointer flex items-center gap-2 shrink-0 self-start sm:self-auto"
+                  >
+                    <span>Review & Fix Checkpoints</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
               {/* Executive Metrics Overview */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="bg-[#121829]/70 p-4 rounded-xl border border-white/[0.08] backdrop-blur-md">
@@ -2748,6 +2801,16 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                 </div>
               </div>
             </div>
+          )}
+
+          {/* TAB 6: HUMAN INTERVENTIONS HUB */}
+          {(currentTab === "reviews" || currentTab === "interventions") && (
+            <InterventionsHub
+              applications={applications}
+              onResolveCheckpoint={handleResolveCheckpoint}
+              onRefresh={fetchBackendApplications}
+              onOpenDirectCheckpoint={(appId) => router.push(`/checkpoint/${appId}`)}
+            />
           )}
         </main>
       </div>
