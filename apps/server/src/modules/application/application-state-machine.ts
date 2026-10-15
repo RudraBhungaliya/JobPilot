@@ -169,15 +169,34 @@ export class ApplicationStateMachine {
 
             if (candidateEmail) {
                 try {
+                    const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+                    const actionUrl = `${frontendUrl}/?tab=pipeline&checkpointId=${application.id}`;
+                    const prof = application.user.profile;
+                    const alreadyFilledFields = [
+                        { label: "Candidate Name", value: candidateName },
+                        { label: "Contact Email", value: candidateEmail },
+                        { label: "Phone Number", value: prof?.phone || "Pre-filled from Profile" },
+                        { label: "Target Location", value: prof?.city || application.job.location || "Bengaluru, Karnataka, India" },
+                        { label: "Tailored ATS Resume", value: (application as any).resume?.title || "Tailored ATS Resume Attached (PDF)" },
+                        { label: "Synced Profiles", value: prof?.linkedin || prof?.github ? "LinkedIn & GitHub Attached" : "Profile Verified" },
+                    ];
+
+                    const remainingFields = req.metadata?.missingFields || [
+                        req.reason || "Additional employer screening questions or interactive verification checkpoint."
+                    ];
+
                     await emailService.sendHumanInterventionAlert({
                         to: candidateEmail,
                         candidateName,
                         jobTitle: application.job.title,
                         companyName: application.job.company.name,
-                        actionUrl: application.job.url,
+                        actionUrl,
                         reason: req.reason || "Employer ATS portal requested interactive CAPTCHA / 2FA / Custom Verification.",
                         verificationType: req.metadata?.verificationType || "Interactive Security Checkpoint",
                         jobLocation: application.job.location,
+                        applicationId: application.id,
+                        alreadyFilledFields,
+                        remainingFields,
                     });
                 } catch (emailErr) {
                     console.error("[StateMachine] Failed to send email alert:", emailErr);

@@ -43,21 +43,19 @@ test("Task 3 Application Pipeline & Adapter Verification Suite", async (t) => {
     const sampleProfile: CandidateContext = {
       firstName: "Rudra",
       lastName: "Bhungaliya",
-      fullName: "Rudra Bhungaliya",
       email: "rudra@example.com",
       phone: "+91 9876543210",
       city: "Surat",
       state: "Gujarat",
       country: "India",
-      location: "Surat, Gujarat, India",
       linkedin: "https://linkedin.com/in/rudrabhungaliya",
       github: "https://github.com/RudraBhungaliya",
       portfolio: "https://rudra.dev",
       workAuthorization: "YES_AUTHORIZED",
       sponsorshipRequired: false,
-      experiences: [{ title: "Software Engineer", company: "TechCorp" }],
-      educations: [{ degree: "B.Tech Computer Science", school: "University" }],
-      skills: ["TypeScript", "Node.js", "React", "PostgreSQL"],
+      experiences: [{ title: "Software Engineer", company: "TechCorp" } as any],
+      educations: [{ degree: "B.Tech Computer Science", school: "University" } as any],
+      skills: [{ name: "TypeScript" }, { name: "Node.js" }, { name: "React" }, { name: "PostgreSQL" }] as any,
     };
 
     const fieldsToTest = [
@@ -107,15 +105,22 @@ test("Task 3 Application Pipeline & Adapter Verification Suite", async (t) => {
   });
 
   await t.test("6. HumanAction creation and persistence for security challenges & approvals", async () => {
-    let testApp = await prisma.application.findFirst({ include: { user: true } });
+    let testApp: any = await prisma.application.findFirst({ include: { user: true } });
     if (!testApp) {
       const user = await prisma.user.findFirst();
       const job = await prisma.job.findFirst();
       if (user && job) {
+        let resume = await prisma.resume.findFirst({ where: { userId: user.id } });
+        if (!resume) {
+          resume = await prisma.resume.create({
+            data: { userId: user.id, title: "Default Resume", originalName: "resume.pdf", fileUrl: "https://example.com/resume.pdf" },
+          });
+        }
         testApp = await prisma.application.create({
           data: {
             userId: user.id,
             jobId: job.id,
+            resumeId: resume.id,
             status: "WAITING_FOR_USER",
           },
           include: { user: true },
@@ -144,9 +149,10 @@ test("Task 3 Application Pipeline & Adapter Verification Suite", async (t) => {
       ],
     });
 
-    assert.equal(action.questions.length, 2);
-    assert.equal(action.questions[0].type, "captcha");
-    assert.equal(action.questions[1].type, "approval");
+    const qs = action.questions as any[];
+    assert.equal(qs.length, 2);
+    assert.equal(qs[0].type, "captcha");
+    assert.equal(qs[1].type, "approval");
 
     // Clean up
     await prisma.humanAction.delete({ where: { id: action.id } }).catch(() => {});

@@ -189,4 +189,20 @@ describe("filterJobs location matching", () => {
         const result = filterJobs(jobs, { keyword: "" });
         assert.equal(result.length, 2);
     });
+
+    it("SDE Intern keyword matches Software Engineer - Intern, Developer Intern and SDE Intern in Bengaluru", () => {
+        const jobs = [
+            makeJob({ externalId: "j1", title: "Software Engineer - Intern", location: "Bengaluru, Karnataka, India" }),
+            makeJob({ externalId: "j2", title: "Software Development Engineer (SDE) Intern", location: "Bengaluru, Karnataka, India" }),
+            makeJob({ externalId: "j3", title: "Frontend Developer Intern", location: "Bangalore, India" }),
+            makeJob({ externalId: "j4", title: "Senior HR Manager", location: "Bengaluru, India" }),
+        ];
+        const result = filterJobs(jobs, { keyword: "SDE Intern", location: "Bengaluru" });
+        assert.equal(result.length, 3);
+        const ids = result.map((j) => j.externalId);
+        assert.ok(ids.includes("j1"));
+        assert.ok(ids.includes("j2"));
+        assert.ok(ids.includes("j3"));
+        assert.ok(!ids.includes("j4"));
+    });
 });

@@ -20,10 +20,17 @@ test("Task 4: Email & Human-Intervention Workflow Suite", async (t) => {
       const user = await prisma.user.findFirst();
       const job = await prisma.job.findFirst({ include: { company: true } });
       if (user && job) {
+        let resume = await prisma.resume.findFirst({ where: { userId: user.id } });
+        if (!resume) {
+          resume = await prisma.resume.create({
+            data: { userId: user.id, title: "Default Resume", originalName: "resume.pdf", fileUrl: "https://example.com/resume.pdf" },
+          });
+        }
         testApp = await prisma.application.create({
           data: {
             userId: user.id,
             jobId: job.id,
+            resumeId: resume.id,
             status: "WAITING_FOR_USER",
           },
           include: { user: true, job: { include: { company: true } } },

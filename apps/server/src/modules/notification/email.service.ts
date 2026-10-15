@@ -11,6 +11,9 @@ export interface HumanInterventionAlertInput {
     verificationType?: string;
     jobLocation?: string;
     salaryDollar?: string;
+    applicationId?: string;
+    alreadyFilledFields?: Array<{ label: string; value: string }>;
+    remainingFields?: string[];
 }
 
 export interface ApplicationSummaryAlertInput {
@@ -64,61 +67,111 @@ class EmailService {
     }
 
     async sendHumanInterventionAlert(input: HumanInterventionAlertInput): Promise<{ success: boolean; preview?: string }> {
-        const subject = `🚨 Action Required: Human Intervention needed for ${input.companyName} (${input.jobTitle})`;
+        const subject = `🚨 Action Required: Complete Verification for ${input.companyName} (${input.jobTitle}) - Application Paused`;
+
+        const filledList = (input.alreadyFilledFields && input.alreadyFilledFields.length > 0)
+            ? input.alreadyFilledFields
+            : [
+                { label: "Candidate Name", value: input.candidateName || "Candidate" },
+                { label: "Contact Email", value: input.to },
+                { label: "Location Alignment", value: input.jobLocation || "Bengaluru, Karnataka, India" },
+                { label: "Tailored ATS Resume", value: "Verified & Attached (PDF)" },
+                { label: "Work & Education Profiles", value: "Synced & Pre-populated" },
+            ];
+
+        const remainingItems = (input.remainingFields && input.remainingFields.length > 0)
+            ? input.remainingFields
+            : [input.reason || "Additional employer screening questions or interactive verification checkpoint."];
+
+        const filledRowsHtml = filledList.map((f) => `
+            <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px;">
+                <span style="color: #94a3b8;">${f.label}:</span>
+                <span style="color: #34d399; font-weight: 600;">✓ ${f.value}</span>
+            </div>
+        `).join("");
+
+        const remainingRowsHtml = remainingItems.map((r) => `
+            <div style="padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; color: #fbbf24; font-weight: 500;">
+                ⏳ ${r}
+            </div>
+        `).join("");
 
         const html = `
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #090d16; color: #f3f4f6; margin: 0; padding: 24px; }
-        .container { max-width: 600px; margin: 0 auto; background: #131b2e; border: 1px solid #1e293b; border-radius: 12px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        .badge { display: inline-block; background: #ef4444; color: #ffffff; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 700; text-transform: uppercase; margin-bottom: 16px; }
-        h1 { color: #ffffff; font-size: 22px; margin-top: 0; }
-        p { color: #94a3b8; font-size: 15px; line-height: 1.6; }
-        .details-box { background: #0b1120; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin: 20px 0; }
-        .detail-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-        .detail-label { color: #64748b; font-weight: 600; }
-        .detail-value { color: #38bdf8; font-weight: 600; }
-        .btn { display: inline-block; background: #3b82f6; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 15px; margin-top: 16px; }
-        .footer { margin-top: 32px; font-size: 12px; color: #64748b; text-align: center; border-top: 1px solid #1e293b; padding-top: 16px; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human Intervention Required</title>
 </head>
-<body>
-    <div class="container">
-        <div class="badge">Human Intervention Required</div>
-        <h1>Action Needed: Auto-Apply Paused</h1>
-        <p>Hi ${input.candidateName || "Candidate"},</p>
-        <p>JobPilot was applying to <strong>${input.jobTitle}</strong> at <strong>${input.companyName}</strong>, but encountered a security checkpoint or question that requires your personal verification.</p>
-        
-        <div class="details-box">
-            <div class="detail-row">
-                <span class="detail-label">Company:</span>
-                <span class="detail-value">${input.companyName}</span>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #080c14; color: #f3f4f6; margin: 0; padding: 24px;">
+    <div style="max-width: 640px; margin: 0 auto; background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">
+        <!-- Top Badge & Header -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+            <span style="display: inline-block; background: #ef4444; color: #ffffff; padding: 5px 14px; border-radius: 9999px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+                🚨 Action Required • 50%+ Complete
+            </span>
+            <span style="color: #64748b; font-size: 12px; font-weight: 600;">JobPilot Autonomous Agent</span>
+        </div>
+
+        <h1 style="color: #ffffff; font-size: 22px; margin: 0 0 10px 0; font-weight: 700;">
+            Application Paused at Verification Checkpoint
+        </h1>
+        <p style="color: #94a3b8; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
+            Hi <strong>${input.candidateName || "Candidate"}</strong>,<br>
+            JobPilot has filled out the majority of your application for <strong>${input.jobTitle}</strong> at <strong>${input.companyName}</strong>. 
+            The employer portal presented a checkpoint requiring your action before final submission.
+        </p>
+
+        <!-- Progress Meter -->
+        <div style="background: #1e293b; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; border: 1px solid #334155;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 6px;">
+                <span style="color: #38bdf8;">Application Progress</span>
+                <span style="color: #34d399;">50% Done • Core Data Pre-Filled</span>
             </div>
-            <div class="detail-row">
-                <span class="detail-label">Position:</span>
-                <span class="detail-value">${input.jobTitle}</span>
-            </div>
-            ${input.jobLocation ? `<div class="detail-row"><span class="detail-label">Location:</span><span class="detail-value">${input.jobLocation}</span></div>` : ""}
-            ${input.salaryDollar ? `<div class="detail-row"><span class="detail-label">Est. Compensation:</span><span class="detail-value">${input.salaryDollar}</span></div>` : ""}
-            <div class="detail-row">
-                <span class="detail-label">Intervention Type:</span>
-                <span class="detail-value" style="color: #f87171;">${input.verificationType || "CAPTCHA / Security Challenge"}</span>
-            </div>
-            <div class="detail-row">
-                <span class="detail-label">Details:</span>
-                <span class="detail-value" style="color: #facc15;">${input.reason}</span>
+            <div style="background: #0b1120; height: 8px; border-radius: 9999px; overflow: hidden;">
+                <div style="background: linear-gradient(90deg, #10b981 0%, #06b6d4 100%); width: 50%; height: 100%;"></div>
             </div>
         </div>
 
-        <p>Please click the button below to resolve this step directly in your live browser console so the automated submission can proceed:</p>
-        
-        <a href="${input.actionUrl}" class="btn" target="_blank">Complete Verification & Resume Application</a>
+        <!-- 2-Box Split: Already Filled vs Remaining To Fill -->
+        <div style="margin-bottom: 24px;">
+            <!-- Box 1: Pre-Filled -->
+            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: #34d399; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                    <span>✓ Data Already Auto-Filled by JobPilot (Pre-filled & Saved)</span>
+                </div>
+                ${filledRowsHtml}
+            </div>
 
-        <div class="footer">
-            JobPilot Autonomous Career Agent • Realtime Indian & Global ATS Connector
+            <!-- Box 2: Remaining -->
+            <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: #fbbf24; margin-bottom: 8px;">
+                    <span>⏳ Remaining For You to Complete (1-2 Min Action)</span>
+                </div>
+                ${remainingRowsHtml}
+                <div style="font-size: 11px; color: #94a3b8; margin-top: 8px;">
+                    Verification Type: <strong style="color: #f87171;">${input.verificationType || "Custom Questionnaire / Security Gate"}</strong>
+                </div>
+            </div>
+        </div>
+
+        <!-- Call to Action Button -->
+        <div style="text-align: center; margin: 28px 0 20px 0;">
+            <a href="${input.actionUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 700; font-size: 15px; box-shadow: 0 10px 20px rgba(79, 70, 229, 0.4); letter-spacing: 0.3px;">
+                👉 Complete Remaining Details & Resume Session
+            </a>
+        </div>
+
+        <p style="color: #64748b; font-size: 12px; line-height: 1.5; text-align: center; margin: 0 0 24px 0;">
+            This link redirects you directly to the paused application step with your pre-filled data loaded. 
+            Once submitted, your session will automatically continue its execution and submit to the employer ATS.
+        </p>
+
+        <!-- Footer -->
+        <div style="border-top: 1px solid #1e293b; padding-top: 20px; font-size: 11px; color: #475569; text-align: center;">
+            JobPilot Autonomous Career Agent • Real-Time Bengaluru & Global ATS Pipeline<br>
+            Direct Verification Link: <a href="${input.actionUrl}" style="color: #6366f1;">${input.actionUrl}</a>
         </div>
     </div>
 </body>
@@ -126,14 +179,19 @@ class EmailService {
 `;
 
         const text = `
-Action Required: Human Intervention needed for ${input.companyName} - ${input.jobTitle}
+🚨 ACTION REQUIRED: JobPilot Auto-Apply Paused for ${input.companyName} (${input.jobTitle})
 Hi ${input.candidateName || "Candidate"},
 
-JobPilot encountered a checkpoint while applying for ${input.jobTitle} at ${input.companyName}:
-Reason: ${input.reason}
-Type: ${input.verificationType || "CAPTCHA / Security Challenge"}
+JobPilot has auto-filled 50%+ of your application for ${input.jobTitle} at ${input.companyName}.
+A human verification checkpoint or custom question requires your direct action.
 
-Resolve here: ${input.actionUrl}
+✓ PRE-FILLED BY JOBPILOT: Name, Email, Phone, Tailored ATS Resume, Location
+⏳ REMAINING TO COMPLETE: ${remainingItems.join(", ")}
+
+Complete the remaining details directly at the paused step link below so execution can resume:
+${input.actionUrl}
+
+Once completed, JobPilot will continue executing your submission session.
 `;
 
         await this.deliver({ to: input.to, subject, text, html });

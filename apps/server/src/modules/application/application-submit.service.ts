@@ -562,14 +562,28 @@ class ApplicationSubmitService {
             const { default: emailService } = await import("../notification/email.service.js");
             const candidateEmail = raw.profile?.email || raw.user?.email;
             if (candidateEmail) {
+                const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+                const actionUrl = `${frontendUrl}/?tab=pipeline&checkpointId=${applicationId}`;
+                const prof = raw.profile;
+                const alreadyFilledFields = [
+                    { label: "Candidate Name", value: prof?.firstName ? `${prof.firstName} ${prof.lastName || ""}` : "Candidate" },
+                    { label: "Contact Email", value: candidateEmail },
+                    { label: "Phone Number", value: prof?.phone || "Pre-filled from Profile" },
+                    { label: "Location", value: prof?.city || raw.job?.location || "Bengaluru, India" },
+                    { label: "Tailored Resume", value: "Verified & Attached (PDF)" },
+                ];
+
                 await emailService.sendHumanInterventionAlert({
                     to: candidateEmail,
                     candidateName: raw.profile?.firstName ? `${raw.profile.firstName} ${raw.profile.lastName || ""}` : "Candidate",
                     jobTitle,
                     companyName,
-                    actionUrl: raw.job?.url,
+                    actionUrl,
                     reason: captchaMsg,
                     verificationType: challengeType,
+                    applicationId,
+                    alreadyFilledFields,
+                    remainingFields: [captchaMsg || "Interactive CAPTCHA / 2FA Security Challenge"],
                 });
             }
         } catch {
