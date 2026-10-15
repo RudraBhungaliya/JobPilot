@@ -4,7 +4,7 @@ export class LeverApiAdapter implements ApplyAdapter {
   readonly name = "lever-api";
 
   canApply(url: string, atsProvider?: string): boolean {
-    return /jobs\\.lever\\.co/i.test(url) || atsProvider?.toLowerCase() === "lever";
+    return /lever\.co/i.test(url) || atsProvider?.toLowerCase() === "lever";
   }
 
   async apply(_input: ApplyAdapterInput): Promise<ApplyResult> {

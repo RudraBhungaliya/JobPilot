@@ -267,9 +267,14 @@ export interface WorkdayTenant {
   tier: WorkdayTier;
   board?: string;
   tenant?: string;
+  host?: string;
 }
 
 export const WORKDAY_TENANTS: WorkdayTenant[] = [
+  { slug: "nvidia", company: "NVIDIA", hiresInIndia: true, tier: "MNC", tenant: "nvidia", host: "nvidia.wd5.myworkdayjobs.com", board: "NVIDIAExternalCareerSite" },
+  { slug: "adobe", company: "Adobe", hiresInIndia: true, tier: "MNC", tenant: "adobe", host: "adobe.wd5.myworkdayjobs.com", board: "external_experienced" },
+  { slug: "hp", company: "HP", hiresInIndia: true, tier: "MNC", tenant: "hp", host: "hp.wd5.myworkdayjobs.com", board: "ExternalCareerSite" },
+  { slug: "autodesk", company: "Autodesk", hiresInIndia: true, tier: "MNC", tenant: "autodesk", host: "autodesk.wd1.myworkdayjobs.com", board: "Uni" },
   { slug: "accenture", company: "Accenture", hiresInIndia: true, tier: "MNC", tenant: "accenture" },
   { slug: "deloitte", company: "Deloitte", hiresInIndia: true, tier: "MNC", tenant: "deloitte" },
   { slug: "ey", company: "Ernst & Young", hiresInIndia: true, tier: "MNC", tenant: "ey" },

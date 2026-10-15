@@ -18,6 +18,7 @@ let lastDevUserAttempt = 0;
 const DEV_USER_RETRY_INTERVAL_MS = 60000;
 
 async function ensureDevUser(userId = "usr_dev_candidate_default") {
+    if (process.env.NODE_ENV === "production") return;
     if (devUserEnsured) return;
     const now = Date.now();
     if (now - lastDevUserAttempt < DEV_USER_RETRY_INTERVAL_MS) {
@@ -66,8 +67,8 @@ export default async function authMiddleware(
         }
     }
 
-    if (process.env.NODE_ENV === "production" && !rawToken) {
-        return next(new AppError("Unauthorized", 401));
+    if (process.env.NODE_ENV === "production") {
+        return next(new AppError("Unauthorized: A valid Bearer token is required in production.", 401));
     }
 
     const devUserId = (req.headers["x-user-id"] as string) || "usr_dev_candidate_default";

@@ -30,11 +30,11 @@ class JobController {
                 if (parsed.protocol !== "https:") return false;
                 const host = parsed.hostname.toLowerCase();
                 const officialHost = job.source === "greenhouse"
-                    ? host === "boards.greenhouse.io" || host === "job-boards.greenhouse.io"
+                    ? (host === "boards.greenhouse.io" || host === "job-boards.greenhouse.io" || host.endsWith(".greenhouse.io"))
                     : job.source === "ashby"
-                    ? host === "jobs.ashbyhq.com"
+                    ? (host === "jobs.ashbyhq.com" || host.endsWith(".ashbyhq.com"))
                     : job.source === "lever"
-                    ? host === "jobs.lever.co"
+                    ? (host === "jobs.lever.co" || host.endsWith(".lever.co"))
                     : job.source === "workday"
                     ? host.endsWith(".myworkdayjobs.com")
                     : false;

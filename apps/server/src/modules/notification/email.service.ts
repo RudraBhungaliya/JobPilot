@@ -59,8 +59,7 @@ class EmailService {
         const { default: emailProvider } = await import("./providers/email.provider.js");
         const result = await emailProvider.send(input);
         if (!result.success) {
-            console.log(`[EmailService] Simulated delivery to ${input.to} | Subject: "${input.subject}"`);
-            return;
+            throw new Error(`Email delivery failed: ${result.error || "Email provider could not dispatch message."}`);
         }
     }
 

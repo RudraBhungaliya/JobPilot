@@ -4,7 +4,7 @@ export class GreenhouseApiAdapter implements ApplyAdapter {
   readonly name = "greenhouse-api";
 
   canApply(url: string, atsProvider?: string): boolean {
-    return /greenhouse\\.io/i.test(url) || atsProvider?.toLowerCase() === "greenhouse";
+    return /greenhouse\.io/i.test(url) || atsProvider?.toLowerCase() === "greenhouse";
   }
 
   async apply(_input: ApplyAdapterInput): Promise<ApplyResult> {

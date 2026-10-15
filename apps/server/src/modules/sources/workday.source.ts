@@ -12,8 +12,6 @@ import {
     getWorkdayTenants,
 } from "./curated-companies.constants.js";
 
-import { getEnv } from "../../config/env.js";
-
 interface WorkdayJobPosting {
     title?: string;
     externalPath?: string;
@@ -39,16 +37,19 @@ class WorkdaySource implements JobSource {
     private async fetchWithTimeout(
         url: string,
         timeoutMs = 4000,
+        options: RequestInit = {},
     ): Promise<Response> {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
             return await this.fetcher(url, {
+                ...options,
                 signal: controller.signal,
                 headers: {
                     "User-Agent":
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 JobPilotBot/1.0",
                     Accept: "application/json, text/plain, */*",
+                    ...(options.headers || {}),
                 },
             });
         } finally {
@@ -59,9 +60,6 @@ class WorkdaySource implements JobSource {
     async search(
         options: SearchOptions,
     ): Promise<SourceJob[]> {
-        const env = getEnv();
-        void env;
-
         const tier = options.companyTier;
 
         if (tier === "STARTUP") {
@@ -80,16 +78,29 @@ class WorkdaySource implements JobSource {
         }
 
         const allJobs: SourceJob[] = [];
-        const tenantsToQuery = tenants.slice(0, Math.max(3, Math.min(tenants.length, 6)));
+        const tenantsToQuery = tenants.slice(0, Math.max(3, Math.min(tenants.length, 5)));
 
         await Promise.allSettled(
             tenantsToQuery.map(async (tenant) => {
                 const hostPart = tenant.tenant || tenant.slug;
+                const host = tenant.host || `${hostPart}.wd5.myworkdayjobs.com`;
                 const boardPart = tenant.board || "external";
-                const url = `https://${hostPart}.myworkdayjobs.com/wday/cxs/${hostPart}/${boardPart}/jobs`;
+                const url = `https://${host}/wday/cxs/${hostPart}/${boardPart}/jobs`;
 
                 try {
-                    const res = await this.fetchWithTimeout(url, 4000);
+                    const res = await this.fetchWithTimeout(url, 4000, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            Accept: "application/json",
+                        },
+                        body: JSON.stringify({
+                            appliedFacets: {},
+                            limit: 20,
+                            offset: 0,
+                            searchText: options.keyword || "",
+                        }),
+                    });
                     if (!res.ok) {
                         return;
                     }
@@ -109,7 +120,7 @@ class WorkdaySource implements JobSource {
 
                         const jobUrl = jobPath.startsWith("http")
                             ? jobPath
-                            : `https://${hostPart}.myworkdayjobs.com/${boardPart}${jobPath}`;
+                            : `https://${host}/en-US/${boardPart}${jobPath}`;
                         let parsedJobUrl: URL;
                         try { parsedJobUrl = new URL(jobUrl); } catch { continue; }
                         if (parsedJobUrl.protocol !== "https:" || !parsedJobUrl.hostname.endsWith(".myworkdayjobs.com")) continue;
@@ -128,7 +139,7 @@ class WorkdaySource implements JobSource {
                         const location = posting.locationsText || "Global / Remote";
                         const queryTerms = (options.keyword || "").toLowerCase().trim().split(/\s+/).filter((term) => term.length > 1);
                         const searchable = `${posting.title} ${tenant.company} ${description} ${location}`.toLowerCase();
-                        if (!queryTerms.every((term) => searchable.includes(term))) continue;
+                        if (queryTerms.length > 0 && !queryTerms.every((term) => searchable.includes(term))) continue;
                         if (options.location?.trim() && !location.toLowerCase().includes(options.location.trim().toLowerCase())) continue;
 
                         allJobs.push({

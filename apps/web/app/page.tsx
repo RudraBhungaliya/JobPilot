@@ -39,6 +39,8 @@ import {
   Wand2,
   Mail,
   Filter,
+  Globe,
+  Code2,
 } from "lucide-react";
 import { JobSearchLoopsView } from "../components/job-search-loops";
 
@@ -58,8 +60,8 @@ export interface JobOpening {
   source: string;
   atsProvider: string;
   salaryINR: string;
-  salaryMinLPA: number;
-  salaryMaxLPA: number;
+  salaryMinLPA?: number;
+  salaryMaxLPA?: number;
   experienceLevel: string;
   tags: string[];
   description: string;
@@ -73,6 +75,8 @@ export interface CandidateProfile {
   email: string;
   phone: string;
   city: string;
+  state?: string;
+  country?: string;
   currentTitle: string;
   currentCompany: string;
   yearsOfExperience: number;
@@ -83,6 +87,9 @@ export interface CandidateProfile {
   github: string;
   linkedin: string;
   portfolio: string;
+  workAuthorization?: string;
+  sponsorshipRequired?: boolean;
+  willingToRelocate?: boolean;
   skills: string[];
 }
 
@@ -106,6 +113,8 @@ const INITIAL_PROFILE: CandidateProfile = {
   email: "rudra.b@jobpilot.ai",
   phone: "+91 9876543210",
   city: "Bengaluru",
+  state: "Karnataka",
+  country: "India",
   currentTitle: "Senior Full Stack Engineer",
   currentCompany: "Tech Systems India",
   yearsOfExperience: 5,
@@ -116,6 +125,9 @@ const INITIAL_PROFILE: CandidateProfile = {
   github: "https://github.com/developer",
   linkedin: "https://linkedin.com/in/developer",
   portfolio: "https://rudra.dev",
+  workAuthorization: "Authorized to work in India",
+  sponsorshipRequired: false,
+  willingToRelocate: true,
   skills: [
     "TypeScript",
     "React",
@@ -140,6 +152,7 @@ export default function Home() {
   });
   const [isParsing, setIsParsing] = useState(false);
   const [profile, setProfile] = useState<CandidateProfile>(INITIAL_PROFILE);
+  const [newSkillInput, setNewSkillInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Resume Text Paste Modal
@@ -326,19 +339,14 @@ export default function Home() {
       catLabel = "Remote Tech";
     }
 
-    const titleLower = (raw.title || "").toLowerCase();
-    let salaryINR = "₹28 - 45 LPA";
-    let minLPA = 28;
-    let maxLPA = 45;
-    if (/lead|staff|director|principal/i.test(titleLower)) {
-      salaryINR = "₹45 - 75 LPA";
-      minLPA = 45;
-      maxLPA = 75;
-    } else if (/junior|intern|associate/i.test(titleLower)) {
-      salaryINR = "₹12 - 20 LPA";
-      minLPA = 12;
-      maxLPA = 20;
-    }
+    const rawSalary = raw.salaryRange || raw.salaryINR || (raw.salary ? String(raw.salary) : undefined);
+    const salaryINR = rawSalary && rawSalary.trim() ? rawSalary.trim() : "Undisclosed by Employer";
+    const minLPA = typeof raw.salaryMinLPA === "number" ? raw.salaryMinLPA : (typeof raw.minSalaryLPA === "number" ? raw.minSalaryLPA : undefined);
+    const maxLPA = typeof raw.salaryMaxLPA === "number" ? raw.salaryMaxLPA : (typeof raw.maxSalaryLPA === "number" ? raw.maxSalaryLPA : undefined);
+
+    const verifiedUrl = raw.sourceUrl || raw.applicationUrl || raw.url || "";
+    const rawExp = raw.experienceLevel || raw.minExperience;
+    const experienceLevel = rawExp && typeof rawExp === "string" && rawExp.trim() ? rawExp.trim() : "Not Specified";
 
     return {
       id: raw.id || raw.externalId || `job-${Math.random().toString(36).slice(2, 9)}`,
@@ -350,18 +358,18 @@ export default function Home() {
       location: loc,
       city: loc.split(",")[0]?.trim() || "Bengaluru",
       workMode: isRemote ? "Remote" : "Hybrid",
-      url: raw.sourceUrl || raw.applicationUrl || raw.url || "https://careers.google.com",
+      url: verifiedUrl,
       atsUrl: raw.atsUrl || raw.applicationUrl || raw.url,
-      canonicalUrl: raw.sourceUrl || raw.applicationUrl || raw.url,
+      canonicalUrl: verifiedUrl,
       source: raw.source || "greenhouse",
       atsProvider: (raw.source || "greenhouse").toUpperCase(),
       salaryINR,
       salaryMinLPA: minLPA,
       salaryMaxLPA: maxLPA,
-      experienceLevel: /senior|lead|staff/i.test(titleLower) ? "5+ Years" : "2+ Years",
-      tags: raw.tags || ["TypeScript", "Distributed Systems", "Cloud"],
+      experienceLevel,
+      tags: Array.isArray(raw.tags) && raw.tags.length > 0 ? raw.tags : ["Engineering"],
       description: raw.description || "",
-      matchScore: raw.matchScore,
+      matchScore: typeof raw.matchScore === "number" ? raw.matchScore : undefined,
     };
   };
 
@@ -509,9 +517,98 @@ export default function Home() {
     }
   };
 
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Fetch PostgreSQL Profile
+  const fetchCandidateProfile = async () => {
+    try {
+      const res = await fetch("/api/v1/profile");
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data) {
+          const d = json.data;
+          setProfile((prev) => ({
+            ...prev,
+            firstName: d.firstName || prev.firstName,
+            lastName: d.lastName || prev.lastName,
+            email: d.email || prev.email,
+            phone: d.phone || prev.phone,
+            city: d.city || prev.city,
+            state: d.state || prev.state,
+            country: d.country || prev.country,
+            currentTitle: d.currentTitle || prev.currentTitle,
+            currentCompany: d.currentCompany || prev.currentCompany,
+            yearsOfExperience: typeof d.yearsOfExperience === "number" ? d.yearsOfExperience : prev.yearsOfExperience,
+            expectedSalaryLPA: typeof d.expectedSalary === "number" ? Math.round(d.expectedSalary / 100000) : prev.expectedSalaryLPA,
+            currentSalaryLPA: typeof d.currentSalary === "number" ? Math.round(d.currentSalary / 100000) : prev.currentSalaryLPA,
+            noticePeriodDays: typeof d.noticePeriodDays === "number" ? d.noticePeriodDays : (typeof d.noticePeriod === "number" ? d.noticePeriod : prev.noticePeriodDays),
+            workMode: d.workMode || prev.workMode,
+            github: d.github || prev.github,
+            linkedin: d.linkedin || prev.linkedin,
+            portfolio: d.portfolio || prev.portfolio,
+            workAuthorization: d.workAuthorization || prev.workAuthorization || "Authorized to work in India",
+            sponsorshipRequired: d.sponsorshipRequired ?? prev.sponsorshipRequired ?? false,
+            willingToRelocate: d.willingToRelocate ?? prev.willingToRelocate ?? true,
+            skills: Array.isArray(d.skills) && d.skills.length > 0
+              ? d.skills.map((s: any) => (typeof s === "string" ? s : s.name)).filter(Boolean)
+              : prev.skills,
+          }));
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  const saveCandidateProfile = async (customProfile?: CandidateProfile) => {
+    const prof = customProfile || profile;
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch("/api/v1/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: prof.firstName,
+          lastName: prof.lastName,
+          email: prof.email,
+          phone: prof.phone,
+          city: prof.city,
+          state: prof.state,
+          country: prof.country,
+          currentTitle: prof.currentTitle,
+          currentCompany: prof.currentCompany,
+          yearsOfExperience: prof.yearsOfExperience,
+          expectedSalary: prof.expectedSalaryLPA ? prof.expectedSalaryLPA * 100000 : undefined,
+          currentSalary: prof.currentSalaryLPA ? prof.currentSalaryLPA * 100000 : undefined,
+          noticePeriod: prof.noticePeriodDays,
+          noticePeriodDays: prof.noticePeriodDays,
+          workMode: prof.workMode,
+          github: prof.github,
+          linkedin: prof.linkedin,
+          portfolio: prof.portfolio,
+          workAuthorization: prof.workAuthorization,
+          sponsorshipRequired: prof.sponsorshipRequired,
+          willingToRelocate: prof.willingToRelocate,
+          skills: prof.skills.map((name) => ({ name })),
+        }),
+      });
+      if (res.ok) {
+        showToast("Profile saved and synchronized with PostgreSQL & ATS autofill!");
+      } else {
+        const errJson = await res.json().catch(() => null);
+        showToast(`Could not save profile: ${errJson?.message || "Server error"}`);
+      }
+    } catch {
+      showToast("Network error saving profile.");
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   // Initialize and load backend state
   useEffect(() => {
     fetchLiveJobs();
+    fetchCandidateProfile();
     fetchPipelineStats();
     fetchBackendApplications();
     fetchNotifications();
@@ -680,24 +777,7 @@ export default function Home() {
     setProfile(updatedProfile);
 
     // Persist candidate profile and skills to PostgreSQL database
-    fetch("/api/v1/profile", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        firstName: updatedProfile.firstName,
-        lastName: updatedProfile.lastName,
-        email: updatedProfile.email,
-        phone: updatedProfile.phone,
-        city: updatedProfile.city,
-        currentTitle: updatedProfile.currentTitle,
-        currentCompany: updatedProfile.currentCompany,
-        yearsOfExperience: updatedProfile.yearsOfExperience,
-        github: updatedProfile.github,
-        linkedin: updatedProfile.linkedin,
-        portfolio: updatedProfile.portfolio,
-        skills: updatedProfile.skills.map((s) => ({ name: s })),
-      }),
-    }).catch(() => {});
+    saveCandidateProfile(updatedProfile);
 
     // Target query based on candidate's real title and top skills
     const targetQuery = updatedProfile.currentTitle || (updatedProfile.skills.slice(0, 2).join(" ")) || "Full Stack";
@@ -1156,13 +1236,30 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
             >
               <div className="flex items-center gap-3">
                 <Target className={`w-4 h-4 ${currentTab === "jobs" ? "text-indigo-400" : "text-slate-500"}`} />
-                <span>Verified Jobs</span>
+                <span>Find Jobs</span>
               </div>
               {jobs.length > 0 && (
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
                   {jobs.length}
                 </span>
               )}
+            </button>
+
+            <button
+              onClick={() => setCurrentTab("loops")}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition cursor-pointer text-left ${
+                currentTab === "loops"
+                  ? "bg-indigo-600/20 text-indigo-300 font-semibold border border-indigo-500/30 shadow-sm"
+                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Activity className={`w-4 h-4 ${currentTab === "loops" ? "text-indigo-400" : "text-slate-500"}`} />
+                <span>Search Loops</span>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">
+                Campaigns
+              </span>
             </button>
 
             <button
@@ -1190,23 +1287,6 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
             </button>
 
             <button
-              onClick={() => setCurrentTab("loops")}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition cursor-pointer text-left ${
-                currentTab === "loops"
-                  ? "bg-indigo-600/20 text-indigo-300 font-semibold border border-indigo-500/30 shadow-sm"
-                  : "text-slate-400 hover:bg-white/[0.04] hover:text-slate-200"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Activity className={`w-4 h-4 ${currentTab === "loops" ? "text-indigo-400" : "text-slate-500"}`} />
-                <span>Search Loops</span>
-              </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold">
-                Campaigns
-              </span>
-            </button>
-
-            <button
               onClick={() => setCurrentTab("profile")}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition cursor-pointer text-left ${
                 currentTab === "profile"
@@ -1215,7 +1295,7 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
               }`}
             >
               <User className={`w-4 h-4 ${currentTab === "profile" ? "text-indigo-400" : "text-slate-500"}`} />
-              <span>Candidate Profile</span>
+              <span>Profile & Resume</span>
             </button>
           </nav>
         </div>
@@ -1590,7 +1670,14 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
 
                     <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-xs">
                       <span className="text-slate-400 text-[11px]">Match Score on Live Jobs:</span>
-                      <span className="font-mono font-bold text-emerald-400">92% - 98%</span>
+                      <span className="font-mono font-bold text-emerald-400">
+                        {jobs.some((j: JobOpening) => typeof j.matchScore === "number")
+                          ? `${Math.round(
+                              jobs.filter((j: JobOpening) => typeof j.matchScore === "number").reduce((acc: number, j: JobOpening) => acc + (j.matchScore || 0), 0) /
+                                jobs.filter((j: JobOpening) => typeof j.matchScore === "number").length
+                            )}% Avg`
+                          : "Profile Grounded"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1712,13 +1799,21 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                             <td className="py-3 font-semibold text-white pr-2">
                               <div className="flex items-center gap-2">
                                 <span className="truncate max-w-[180px] group-hover:text-indigo-300 transition-colors">{job.title}</span>
-                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                                  {job.matchScore || 92}%
-                                </span>
+                                {typeof job.matchScore === "number" ? (
+                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
+                                    {job.matchScore}%
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-white/5">
+                                    Live
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-[10px] text-slate-400 block font-normal mt-0.5">
-                                {job.salaryINR}
-                              </span>
+                              {job.salaryINR && job.salaryINR !== "Undisclosed by Employer" && (
+                                <span className="text-[10px] text-slate-400 block font-normal mt-0.5">
+                                  {job.salaryINR}
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 text-slate-300">
                               <div className="font-medium text-white">{job.company}</div>
@@ -1842,7 +1937,27 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
 
               {/* Jobs List */}
               <div className="space-y-3">
-                {filteredJobs.slice(0, 40).map((job) => (
+                {loadingJobs ? (
+                  <div className="bg-[#121829]/70 rounded-2xl border border-white/[0.08] p-12 text-center space-y-3 backdrop-blur-md">
+                    <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto" />
+                    <p className="text-sm font-semibold text-white">Searching live ATS job boards...</p>
+                    <p className="text-xs text-slate-400">Querying real-time openings across Greenhouse, Lever, Ashby, and Workday</p>
+                  </div>
+                ) : filteredJobs.length === 0 ? (
+                  <div className="bg-[#121829]/70 rounded-2xl border border-white/[0.08] p-12 text-center space-y-3 backdrop-blur-md">
+                    <Target className="w-8 h-8 text-slate-500 mx-auto" />
+                    <p className="text-sm font-semibold text-white">No openings match your current search criteria</p>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">Try clearing your keyword filter or search across all verified openings.</p>
+                    <button
+                      onClick={() => { setSearchQuery(""); setCategoryFilter("ALL"); fetchLiveJobs(profile, ""); }}
+                      className="text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition cursor-pointer inline-flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Reset Filters & Reload</span>
+                    </button>
+                  </div>
+                ) : (
+                  filteredJobs.slice(0, 40).map((job) => (
                   <div
                     key={job.id}
                     className="bg-[#121829]/70 rounded-2xl border border-white/[0.08] hover:border-indigo-500/40 p-5 shadow-xl transition flex flex-col md:flex-row md:items-center justify-between gap-4 backdrop-blur-md group"
@@ -1863,10 +1978,16 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                           {job.categoryLabel}
                         </span>
 
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-semibold">
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          {job.matchScore || 92}% Match
-                        </span>
+                        {typeof job.matchScore === "number" ? (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-semibold">
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            {job.matchScore}% Match
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/5 flex items-center gap-1">
+                            Verified ATS
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
@@ -1876,8 +1997,12 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                         </span>
                         <span>•</span>
                         <span>{job.location}</span>
-                        <span>•</span>
-                        <span className="font-mono text-emerald-400 font-medium">{job.salaryINR}</span>
+                        {job.salaryINR && job.salaryINR !== "Undisclosed by Employer" && (
+                          <>
+                            <span>•</span>
+                            <span className="font-mono text-emerald-400 font-medium">{job.salaryINR}</span>
+                          </>
+                        )}
                         <span>•</span>
                         <span className="text-[10px] font-mono uppercase text-slate-500">{job.atsProvider}</span>
                       </div>
@@ -1935,7 +2060,8 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                       </button>
                     </div>
                   </div>
-                ))}
+                ))
+              )}
               </div>
             </div>
           )}
@@ -2134,130 +2260,350 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
           {/* TAB 5: CANDIDATE PROFILE */}
           {currentTab === "profile" && (
             <div className="space-y-6 max-w-4xl">
-              <div className="bg-[#121829]/70 rounded-2xl border border-white/[0.08] p-6 shadow-xl space-y-5 backdrop-blur-md">
-                <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
+              <div className="bg-[#121829]/70 rounded-2xl border border-white/[0.08] p-6 shadow-xl space-y-6 backdrop-blur-md">
+                <div className="flex flex-wrap items-center justify-between pb-4 border-b border-white/[0.06] gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-white">Candidate Profile & Experience</h2>
-                    <p className="text-xs text-slate-400">Synchronized with Google Gemini resume parser</p>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <User className="w-4 h-4 text-indigo-400" />
+                      Candidate Profile & Application Autofill
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Synchronized with PostgreSQL and mapped directly to Greenhouse, Lever, Ashby, and Workday forms
+                    </p>
                   </div>
 
                   <button
-                    onClick={() => {
-                      showToast("Profile saved successfully!");
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-xl shadow-lg shadow-indigo-600/30 transition cursor-pointer"
+                    onClick={() => saveCandidateProfile()}
+                    disabled={isSavingProfile}
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition cursor-pointer flex items-center gap-2"
                   >
-                    Save Changes
+                    {isSavingProfile ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Save Profile</span>
+                      </>
+                    )}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">First Name</label>
-                    <input
-                      type="text"
-                      value={profile.firstName}
-                      onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                {/* Section 1: Contact Details & Location */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>1. Contact Details & Identity</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">First Name *</label>
+                      <input
+                        type="text"
+                        value={profile.firstName}
+                        onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Last Name</label>
-                    <input
-                      type="text"
-                      value={profile.lastName}
-                      onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Last Name *</label>
+                      <input
+                        type="text"
+                        value={profile.lastName}
+                        onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Current Title</label>
-                    <input
-                      type="text"
-                      value={profile.currentTitle}
-                      onChange={(e) => setProfile({ ...profile, currentTitle: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Email *</label>
+                      <input
+                        type="email"
+                        value={profile.email}
+                        onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Current Company</label>
-                    <input
-                      type="text"
-                      value={profile.currentCompany}
-                      onChange={(e) => setProfile({ ...profile, currentCompany: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Phone Number *</label>
+                      <input
+                        type="text"
+                        value={profile.phone}
+                        onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Email</label>
-                    <input
-                      type="email"
-                      value={profile.email}
-                      onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">City / Hub</label>
+                      <input
+                        type="text"
+                        value={profile.city}
+                        onChange={(e) => setProfile({ ...profile, city: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Phone</label>
-                    <input
-                      type="text"
-                      value={profile.phone}
-                      onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Years of Experience</label>
-                    <input
-                      type="number"
-                      value={profile.yearsOfExperience}
-                      onChange={(e) => setProfile({ ...profile, yearsOfExperience: Number(e.target.value) })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 mb-1 font-medium">Location / City</label>
-                    <input
-                      type="text"
-                      value={profile.city}
-                      onChange={(e) => setProfile({ ...profile, city: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                    />
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Country</label>
+                      <input
+                        type="text"
+                        value={profile.country || "India"}
+                        onChange={(e) => setProfile({ ...profile, country: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2 pt-2">
-                  <label className="block text-slate-400 font-medium text-xs">
-                    Skills (Comma Separated)
-                  </label>
-                  <input
-                    type="text"
-                    value={profile.skills.join(", ")}
-                    onChange={(e) =>
-                      setProfile({
-                        ...profile,
-                        skills: e.target.value
-                          .split(",")
-                          .map((s) => s.trim())
-                          .filter(Boolean),
-                      })
-                    }
-                    className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                  <div className="flex flex-wrap gap-1 pt-1">
+                {/* Section 2: Role, Experience & Notice Period */}
+                <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                  <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5" />
+                    <span>2. Professional Experience & Notice Period</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Current Title</label>
+                      <input
+                        type="text"
+                        value={profile.currentTitle}
+                        onChange={(e) => setProfile({ ...profile, currentTitle: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Current Company</label>
+                      <input
+                        type="text"
+                        value={profile.currentCompany}
+                        onChange={(e) => setProfile({ ...profile, currentCompany: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Total Experience (Years)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="50"
+                        step="0.5"
+                        value={profile.yearsOfExperience}
+                        onChange={(e) => setProfile({ ...profile, yearsOfExperience: Number(e.target.value) })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Notice Period (Days)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="180"
+                        value={profile.noticePeriodDays}
+                        onChange={(e) => setProfile({ ...profile, noticePeriodDays: Number(e.target.value) })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Work Mode Preference</label>
+                      <select
+                        value={profile.workMode}
+                        onChange={(e) => setProfile({ ...profile, workMode: e.target.value as any })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="REMOTE">Remote Only</option>
+                        <option value="HYBRID">Hybrid (Office + Remote)</option>
+                        <option value="ONSITE">Onsite Office</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Compensation (INR LPA) */}
+                <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                  <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>3. Compensation Details (₹ LPA)</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Current CTC (₹ LPA)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="200"
+                        value={profile.currentSalaryLPA || ""}
+                        onChange={(e) => setProfile({ ...profile, currentSalaryLPA: Number(e.target.value) })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        placeholder="e.g. 26"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Expected CTC (₹ LPA)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="250"
+                        value={profile.expectedSalaryLPA || ""}
+                        onChange={(e) => setProfile({ ...profile, expectedSalaryLPA: Number(e.target.value) })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        placeholder="e.g. 38"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Portfolios & Professional Links */}
+                <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                  <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>4. Portfolios & Professional Links</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">GitHub URL</label>
+                      <input
+                        type="url"
+                        value={profile.github}
+                        onChange={(e) => setProfile({ ...profile, github: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                        placeholder="https://github.com/..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">LinkedIn URL</label>
+                      <input
+                        type="url"
+                        value={profile.linkedin}
+                        onChange={(e) => setProfile({ ...profile, linkedin: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                        placeholder="https://linkedin.com/in/..."
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Portfolio / Website</label>
+                      <input
+                        type="url"
+                        value={profile.portfolio}
+                        onChange={(e) => setProfile({ ...profile, portfolio: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                        placeholder="https://yourportfolio.dev"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 5: Work Authorization & Screening */}
+                <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                  <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>5. Work Authorization & Screening Questions</span>
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Work Authorization Status</label>
+                      <input
+                        type="text"
+                        value={profile.workAuthorization || "Authorized to work in India"}
+                        onChange={(e) => setProfile({ ...profile, workAuthorization: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Visa Sponsorship Required?</label>
+                      <select
+                        value={profile.sponsorshipRequired ? "YES" : "NO"}
+                        onChange={(e) => setProfile({ ...profile, sponsorshipRequired: e.target.value === "YES" })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="NO">No (Do not require sponsorship)</option>
+                        <option value="YES">Yes (Require visa sponsorship)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-400 mb-1 font-medium">Willing to Relocate?</label>
+                      <select
+                        value={profile.willingToRelocate ? "YES" : "NO"}
+                        onChange={(e) => setProfile({ ...profile, willingToRelocate: e.target.value === "YES" })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="YES">Yes (Open to relocating)</option>
+                        <option value="NO">No (Remote / current city only)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 6: Technical Skills & Competencies */}
+                <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                      <Code2 className="w-3.5 h-3.5" />
+                      <span>6. Technical Skills & Keywords ({profile.skills.length})</span>
+                    </h3>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add a new skill (e.g. Docker, Kafka, Go)..."
+                      value={newSkillInput}
+                      onChange={(e) => setNewSkillInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newSkillInput.trim()) {
+                          e.preventDefault();
+                          const trimmed = newSkillInput.trim();
+                          if (!profile.skills.includes(trimmed)) {
+                            setProfile({ ...profile, skills: [...profile.skills, trimmed] });
+                          }
+                          setNewSkillInput("");
+                        }
+                      }}
+                      className="flex-1 bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = newSkillInput.trim();
+                        if (trimmed && !profile.skills.includes(trimmed)) {
+                          setProfile({ ...profile, skills: [...profile.skills, trimmed] });
+                        }
+                        setNewSkillInput("");
+                      }}
+                      className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/30 px-3.5 py-2 rounded-xl text-xs font-semibold transition cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
                     {profile.skills.map((s) => (
                       <span
                         key={s}
-                        className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 font-mono"
+                        className="text-[11px] px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 font-mono flex items-center gap-1.5 group"
                       >
-                        {s}
+                        <span>{s}</span>
+                        <button
+                          type="button"
+                          onClick={() => setProfile({ ...profile, skills: profile.skills.filter((item) => item !== s) })}
+                          className="text-indigo-400 hover:text-rose-400 transition cursor-pointer"
+                          title={`Remove ${s}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
                       </span>
                     ))}
                   </div>
@@ -2502,10 +2848,16 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/[0.06] text-slate-300 border border-white/[0.08] uppercase">
                     {selectedJobForDetails.atsProvider}
                   </span>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-semibold">
-                    <Sparkles className="w-3 h-3 text-emerald-400" />
-                    {selectedJobForDetails.matchScore || 92}% Match Score
-                  </span>
+                  {typeof selectedJobForDetails.matchScore === "number" ? (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-semibold">
+                      <Sparkles className="w-3 h-3 text-emerald-400" />
+                      {selectedJobForDetails.matchScore}% Match Score
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-white/5">
+                      Verified Opening
+                    </span>
+                  )}
                 </div>
 
                 <button
@@ -2531,15 +2883,23 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
                     {selectedJobForDetails.location}
                   </span>
-                  <span>•</span>
-                  <span className="font-mono text-emerald-400 font-semibold text-xs">
-                    {selectedJobForDetails.salaryINR}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 text-slate-400">
-                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                    {selectedJobForDetails.experienceLevel}
-                  </span>
+                  {selectedJobForDetails.salaryINR && selectedJobForDetails.salaryINR !== "Undisclosed by Employer" && (
+                    <>
+                      <span>•</span>
+                      <span className="font-mono text-emerald-400 font-semibold text-xs">
+                        {selectedJobForDetails.salaryINR}
+                      </span>
+                    </>
+                  )}
+                  {selectedJobForDetails.experienceLevel && selectedJobForDetails.experienceLevel !== "Not Specified" && (
+                    <>
+                      <span>•</span>
+                      <span className="flex items-center gap-1 text-slate-400">
+                        <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                        {selectedJobForDetails.experienceLevel}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

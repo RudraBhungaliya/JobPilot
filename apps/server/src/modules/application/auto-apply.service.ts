@@ -117,7 +117,10 @@ export class AutoApplyService {
                 },
             });
 
-            const jobUrl = input.discoveredJob.url || input.discoveredJob.applicationUrl || `https://careers.google.com/jobs/${Date.now()}`;
+            const jobUrl = input.discoveredJob.url || input.discoveredJob.applicationUrl;
+            if (!jobUrl || !jobUrl.startsWith("http")) {
+                throw new Error("Discovered job opening does not have a verified application URL.");
+            }
 
             const existingJob = await prisma.job.findFirst({
                 where: {

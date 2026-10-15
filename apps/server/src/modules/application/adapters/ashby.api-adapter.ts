@@ -4,7 +4,7 @@ export class AshbyApiAdapter implements ApplyAdapter {
   readonly name = "ashby-api";
 
   canApply(url: string, atsProvider?: string): boolean {
-    return /ashbyhq\\.com/i.test(url) || atsProvider?.toLowerCase() === "ashby";
+    return /ashbyhq\.com/i.test(url) || atsProvider?.toLowerCase() === "ashby";
   }
 
   async apply(_input: ApplyAdapterInput): Promise<ApplyResult> {

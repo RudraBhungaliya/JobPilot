@@ -20,6 +20,7 @@ export const createProfileSchema = z.object({
     expectedSalary: z.number().optional().nullable(),
     currentSalary: z.number().optional().nullable(),
     noticePeriod: z.number().optional().nullable(),
+    noticePeriodDays: z.number().optional().nullable(),
     github: z.string().optional().nullable(),
     linkedin: z.string().optional().nullable(),
     portfolio: z.string().optional().nullable(),

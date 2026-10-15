@@ -1,4 +1,5 @@
 import type { SourceJob, SourceSearchInput } from "./source.types.js";
+import workdaySource from "./workday.source.js";
 import {
     INDIAN_LOCATION_ALIASES,
     canonicalizeLocation,
@@ -288,8 +289,7 @@ class LiveAtsService {
         const specificCompany = this.extractCompanyFromInput(input.keyword, allCompanies);
 
         const prioritizedLever = [
-            "meesho", "zeta", "paytm", "cred", "freshworks",
-            "atlassian", "spotify", "uber"
+            "palantir", "meesho", "zeta", "paytm", "cred", "spotify"
         ];
         const companiesToFetch = specificCompany ? [specificCompany] : Array.from(new Set([...prioritizedLever, ...allCompanies])).slice(0, 15);
 
@@ -508,13 +508,14 @@ class LiveAtsService {
     }
 
     async searchAll(input: SourceSearchInput): Promise<SourceJob[]> {
-        const [greenhouse, ashby, lever] = await Promise.allSettled([
+        const [greenhouse, ashby, lever, workday] = await Promise.allSettled([
             this.searchGreenhouse(input),
             this.searchAshby(input),
             this.searchLever(input),
+            workdaySource.search(input),
         ]);
 
-        const results = [greenhouse, ashby, lever];
+        const results = [greenhouse, ashby, lever, workday];
         const failures = results.filter((result) => result.status === "rejected");
         if (failures.length === results.length) {
             throw new AggregateError(
@@ -527,6 +528,7 @@ class LiveAtsService {
         if (greenhouse.status === "fulfilled") allJobs.push(...greenhouse.value);
         if (ashby.status === "fulfilled") allJobs.push(...ashby.value);
         if (lever.status === "fulfilled") allJobs.push(...lever.value);
+        if (workday.status === "fulfilled") allJobs.push(...workday.value);
         const unique = new Map<string, SourceJob>();
         for (const job of allJobs) unique.set(job.url.toLowerCase().replace(/\/$/, ""), job);
         return Array.from(unique.values());
@@ -571,12 +573,17 @@ class LiveAtsService {
         remoteOnly?: boolean;
     } = {}): Promise<Array<SourceJob & { department?: string; tags?: string[] }>> {
         const kw = input.keyword || "";
-        const [gh, lv, as] = await Promise.all([
+        const [gh, lv, as, wd] = await Promise.allSettled([
             this.searchGreenhouse({ keyword: kw, location: input.city, remote: input.remoteOnly }),
             this.searchLever({ keyword: kw, location: input.city, remote: input.remoteOnly }),
             this.searchAshby({ keyword: kw, location: input.city, remote: input.remoteOnly }),
+            workdaySource.search({ keyword: kw, location: input.city }),
         ]);
-        const combined = [...gh, ...lv, ...as];
+        const combined: SourceJob[] = [];
+        if (gh.status === "fulfilled") combined.push(...gh.value);
+        if (lv.status === "fulfilled") combined.push(...lv.value);
+        if (as.status === "fulfilled") combined.push(...as.value);
+        if (wd.status === "fulfilled") combined.push(...wd.value);
         return combined
             .filter((j) => this.isIndiaOrGlobalCompatible(j.location || "", j.description || ""))
             .map((j) => ({

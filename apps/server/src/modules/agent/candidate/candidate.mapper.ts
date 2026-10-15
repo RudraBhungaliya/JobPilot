@@ -132,11 +132,20 @@ class CandidateMapper {
     }
 
     if (/authorized.?to.?work.*india|are.?you.?authorized.*india|legally.?authorized.*india|work.?eligibility.*india|eligible.?to.?work.*india|can.?you.?work.*india/.test(key)) {
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+      const isIndiaAuth = (context.workAuthorization || "").toLowerCase().includes("india");
+      return isIndiaAuth
+        ? { value: "Yes", source: "PROFILE", confidence: "HIGH" }
+        : { value: "", source: "UNKNOWN", confidence: "LOW" };
     }
 
-    if (/authorized.?to.?work.*(us|usa|united.?states|america)|are.?you.?authorized.*(us|usa|states)|work.?eligibility.*(us|usa)|eligible.?to.?work.*(us|usa)|can.?you.?work.*(us|usa|united.?states)/.test(key)) {
-      return { value: "", source: "UNKNOWN", confidence: "LOW" };
+    const foreignCountryPattern = /\b(argentina|germany|france|canada|uk|united.?kingdom|australia|singapore|brazil|mexico|poland|netherlands|spain|italy|switzerland|ireland|austria|japan|korea|us|usa|united.?states)\b/i;
+    if (foreignCountryPattern.test(key) && /authorized|eligibility|eligible|permit|visa/.test(key)) {
+      const match = key.match(foreignCountryPattern);
+      const countryMentioned = match ? match[0].toLowerCase() : "";
+      const isExplicitlyAuth = (context.workAuthorization || "").toLowerCase().includes(countryMentioned);
+      if (!isExplicitlyAuth) {
+        return { value: "", source: "UNKNOWN", confidence: "LOW" };
+      }
     }
 
     if (/work.?eligibility|eligibility.?to.?work|legal.?to.?work|authorized.?to.?work|eligible.?for.?employment|right.?to.?work/.test(key)) {

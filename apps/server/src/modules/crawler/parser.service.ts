@@ -89,6 +89,24 @@ class ParserService {
 
             const selectors = SELECTOR_REGISTRY[job.platform] || SELECTOR_REGISTRY.UNKNOWN;
 
+            const isClosed = await page.evaluate(() => {
+                const text = (document.body?.innerText || "").toLowerCase();
+                return (
+                    text.includes("this job is no longer available") ||
+                    text.includes("this job is closed") ||
+                    text.includes("this position has been filled") ||
+                    text.includes("job posting has expired") ||
+                    text.includes("no longer accepting applications") ||
+                    text.includes("the posting has been removed") ||
+                    text.includes("this job has expired") ||
+                    text.includes("this position is closed") ||
+                    text.includes("this job posting is no longer active")
+                );
+            });
+            if (isClosed) {
+                throw new Error("The job is closed, expired, or no longer accepting applications.");
+            }
+
             const extract = async (selectorList: string[]): Promise<string> => {
                 for (const sel of selectorList) {
                     try {

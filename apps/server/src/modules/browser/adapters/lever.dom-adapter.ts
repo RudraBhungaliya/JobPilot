@@ -72,6 +72,28 @@ export class LeverDomAdapter implements DomAtsAdapter {
         }
       }
 
+      // Check for security challenge / CAPTCHA
+      const captchaPresent = await page.evaluate(() => {
+        const selectors = [
+          'iframe[src*="recaptcha"]',
+          'iframe[src*="turnstile"]',
+          'iframe[src*="challenges.cloudflare"]',
+          'iframe[src*="hcaptcha"]',
+          '.g-recaptcha',
+          '.cf-turnstile',
+          '#cf-challenge-running'
+        ];
+        return selectors.some((s) => !!document.querySelector(s));
+      }).catch(() => false);
+
+      if (captchaPresent) {
+        return {
+          success: false,
+          requiresBrowserFallback: false,
+          reason: "CAPTCHA or Cloudflare Turnstile challenge detected on Lever form; requires human intervention.",
+        };
+      }
+
       if (input.resumeBuffer) {
         const fileInput = page.locator('input[type="file"]').first();
         if (await fileInput.isVisible().catch(() => false)) {

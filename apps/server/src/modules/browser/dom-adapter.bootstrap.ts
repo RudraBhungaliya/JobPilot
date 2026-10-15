@@ -1,9 +1,9 @@
 import domAdapterRegistry from "./dom-adapter.registry.js";
 import domAtsDetector from "./dom-adapter.detector.js";
 import type { DomAtsAdapter } from "./dom-adapter.interface.js";
-import { greenhouseDomAdapter, leverDomAdapter, workdayDomAdapter } from "./adapters/index.js";
+import { greenhouseDomAdapter, leverDomAdapter, workdayDomAdapter, ashbyDomAdapter } from "./adapters/index.js";
 
-const ADAPTERS: DomAtsAdapter[] = [greenhouseDomAdapter, leverDomAdapter, workdayDomAdapter];
+const ADAPTERS: DomAtsAdapter[] = [greenhouseDomAdapter, leverDomAdapter, workdayDomAdapter, ashbyDomAdapter];
 
 export function initialize(): void {
   for (const adapter of ADAPTERS) {

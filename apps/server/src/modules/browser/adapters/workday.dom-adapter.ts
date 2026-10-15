@@ -89,6 +89,38 @@ export class WorkdayDomAdapter implements DomAtsAdapter {
         logger.debug("WD scope step inputs error", { step, error: err instanceof Error ? err.message : String(err) });
       }
 
+      // Check for security challenge / CAPTCHA or Account Requirement
+      const challengeInfo = await page.evaluate(() => {
+        const selectors = [
+          'iframe[src*="recaptcha"]',
+          'iframe[src*="turnstile"]',
+          'iframe[src*="challenges.cloudflare"]',
+          'iframe[src*="hcaptcha"]',
+          '.g-recaptcha',
+          '.cf-turnstile',
+          '#cf-challenge-running'
+        ];
+        const hasCaptcha = selectors.some((s) => !!document.querySelector(s));
+        const body = (document.body.innerText || "").toLowerCase();
+        const hasSignIn = body.includes("sign in") || body.includes("create account") || body.includes("autofill with resume");
+        return { hasCaptcha, hasSignIn };
+      }).catch(() => ({ hasCaptcha: false, hasSignIn: false }));
+
+      if (challengeInfo.hasCaptcha) {
+        return {
+          success: false,
+          requiresBrowserFallback: false,
+          reason: "CAPTCHA or security challenge detected on Workday form; requires human intervention.",
+        };
+      }
+      if (challengeInfo.hasSignIn) {
+        return {
+          success: false,
+          requiresBrowserFallback: false,
+          reason: "Workday portal requires candidate authentication / account sign-in; requires human intervention.",
+        };
+      }
+
       if (input.resumeBuffer) {
         try {
           const fileInput = scope.locator('input[type="file"]').first();

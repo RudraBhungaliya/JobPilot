@@ -1,6 +1,7 @@
 import greenhouseSource from "./greenhouse.source.js";
 import leverSource from "./lever.source.js";
 import ashbySource from "./ashby.source.js";
+import workdaySource from "./workday.source.js";
 
 class SourceFactory {
     all() {
@@ -8,6 +9,7 @@ class SourceFactory {
             greenhouseSource,
             leverSource,
             ashbySource,
+            workdaySource,
         ];
     }
 }
