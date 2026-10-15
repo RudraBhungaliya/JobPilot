@@ -79,3 +79,36 @@ export default async function authMiddleware(
     };
     next();
 }
+
+export async function optionalAuthMiddleware(
+    req: Request,
+    _res: Response,
+    next: NextFunction
+) {
+    const authHeader = req.headers.authorization;
+    const queryToken = typeof req.query?.token === "string" ? req.query.token : undefined;
+    const rawToken = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : queryToken;
+
+    if (rawToken) {
+        try {
+            const payload = verifyAccessToken(rawToken);
+            req.user = {
+                id: payload.userId,
+                email: payload.email,
+                role: payload.role,
+            };
+            return next();
+        } catch {
+            // invalid token, proceed without error
+        }
+    }
+
+    const devUserId = (req.headers["x-user-id"] as string) || "usr_dev_candidate_default";
+    req.user = {
+        id: devUserId,
+        email: "candidate@jobpilot.io",
+        role: "USER",
+    };
+    next();
+}
+

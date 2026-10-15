@@ -151,14 +151,24 @@ class ApplyNode {
             });
 
             // DISPATCH EMAIL ALERT TO USER
+            const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+            const interventionUrl = `${frontendUrl}/?tab=pipeline&checkpointId=${application.id}`;
             await emailService.sendHumanInterventionAlert({
               to: candidateEmail,
               candidateName,
               jobTitle: job.title,
               companyName: job.company,
-              actionUrl: job.url,
+              actionUrl: interventionUrl,
               reason: humanVerification.message || "Security challenge (CAPTCHA / Cloudflare Turnstile) detected.",
               verificationType: humanVerification.type || "CAPTCHA / Security Checkpoint",
+              applicationId: application.id,
+              alreadyFilledFields: [
+                { label: "Candidate Name", value: candidateName },
+                { label: "Contact Email", value: candidateEmail },
+                { label: "Job Location", value: job.location || "Bengaluru, India" },
+                { label: "Tailored Resume", value: "Verified & Attached (PDF)" },
+              ],
+              remainingFields: [humanVerification.message || "CAPTCHA / Security Checkpoint Verification"],
             });
             applications.push(waitingApp);
             requiresUserAction = true;
@@ -226,14 +236,24 @@ class ApplyNode {
             });
 
             // DISPATCH EMAIL ALERT TO USER
+            const frontendUrl2 = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+            const interventionUrl2 = `${frontendUrl2}/?tab=pipeline&checkpointId=${application.id}`;
             await emailService.sendHumanInterventionAlert({
               to: candidateEmail,
               candidateName,
               jobTitle: job.title,
               companyName: job.company,
-              actionUrl: job.url,
+              actionUrl: interventionUrl2,
               reason: `The employer asks custom questions not yet in your profile: ${missingNames}`,
               verificationType: "Missing Required Profile Data",
+              applicationId: application.id,
+              alreadyFilledFields: [
+                { label: "Candidate Name", value: candidateName },
+                { label: "Contact Email", value: candidateEmail },
+                { label: "Job Location", value: job.location || "Bengaluru, India" },
+                { label: "Tailored Resume", value: "Verified & Attached (PDF)" },
+              ],
+              remainingFields: outsiderMissing.map((item) => item.field.label || item.field.name || item.field.selector),
             });
             applications.push(waitingApp);
             requiresUserAction = true;

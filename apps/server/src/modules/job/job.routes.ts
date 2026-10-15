@@ -1,5 +1,5 @@
 import { Router } from "express";
-import authMiddlewares from "../auth/auth.middleware.js";
+import authMiddlewares, { optionalAuthMiddleware } from "../auth/auth.middleware.js";
 import jobController from "./job.controller.js";
 
 const router = Router();
@@ -8,7 +8,7 @@ const router = Router();
 // Keep them unauthenticated so the web client can show real-time feeds without sign-in block.
 router.get(
     "/live",
-    authMiddlewares,
+    optionalAuthMiddleware,
     jobController.liveJobs.bind(jobController)
 );
 router.get(

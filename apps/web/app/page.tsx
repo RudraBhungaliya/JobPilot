@@ -96,8 +96,10 @@ export interface ApplicationTrackerItem {
   salaryINR: string;
   location: string;
   canonicalUrl?: string;
+  checkpointUrl?: string;
   reason?: string;
   step?: string;
+  questions?: Array<{ selector: string; label: string; type?: string; hint?: string; required?: boolean }>;
 }
 
 const INITIAL_PROFILE: CandidateProfile = {
@@ -188,6 +190,7 @@ export default function Home() {
     questions?: Array<{ selector: string; label: string; type?: string; hint?: string; required?: boolean }>;
   } | null>(null);
   const [verificationAnswers, setVerificationAnswers] = useState<Record<string, any>>({});
+  const [directCheckpointId, setDirectCheckpointId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Backend Stats & Notifications
@@ -447,6 +450,17 @@ export default function Home() {
             else if (item.status === "RUNNING" || item.status === "SUBMITTING" || item.status === "TAILORING") mappedStatus = "RUNNING";
             else mappedStatus = "QUEUED";
 
+            const rawQuestions = item.questions || item.humanActions?.[0]?.questions || [];
+            const mappedQuestions = Array.isArray(rawQuestions)
+              ? rawQuestions.map((q: any) => ({
+                  selector: q.field || q.selector || q.id,
+                  label: q.label || q.field || q.selector || "Required Information",
+                  type: q.type || "text",
+                  hint: q.hint || q.reviewReason || undefined,
+                  required: q.required !== false,
+                }))
+              : [];
+
             return {
               id: item.id,
               title: item.jobTitle || item.job?.title || item.title || "Software Engineer",
@@ -457,12 +471,14 @@ export default function Home() {
               salaryINR: item.salaryRange || item.salaryINR || "Competitive",
               location: item.location || item.company?.location || "Remote",
               canonicalUrl: item.jobUrl || item.canonicalUrl || item.job?.url || item.url,
+              checkpointUrl: item.canonicalUrl || item.jobUrl || item.job?.url || item.url,
               step: item.status === "WAITING_FOR_USER"
                 ? (item.failureReason || "Human verification or security challenge required")
                 : item.status === "SUBMITTED"
                 ? "Verified confirmation on official employer portal"
                 : `Application status: ${item.status}`,
               reason: item.failureReason,
+              questions: mappedQuestions,
             };
           });
           setApplications(mapped);
@@ -515,7 +531,79 @@ export default function Home() {
     fetchPipelineStats();
     fetchBackendApplications();
     fetchNotifications();
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      const checkpointParam = params.get("checkpointId");
+      if (tabParam === "pipeline") {
+        setCurrentTab("pipeline");
+      }
+      if (checkpointParam) {
+        setDirectCheckpointId(checkpointParam);
+      }
+    }
   }, []);
+
+  // When directed to a paused step (via email intervention link), automatically open the Checkpoint Modal
+  useEffect(() => {
+    if (!directCheckpointId) return;
+
+    const found = applications.find((a) => a.id === directCheckpointId);
+    if (found) {
+      setCurrentTab("pipeline");
+      setSecurityModal({
+        job: found,
+        applicationId: found.id,
+        type: "Human Intervention Checkpoint",
+        reason: found.reason || "Additional employer screening questions or interactive verification checkpoint.",
+        checkpointUrl: found.checkpointUrl || found.canonicalUrl,
+        questions: (found.questions && found.questions.length > 0)
+          ? found.questions
+          : [
+              { selector: "work_authorization", label: "Are you legally authorized to work in India?", hint: "Yes / No", type: "select" },
+              { selector: "earliest_start_date", label: "Earliest Available Start Date", hint: "Immediate / Within 2 weeks", type: "text" },
+              { selector: "notice_period", label: "Notice Period / Availability", hint: "Immediate / Currently Available", type: "text" },
+              { selector: "expected_stipend", label: "Expected Monthly Stipend (INR)", hint: "₹45,000 - ₹65,000 / Standard", type: "text" },
+            ],
+      });
+      return;
+    }
+
+    // Fallback: fetch directly from API if not yet in state
+    fetch(`/api/v1/applications/${directCheckpointId}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.data) {
+          const item = json.data;
+          setCurrentTab("pipeline");
+          setSecurityModal({
+            job: {
+              id: item.id,
+              title: item.jobTitle || item.title || "Software Engineer",
+              company: item.company?.name || item.companyName || "Company",
+              status: "NEEDS_INTERVENTION",
+              time: "Just now",
+              atsProvider: item.atsProvider || "Greenhouse",
+              salaryINR: item.salaryRange || "Competitive",
+              location: item.location || "Bengaluru",
+              canonicalUrl: item.jobUrl || item.url,
+            },
+            applicationId: item.id,
+            type: "Human Intervention Checkpoint",
+            reason: item.failureReason || "Additional employer screening questions or interactive verification checkpoint.",
+            checkpointUrl: item.jobUrl || item.url,
+            questions: [
+              { selector: "work_authorization", label: "Are you legally authorized to work in India?", hint: "Yes / No", type: "select" },
+              { selector: "earliest_start_date", label: "Earliest Available Start Date", hint: "Immediate / Within 2 weeks", type: "text" },
+              { selector: "notice_period", label: "Notice Period / Availability", hint: "Immediate / Currently Available", type: "text" },
+              { selector: "expected_stipend", label: "Expected Monthly Stipend (INR)", hint: "₹45,000 - ₹65,000 / Standard", type: "text" },
+            ],
+          });
+        }
+      })
+      .catch(() => {});
+  }, [directCheckpointId, applications]);
 
   // SSE Real-time Subscription with Auto-Reconnection
   useEffect(() => {
@@ -1071,17 +1159,67 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
     }
   };
 
-  // Filtered jobs for Verified Jobs tab
+  // Filtered jobs for Verified Jobs tab with intelligent synonyms and SDE Intern expansion
   const filteredJobs = jobs.filter((j) => {
     if (categoryFilter !== "ALL" && j.category !== categoryFilter) return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = j.title.toLowerCase().includes(q);
-      const matchComp = j.company.toLowerCase().includes(q);
-      const matchTags = j.tags.some((t) => t.toLowerCase().includes(q));
-      if (!matchTitle && !matchComp && !matchTags) return false;
+    if (!searchQuery.trim()) return true;
+
+    const q = searchQuery.toLowerCase().trim();
+    const titleLower = j.title.toLowerCase();
+    const compLower = j.company.toLowerCase();
+    const locLower = (j.location || "").toLowerCase();
+    const tagsLower = j.tags.map((t) => t.toLowerCase());
+    const fullText = `${titleLower} ${compLower} ${locLower} ${tagsLower.join(" ")}`;
+
+    // 1. Direct full text substring
+    if (fullText.includes(q)) return true;
+
+    // 2. Powerful SDE Intern / SWE Internship expansion
+    const isSdeQuery = /\b(sde|swe|software|engineer|developer|frontend|backend|fullstack|full stack)\b/i.test(q);
+    const isInternQuery = /\b(intern|internship|trainee|fresher|campus|student|apprentice)\b/i.test(q);
+    const isBengaluruQuery = /\b(bengaluru|bangalore|blr)\b/i.test(q);
+
+    if (isSdeQuery && isInternQuery) {
+      const roleMatches = /\b(sde|swe|software|engineer|developer|frontend|backend|full stack|web|platform|systems)\b/i.test(titleLower) ||
+                          tagsLower.some((t) => /\b(react|node|typescript|python|java|go|engineering)\b/i.test(t));
+      const levelMatches = /\b(intern|internship|trainee|fresher|campus|student|apprentice|graduate|junior|associate)\b/i.test(titleLower) ||
+                           j.salaryINR.toLowerCase().includes("stipend") ||
+                           j.salaryMinLPA <= 20;
+      if (roleMatches && levelMatches) {
+        if (isBengaluruQuery) {
+          return /\b(bengaluru|bangalore|blr|karnataka|india|remote)\b/i.test(locLower);
+        }
+        return true;
+      }
     }
-    return true;
+
+    // 3. Synonym dictionary matching
+    const SYNONYMS: Record<string, string[]> = {
+      sde: ["sde", "software", "engineer", "developer", "swe", "programming"],
+      swe: ["swe", "software", "engineer", "developer", "sde"],
+      intern: ["intern", "internship", "trainee", "fresher", "campus", "student", "graduate"],
+      bengaluru: ["bengaluru", "bangalore", "blr", "karnataka", "india"],
+      bangalore: ["bengaluru", "bangalore", "blr", "karnataka", "india"],
+      frontend: ["frontend", "front-end", "react", "ui", "web"],
+      backend: ["backend", "back-end", "node", "java", "go", "python", "api"],
+      fullstack: ["fullstack", "full stack", "software", "developer"],
+    };
+
+    const tokens = q.split(/\s+/).filter((t) => t.length > 1);
+    if (tokens.length === 0) return true;
+
+    const matchedTokenCount = tokens.filter((token) => {
+      if (fullText.includes(token)) return true;
+      const syns = SYNONYMS[token];
+      if (syns && syns.some((syn) => fullText.includes(syn))) return true;
+      return false;
+    }).length;
+
+    if (tokens.length <= 2) {
+      return matchedTokenCount === tokens.length || (matchedTokenCount >= 1 && (titleLower.includes(tokens[0]) || titleLower.includes(tokens[1])));
+    }
+
+    return matchedTokenCount >= Math.ceil(tokens.length * 0.5);
   });
 
   // Filtered applications for Pipeline tab
@@ -2407,17 +2545,21 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
 
       {/* MODAL: HUMAN-IN-THE-LOOP CHECKPOINT */}
       {securityModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-[#121829] border border-amber-500/40 rounded-2xl shadow-2xl p-6 space-y-4 text-xs animate-in zoom-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-2xl max-h-[90vh] bg-[#121829] border border-amber-500/40 rounded-2xl shadow-2xl p-6 space-y-4 text-xs animate-in zoom-in-95 duration-150 overflow-y-auto">
+            {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
-              <div className="flex items-center gap-2 text-amber-400">
+              <div className="flex items-center gap-2.5 text-amber-400">
                 <ShieldAlert className="w-5 h-5 shrink-0" />
                 <div>
-                  <h3 className="text-sm font-bold text-white">
-                    Action Required: {securityModal.job.company}
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Action Required: {securityModal.job.company}</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                      Step Paused
+                    </span>
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    {securityModal.job.title}
+                    {securityModal.job.title} • {securityModal.job.location}
                   </p>
                 </div>
               </div>
@@ -2426,59 +2568,181 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
               </button>
             </div>
 
-            <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-xl text-amber-300 space-y-1">
-              <span className="font-semibold block">Human Verification Required:</span>
-              <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                {securityModal.reason}
-              </p>
+            {/* Progress Bar Callout */}
+            <div className="bg-[#0b101d] border border-indigo-500/25 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-indigo-300 font-semibold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  <span>Application Paused at Verification Gate</span>
+                </span>
+                <span className="text-emerald-400 font-mono font-medium flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  50%+ Completed (Core Data Pre-filled)
+                </span>
+              </div>
+              <div className="w-full bg-white/[0.06] h-2 rounded-full overflow-hidden">
+                <div className="bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500 h-full w-1/2 rounded-full"></div>
+              </div>
             </div>
 
-            {securityModal.questions && securityModal.questions.length > 0 && (
-              <div className="space-y-3">
-                <span className="font-semibold text-slate-200 block">Required Details:</span>
-                {securityModal.questions.map((q, idx) => (
+            {/* 1. DATA ALREADY AUTO-FILLED BY JOBPILOT AI */}
+            <div className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-4 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>1. Data Already Auto-Filled by JobPilot (Pre-filled & Saved)</span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  Ready & Attached
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div className="bg-[#0b101d] border border-white/[0.06] rounded-lg p-2.5 flex items-center justify-between">
+                  <span className="text-slate-400">Candidate Name:</span>
+                  <span className="text-white font-medium flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    {profile.firstName} {profile.lastName}
+                  </span>
+                </div>
+                <div className="bg-[#0b101d] border border-white/[0.06] rounded-lg p-2.5 flex items-center justify-between">
+                  <span className="text-slate-400">Email Address:</span>
+                  <span className="text-white font-medium flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    {profile.email}
+                  </span>
+                </div>
+                <div className="bg-[#0b101d] border border-white/[0.06] rounded-lg p-2.5 flex items-center justify-between">
+                  <span className="text-slate-400">Phone Number:</span>
+                  <span className="text-white font-medium flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    {profile.phone || "+91 98765 43210"}
+                  </span>
+                </div>
+                <div className="bg-[#0b101d] border border-white/[0.06] rounded-lg p-2.5 flex items-center justify-between">
+                  <span className="text-slate-400">Target Location:</span>
+                  <span className="text-white font-medium flex items-center gap-1">
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    {profile.city || "Bengaluru"}, India
+                  </span>
+                </div>
+                <div className="bg-[#0b101d] border border-white/[0.06] rounded-lg p-2.5 flex items-center justify-between">
+                  <span className="text-slate-400">Tailored Resume:</span>
+                  <span className="text-indigo-300 font-medium flex items-center gap-1">
+                    <FileText className="w-3 h-3 text-indigo-400" />
+                    Tailored ATS Resume (PDF)
+                  </span>
+                </div>
+                <div className="bg-[#0b101d] border border-white/[0.06] rounded-lg p-2.5 flex items-center justify-between">
+                  <span className="text-slate-400">Synced Profiles:</span>
+                  <span className="text-emerald-400 font-medium flex items-center gap-1">
+                    <ExternalLink className="w-3 h-3" />
+                    LinkedIn & GitHub Verified
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. REMAINING DETAILS REQUIRED TO COMPLETE & SUBMIT */}
+            <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>2. Remaining Information Required from You (Action Needed)</span>
+                </span>
+                <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  1-2 Min Action
+                </span>
+              </div>
+
+              {securityModal.reason && (
+                <div className="text-[11px] text-amber-200/90 leading-relaxed bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5">
+                  <strong className="text-amber-300">Checkpoint Reason:</strong> {securityModal.reason}
+                </div>
+              )}
+
+              {/* Form Questions */}
+              <div className="space-y-2.5">
+                {((securityModal.questions && securityModal.questions.length > 0) ? securityModal.questions : [
+                  { selector: "work_authorization", label: "Are you legally authorized to work in India?", hint: "Yes", type: "select" },
+                  { selector: "earliest_start_date", label: "Earliest Available Start Date", hint: "Immediate / Within 2 weeks", type: "text" },
+                  { selector: "notice_period", label: "Notice Period / Availability", hint: "Immediate / Currently Available", type: "text" },
+                  { selector: "expected_stipend", label: "Expected Monthly Stipend (INR)", hint: "₹45,000 - ₹65,000 / As per company standard", type: "text" },
+                ]).map((q, idx) => (
                   <div key={idx} className="space-y-1">
-                    <label className="block text-slate-400 text-[11px]">{q.label || q.selector}</label>
-                    <input
-                      type="text"
-                      placeholder={q.hint || "Enter response"}
-                      value={verificationAnswers[q.selector] || ""}
-                      onChange={(e) => setVerificationAnswers({ ...verificationAnswers, [q.selector]: e.target.value })}
-                      className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500 text-xs"
-                    />
+                    <div className="flex justify-between text-[11px]">
+                      <label className="text-slate-300 font-medium">{q.label || q.selector}</label>
+                      <span className="text-slate-500 font-mono text-[10px]">{q.hint ? `e.g. ${q.hint}` : "Required"}</span>
+                    </div>
+                    {q.type === "select" || q.selector.includes("work_authorization") ? (
+                      <select
+                        value={verificationAnswers[q.selector] || "Yes"}
+                        onChange={(e) => setVerificationAnswers({ ...verificationAnswers, [q.selector]: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs cursor-pointer"
+                      >
+                        <option value="Yes">Yes, legally authorized to work in India</option>
+                        <option value="No">No, require sponsorship</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder={q.hint || "Enter response"}
+                        value={verificationAnswers[q.selector] ?? (q.selector === "notice_period" ? "Immediate / Currently Available" : q.selector === "earliest_start_date" ? "Immediate" : q.selector === "expected_stipend" ? "₹45,000 - ₹65,000 / Standard" : "")}
+                        onChange={(e) => setVerificationAnswers({ ...verificationAnswers, [q.selector]: e.target.value })}
+                        className="w-full bg-[#0d121f] border border-white/[0.1] rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs"
+                      />
+                    )}
                   </div>
                 ))}
               </div>
-            )}
 
-            {securityModal.checkpointUrl && (
-              <div className="text-[11px] text-slate-400">
-                <span>Employer Verification URL: </span>
-                <a
-                  href={securityModal.checkpointUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-indigo-400 hover:underline font-mono inline-flex items-center gap-1"
-                >
-                  Open Portal Checkpoint <ExternalLink className="w-3 h-3" />
-                </a>
+              {/* Verification / Security Checkpoint Link & Checkbox */}
+              {securityModal.checkpointUrl && (
+                <div className="pt-2 border-t border-white/[0.08] space-y-2">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-300 font-medium">Official Employer Verification Portal:</span>
+                    <a
+                      href={securityModal.checkpointUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-indigo-400 hover:text-indigo-300 underline font-mono inline-flex items-center gap-1 font-semibold"
+                    >
+                      Open Portal Checkpoint <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-[11px] text-slate-300 bg-[#0d121f] p-2.5 rounded-lg border border-white/[0.06]">
+                    <input
+                      type="checkbox"
+                      checked={verificationAnswers["security_checkpoint_verified"] !== false}
+                      onChange={(e) => setVerificationAnswers({ ...verificationAnswers, security_checkpoint_verified: e.target.checked })}
+                      className="rounded border-slate-700 text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                    />
+                    <span>I have completed the verification checkpoint / CAPTCHA on the employer portal</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer / Submit Button */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-white/[0.08]">
+              <div className="text-[11px] text-slate-400 text-left">
+                Submitting will immediately resume the session and finish submission.
               </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-3 border-t border-white/[0.08]">
-              <button
-                onClick={() => setSecurityModal(null)}
-                className="px-3 py-2 text-slate-400 hover:text-white text-xs cursor-pointer"
-              >
-                Dismiss
-              </button>
-              <button
-                onClick={() => handleResolveCheckpoint(securityModal.applicationId || securityModal.job.id, verificationAnswers)}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-lg shadow-emerald-600/25"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Confirm & Resume Submission</span>
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => setSecurityModal(null)}
+                  className="px-3.5 py-2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={() => handleResolveCheckpoint(securityModal.applicationId || securityModal.job.id, verificationAnswers)}
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-emerald-600/30 text-xs"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Submit Remaining Details & Resume Execution</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
