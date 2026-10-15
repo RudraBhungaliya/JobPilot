@@ -37,11 +37,11 @@ describe("Web Scraper Source & Multi-Source Expansion", () => {
     it("WebScraperSource filters by location and remote accurately", async () => {
         const blrJobs = await webScraperSource.search({ keyword: "Engineer", location: "Bengaluru" });
         assert.ok(blrJobs.length > 0, "Should match Bengaluru openings");
-        assert.ok(blrJobs.every((j) => j.location.toLowerCase().includes("bengaluru") || j.location.toLowerCase().includes("bangalore")));
+        assert.ok(blrJobs.every((j) => (j.location || "").toLowerCase().includes("bengaluru") || (j.location || "").toLowerCase().includes("bangalore")));
 
         const remoteJobs = await webScraperSource.search({ keyword: "Engineer", remote: true });
         assert.ok(remoteJobs.length > 0, "Should return remote openings");
-        assert.ok(remoteJobs.some((j) => j.location.toLowerCase().includes("remote") || j.title.toLowerCase().includes("remote")));
+        assert.ok(remoteJobs.some((j) => (j.location || "").toLowerCase().includes("remote") || (j.title || "").toLowerCase().includes("remote")));
     });
 
     it("CrawlerService crawls live web openings matching search filter queries", async () => {
