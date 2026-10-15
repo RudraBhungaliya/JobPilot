@@ -563,7 +563,7 @@ class ApplicationSubmitService {
             const candidateEmail = raw.profile?.email || raw.user?.email;
             if (candidateEmail) {
                 const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-                const actionUrl = `${frontendUrl}/?tab=pipeline&checkpointId=${applicationId}`;
+                const actionUrl = `${frontendUrl}/checkpoint/${applicationId}`;
                 const prof = raw.profile;
                 const alreadyFilledFields = [
                     { label: "Candidate Name", value: prof?.firstName ? `${prof.firstName} ${prof.lastName || ""}` : "Candidate" },
@@ -579,6 +579,7 @@ class ApplicationSubmitService {
                     jobTitle,
                     companyName,
                     actionUrl,
+                    jobOpeningUrl: raw.job?.url,
                     reason: captchaMsg,
                     verificationType: challengeType,
                     applicationId,

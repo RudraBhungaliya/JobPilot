@@ -54,9 +54,13 @@ export function InterventionsHub({
   const [filterType, setFilterType] = useState<string>("ALL");
   const [resolvingId, setResolvingId] = useState<string | null>(null);
 
-  // Filter paused / waiting applications
+  // Filter paused / waiting applications in real-time
   const waitingApps = applications.filter(
-    (app) => app.status === "WAITING_FOR_USER" || app.humanActions?.length > 0
+    (app) =>
+      app.status === "WAITING_FOR_USER" ||
+      app.status === "NEEDS_INTERVENTION" ||
+      app.status === "VERIFICATION_PENDING" ||
+      (Array.isArray(app.humanActions) && app.humanActions.some((h: any) => h.status === "PENDING" || h.status === "WAITING_FOR_USER"))
   );
 
   const classifyIntervention = (app: any): { type: string; label: string; color: string; icon: any } => {

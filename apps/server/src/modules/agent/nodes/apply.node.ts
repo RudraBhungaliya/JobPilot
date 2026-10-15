@@ -152,13 +152,14 @@ class ApplyNode {
 
             // DISPATCH EMAIL ALERT TO USER
             const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-            const interventionUrl = `${frontendUrl}/?tab=pipeline&checkpointId=${application.id}`;
+            const interventionUrl = `${frontendUrl}/checkpoint/${application.id}`;
             await emailService.sendHumanInterventionAlert({
               to: candidateEmail,
               candidateName,
               jobTitle: job.title,
               companyName: job.company,
               actionUrl: interventionUrl,
+              jobOpeningUrl: job.url,
               reason: humanVerification.message || "Security challenge (CAPTCHA / Cloudflare Turnstile) detected.",
               verificationType: humanVerification.type || "CAPTCHA / Security Checkpoint",
               applicationId: application.id,
@@ -237,13 +238,14 @@ class ApplyNode {
 
             // DISPATCH EMAIL ALERT TO USER
             const frontendUrl2 = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-            const interventionUrl2 = `${frontendUrl2}/?tab=pipeline&checkpointId=${application.id}`;
+            const interventionUrl2 = `${frontendUrl2}/checkpoint/${application.id}`;
             await emailService.sendHumanInterventionAlert({
               to: candidateEmail,
               candidateName,
               jobTitle: job.title,
               companyName: job.company,
               actionUrl: interventionUrl2,
+              jobOpeningUrl: job.url,
               reason: `The employer asks custom questions not yet in your profile: ${missingNames}`,
               verificationType: "Missing Required Profile Data",
               applicationId: application.id,

@@ -111,38 +111,28 @@ export interface ApplicationTrackerItem {
   questions?: Array<{ selector: string; label: string; type?: string; hint?: string; required?: boolean }>;
 }
 
-const INITIAL_PROFILE: CandidateProfile = {
-  firstName: "Rudra",
-  lastName: "Bhungaliya",
-  email: "rudra.b@jobpilot.ai",
-  phone: "+91 9876543210",
-  city: "Bengaluru",
-  state: "Karnataka",
+const EMPTY_PROFILE: CandidateProfile = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  city: "",
+  state: "",
   country: "India",
-  currentTitle: "Senior Full Stack Engineer",
-  currentCompany: "Tech Systems India",
-  yearsOfExperience: 5,
-  expectedSalaryLPA: 38,
-  currentSalaryLPA: 26,
+  currentTitle: "",
+  currentCompany: "",
+  yearsOfExperience: 0,
+  expectedSalaryLPA: 0,
+  currentSalaryLPA: 0,
   noticePeriodDays: 30,
   workMode: "HYBRID",
-  github: "https://github.com/developer",
-  linkedin: "https://linkedin.com/in/developer",
-  portfolio: "https://rudra.dev",
+  github: "",
+  linkedin: "",
+  portfolio: "",
   workAuthorization: "Authorized to work in India",
   sponsorshipRequired: false,
   willingToRelocate: true,
-  skills: [
-    "TypeScript",
-    "React",
-    "Next.js",
-    "Node.js",
-    "PostgreSQL",
-    "AWS",
-    "Docker",
-    "Redis",
-    "Python",
-  ],
+  skills: [],
 };
 
 export default function Home() {
@@ -151,12 +141,9 @@ export default function Home() {
   const [currentTab, setCurrentTab] = useState<"dashboard" | "jobs" | "pipeline" | "loops" | "profile" | "reviews" | "interventions">("dashboard");
 
   // Candidate & Resume State
-  const [file, setFile] = useState<{ name: string; size: string } | null>({
-    name: "Rudra_Bhungaliya_CV.pdf",
-    size: "184 KB",
-  });
+  const [file, setFile] = useState<{ name: string; size: string } | null>(null);
   const [isParsing, setIsParsing] = useState(false);
-  const [profile, setProfile] = useState<CandidateProfile>(INITIAL_PROFILE);
+  const [profile, setProfile] = useState<CandidateProfile>(EMPTY_PROFILE);
   const [newSkillInput, setNewSkillInput] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -234,6 +221,8 @@ export default function Home() {
     message: string;
     createdAt: string;
     readAt?: string | null;
+    applicationId?: string | null;
+    type?: string;
   }
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -452,48 +441,47 @@ export default function Home() {
       const res = await fetch("/api/v1/applications");
       if (res.ok) {
         const json = await res.json();
-        if (Array.isArray(json.data) && json.data.length > 0) {
-          const mapped: ApplicationTrackerItem[] = json.data.map((item: any) => {
-            let mappedStatus: ApplicationTrackerItem["status"] = "QUEUED";
-            if (item.status === "WAITING_FOR_USER") mappedStatus = "NEEDS_INTERVENTION";
-            else if (item.status === "SUBMITTED" || item.status === "APPLIED" || item.status === "OFFER") mappedStatus = "SUBMITTED";
-            else if (item.status === "FAILED" || item.status === "REJECTED") mappedStatus = "FAILED";
-            else if (item.status === "RUNNING" || item.status === "SUBMITTING" || item.status === "TAILORING") mappedStatus = "RUNNING";
-            else mappedStatus = "QUEUED";
+        const items = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
+        const mapped: ApplicationTrackerItem[] = items.map((item: any) => {
+          let mappedStatus: ApplicationTrackerItem["status"] = "QUEUED";
+          if (item.status === "WAITING_FOR_USER") mappedStatus = "NEEDS_INTERVENTION";
+          else if (item.status === "SUBMITTED" || item.status === "APPLIED" || item.status === "OFFER") mappedStatus = "SUBMITTED";
+          else if (item.status === "FAILED" || item.status === "REJECTED") mappedStatus = "FAILED";
+          else if (item.status === "RUNNING" || item.status === "SUBMITTING" || item.status === "TAILORING") mappedStatus = "RUNNING";
+          else mappedStatus = "QUEUED";
 
-            const rawQuestions = item.questions || item.humanActions?.[0]?.questions || [];
-            const mappedQuestions = Array.isArray(rawQuestions)
-              ? rawQuestions.map((q: any) => ({
-                  selector: q.field || q.selector || q.id,
-                  label: q.label || q.field || q.selector || "Required Information",
-                  type: q.type || "text",
-                  hint: q.hint || q.reviewReason || undefined,
-                  required: q.required !== false,
-                }))
-              : [];
+          const rawQuestions = item.questions || item.humanActions?.[0]?.questions || [];
+          const mappedQuestions = Array.isArray(rawQuestions)
+            ? rawQuestions.map((q: any) => ({
+                selector: q.field || q.selector || q.id,
+                label: q.label || q.field || q.selector || "Required Information",
+                type: q.type || "text",
+                hint: q.hint || q.reviewReason || undefined,
+                required: q.required !== false,
+              }))
+            : [];
 
-            return {
-              id: item.id,
-              title: item.jobTitle || item.job?.title || item.title || "Software Engineer",
-              company: item.company?.name || item.companyName || item.job?.company?.name || (typeof item.company === "string" ? item.company : "Company"),
-              status: mappedStatus,
-              time: item.appliedAt ? new Date(item.appliedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : item.lastUpdated || "Recently",
-              atsProvider: item.company?.verifiedAts || item.atsProvider || item.job?.atsProvider || "Greenhouse",
-              salaryINR: item.salaryRange || item.salaryINR || "Competitive",
-              location: item.location || item.company?.location || "Remote",
-              canonicalUrl: item.jobUrl || item.canonicalUrl || item.job?.url || item.url,
-              checkpointUrl: item.canonicalUrl || item.jobUrl || item.job?.url || item.url,
-              step: item.status === "WAITING_FOR_USER"
-                ? (item.failureReason || "Human verification or security challenge required")
-                : item.status === "SUBMITTED"
-                ? "Verified confirmation on official employer portal"
-                : `Application status: ${item.status}`,
-              reason: item.failureReason,
-              questions: mappedQuestions,
-            };
-          });
-          setApplications(mapped);
-        }
+          return {
+            id: item.id,
+            title: item.jobTitle || item.job?.title || item.title || "Software Engineer",
+            company: item.company?.name || item.companyName || item.job?.company?.name || (typeof item.company === "string" ? item.company : "Company"),
+            status: mappedStatus,
+            time: item.appliedAt ? new Date(item.appliedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : item.lastUpdated || "Recently",
+            atsProvider: item.company?.verifiedAts || item.atsProvider || item.job?.atsProvider || "Universal Web",
+            salaryINR: item.salaryRange || item.salaryINR || "Competitive",
+            location: item.location || item.company?.location || "Remote",
+            canonicalUrl: item.jobUrl || item.canonicalUrl || item.job?.url || item.url,
+            checkpointUrl: item.canonicalUrl || item.jobUrl || item.job?.url || item.url,
+            step: item.status === "WAITING_FOR_USER"
+              ? (item.failureReason || "Human verification or security challenge required")
+              : item.status === "SUBMITTED"
+              ? "Verified confirmation on official employer portal"
+              : `Application status: ${item.status}`,
+            reason: item.failureReason,
+            questions: mappedQuestions,
+          };
+        });
+        setApplications(mapped);
       }
     } catch {
       // Fallback
@@ -509,15 +497,17 @@ export default function Home() {
       ]);
       if (notifsRes.ok) {
         const notifsData = await notifsRes.json();
-        if (Array.isArray(notifsData.data)) {
-          setNotifications(notifsData.data);
-        }
+        const list = Array.isArray(notifsData)
+          ? notifsData
+          : (Array.isArray(notifsData?.data) ? notifsData.data : []);
+        setNotifications(list);
       }
       if (countRes.ok) {
         const countData = await countRes.json();
-        if (typeof countData.unreadCount === "number") {
-          setUnreadCount(countData.unreadCount);
-        }
+        const count = typeof countData?.unreadCount === "number"
+          ? countData.unreadCount
+          : (typeof countData?.count === "number" ? countData.count : 0);
+        setUnreadCount(count);
       }
     } catch {
       // Fallback
@@ -624,13 +614,30 @@ export default function Home() {
     }
   };
 
-  // Initialize and load backend state
+  const fetchResumes = async () => {
+    try {
+      const res = await fetch("/api/v1/resumes");
+      if (res.ok) {
+        const json = await res.json();
+        const items = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : []);
+        if (items.length > 0) {
+          const latest = items[0];
+          setFile({ name: latest.title || latest.name || "Candidate_CV.pdf", size: "Saved in Database" });
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
+  // Initialize and load backend state with real-time polling
   useEffect(() => {
     fetchLiveJobs();
     fetchCandidateProfile();
     fetchPipelineStats();
     fetchBackendApplications();
     fetchNotifications();
+    fetchResumes();
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -642,9 +649,17 @@ export default function Home() {
         setCurrentTab("interventions");
       }
       if (checkpointParam) {
-        setDirectCheckpointId(checkpointParam);
+        router.push(`/checkpoint/${checkpointParam}`);
       }
     }
+
+    const interval = setInterval(() => {
+      fetchNotifications();
+      fetchBackendApplications();
+      fetchPipelineStats();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // When directed to a paused step (via email intervention link), automatically open the Checkpoint Modal
@@ -653,22 +668,7 @@ export default function Home() {
 
     const found = applications.find((a) => a.id === directCheckpointId);
     if (found) {
-      setCurrentTab("pipeline");
-      setSecurityModal({
-        job: found,
-        applicationId: found.id,
-        type: "Human Intervention Checkpoint",
-        reason: found.reason || "Additional employer screening questions or interactive verification checkpoint.",
-        checkpointUrl: found.checkpointUrl || found.canonicalUrl,
-        questions: (found.questions && found.questions.length > 0)
-          ? found.questions
-          : [
-              { selector: "work_authorization", label: "Are you legally authorized to work in India?", hint: "Yes / No", type: "select" },
-              { selector: "earliest_start_date", label: "Earliest Available Start Date", hint: "Immediate / Within 2 weeks", type: "text" },
-              { selector: "notice_period", label: "Notice Period / Availability", hint: "Immediate / Currently Available", type: "text" },
-              { selector: "expected_stipend", label: "Expected Monthly Stipend (INR)", hint: "₹45,000 - ₹65,000 / Standard", type: "text" },
-            ],
-      });
+      router.push(`/checkpoint/${directCheckpointId}`);
       return;
     }
 
@@ -677,35 +677,12 @@ export default function Home() {
       .then((res) => res.json())
       .then((json) => {
         if (json?.data) {
-          const item = json.data;
-          setCurrentTab("pipeline");
-          setSecurityModal({
-            job: {
-              id: item.id,
-              title: item.jobTitle || item.title || "Software Engineer",
-              company: item.company?.name || item.companyName || "Company",
-              status: "NEEDS_INTERVENTION",
-              time: "Just now",
-              atsProvider: item.atsProvider || "Greenhouse",
-              salaryINR: item.salaryRange || "Competitive",
-              location: item.location || "Bengaluru",
-              canonicalUrl: item.jobUrl || item.url,
-            },
-            applicationId: item.id,
-            type: "Human Intervention Checkpoint",
-            reason: item.failureReason || "Additional employer screening questions or interactive verification checkpoint.",
-            checkpointUrl: item.jobUrl || item.url,
-            questions: [
-              { selector: "work_authorization", label: "Are you legally authorized to work in India?", hint: "Yes / No", type: "select" },
-              { selector: "earliest_start_date", label: "Earliest Available Start Date", hint: "Immediate / Within 2 weeks", type: "text" },
-              { selector: "notice_period", label: "Notice Period / Availability", hint: "Immediate / Currently Available", type: "text" },
-              { selector: "expected_stipend", label: "Expected Monthly Stipend (INR)", hint: "₹45,000 - ₹65,000 / Standard", type: "text" },
-            ],
-          });
+          router.push(`/checkpoint/${directCheckpointId}`);
         }
       })
       .catch(() => {});
   }, [directCheckpointId, applications]);
+
 
   // SSE Real-time Subscription with Auto-Reconnection
   useEffect(() => {
@@ -1524,7 +1501,9 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
 
             <div className="hidden md:flex items-center gap-2 pl-3 border-l border-white/[0.08] text-xs text-slate-400">
               <span>Candidate:</span>
-              <span className="font-medium text-slate-200">{profile.firstName} {profile.lastName} ({profile.currentTitle})</span>
+              <span className="font-medium text-slate-200">
+                {profile.firstName ? `${profile.firstName} ${profile.lastName} (${profile.currentTitle || "Candidate"})` : "Upload CV to Begin"}
+              </span>
             </div>
           </div>
 
@@ -1581,19 +1560,46 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                       Mark all read
                     </button>
                   </div>
-                  <div className="max-h-60 overflow-y-auto space-y-2">
+                  <div className="max-h-72 overflow-y-auto space-y-2">
                     {notifications.length === 0 ? (
                       <p className="text-[11px] text-slate-500 text-center py-4">No notifications yet.</p>
                     ) : (
                       notifications.map((n) => (
                         <div
                           key={n.id}
-                          className={`p-2 rounded-lg transition ${
-                            n.readAt ? "bg-white/[0.02] text-slate-400" : "bg-indigo-500/10 text-slate-200 border border-indigo-500/20"
+                          onClick={() => {
+                            if (!n.readAt) {
+                              fetch(`/api/v1/notifications/${n.id}/read`, { method: "PATCH" }).catch(() => {});
+                              setNotifications((prev) =>
+                                prev.map((item) => (item.id === n.id ? { ...item, readAt: new Date().toISOString() } : item))
+                              );
+                              setUnreadCount((prev) => Math.max(0, prev - 1));
+                            }
+                            setIsNotificationsOpen(false);
+                            if (n.applicationId) {
+                              router.push(`/checkpoint/${n.applicationId}`);
+                            }
+                          }}
+                          className={`p-2.5 rounded-xl transition cursor-pointer hover:bg-white/[0.08] ${
+                            n.readAt
+                              ? "bg-white/[0.02] text-slate-400"
+                              : "bg-indigo-500/15 text-slate-100 border border-indigo-500/30 shadow-sm"
                           }`}
                         >
-                          <div className="font-semibold text-[11px]">{n.title}</div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{n.message}</div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-[11px] text-white">{n.title}</span>
+                            {!n.readAt && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0" />
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-300 mt-1 line-clamp-2 leading-relaxed">
+                            {n.message}
+                          </div>
+                          {n.applicationId && (
+                            <div className="mt-2 text-[10px] text-indigo-400 font-bold flex items-center gap-1">
+                              <span>Open Checkpoint & Resume Pipeline ↗</span>
+                            </div>
+                          )}
                         </div>
                       ))
                     )}
@@ -1830,17 +1836,23 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                       </span>
                     </div>
 
-                    <div className="space-y-1">
-                      <div className="font-bold text-white text-sm">
-                        {profile.firstName} {profile.lastName}
+                    {profile.firstName ? (
+                      <div className="space-y-1">
+                        <div className="font-bold text-white text-sm">
+                          {profile.firstName} {profile.lastName}
+                        </div>
+                        <div className="text-xs text-indigo-300 font-medium">
+                          {profile.currentTitle || "Software Engineer"}
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          {profile.yearsOfExperience} yrs exp • {profile.city || "India"} • Notice: {profile.noticePeriodDays} days
+                        </div>
                       </div>
-                      <div className="text-xs text-indigo-300 font-medium">
-                        {profile.currentTitle || "Software Engineer"}
+                    ) : (
+                      <div className="py-2 text-center text-slate-500 text-xs">
+                        No candidate profile parsed yet. Upload or paste your CV above to extract your skills and experience.
                       </div>
-                      <div className="text-[11px] text-slate-400">
-                        {profile.yearsOfExperience} yrs exp • {profile.city} • Notice: {profile.noticePeriodDays} days
-                      </div>
-                    </div>
+                    )}
 
                     {/* Skill chips */}
                     <div className="space-y-1.5 pt-1">

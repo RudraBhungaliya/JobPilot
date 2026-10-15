@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    const list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+    return NextResponse.json({ success: true, data: list });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, data: [], message: err.message || "Failed to fetch notifications" },

@@ -8,6 +8,7 @@ export interface HumanInterventionAlertInput {
     companyName: string;
     actionUrl: string;
     reason: string;
+    jobOpeningUrl?: string;
     verificationType?: string;
     jobLocation?: string;
     salaryDollar?: string;
@@ -69,6 +70,8 @@ class EmailService {
     async sendHumanInterventionAlert(input: HumanInterventionAlertInput): Promise<{ success: boolean; preview?: string }> {
         const subject = `🚨 Action Required: Complete Verification for ${input.companyName} (${input.jobTitle}) - Application Paused`;
 
+        const openingUrl = input.jobOpeningUrl || input.actionUrl;
+
         const filledList = (input.alreadyFilledFields && input.alreadyFilledFields.length > 0)
             ? input.alreadyFilledFields
             : [
@@ -123,6 +126,19 @@ class EmailService {
             The employer portal presented a checkpoint requiring your action before final submission.
         </p>
 
+        <!-- Official Job Opening Link Card -->
+        <div style="background: #1e293b; border: 1px solid #38bdf8; border-radius: 10px; padding: 14px 16px; margin-bottom: 20px;">
+            <div style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                🔗 Official Employer Opening Page
+            </div>
+            <div style="font-size: 13px; color: #ffffff; font-weight: 600; margin-bottom: 6px;">
+                ${input.jobTitle} · ${input.companyName}
+            </div>
+            <a href="${openingUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; font-size: 12px; color: #38bdf8; text-decoration: underline; word-break: break-all;">
+                ${openingUrl}
+            </a>
+        </div>
+
         <!-- Progress Meter -->
         <div style="background: #1e293b; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; border: 1px solid #334155;">
             <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-bottom: 6px;">
@@ -156,22 +172,23 @@ class EmailService {
             </div>
         </div>
 
-        <!-- Call to Action Button -->
+        <!-- Call to Action Button: Direct Checkpoint Resumption -->
         <div style="text-align: center; margin: 28px 0 20px 0;">
-            <a href="${input.actionUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 700; font-size: 15px; box-shadow: 0 10px 20px rgba(79, 70, 229, 0.4); letter-spacing: 0.3px;">
-                👉 Complete Remaining Details & Resume Session
+            <a href="${input.actionUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); color: #ffffff; text-decoration: none; padding: 16px 36px; border-radius: 12px; font-weight: 800; font-size: 15px; box-shadow: 0 10px 25px rgba(79, 70, 229, 0.5); letter-spacing: 0.3px;">
+                👉 Continue Where Pipeline Left & Fill Details
             </a>
         </div>
 
-        <p style="color: #64748b; font-size: 12px; line-height: 1.5; text-align: center; margin: 0 0 24px 0;">
-            This link redirects you directly to the paused application step with your pre-filled data loaded. 
-            Once submitted, your session will automatically continue its execution and submit to the employer ATS.
+        <p style="color: #94a3b8; font-size: 13px; line-height: 1.6; text-align: center; margin: 0 0 24px 0;">
+            Clicking the button above redirects you directly to the paused application checkpoint where your pre-filled details are safely loaded. 
+            Once you provide the remaining information, <strong>your session will automatically resume execution and complete the submission workflow</strong>.
         </p>
 
         <!-- Footer -->
         <div style="border-top: 1px solid #1e293b; padding-top: 20px; font-size: 11px; color: #475569; text-align: center;">
-            JobPilot Autonomous Career Agent • Real-Time Bengaluru & Global ATS Pipeline<br>
-            Direct Verification Link: <a href="${input.actionUrl}" style="color: #6366f1;">${input.actionUrl}</a>
+            JobPilot Autonomous Career Agent • Real-Time Pipeline Engine<br>
+            Opening Page: <a href="${openingUrl}" style="color: #38bdf8;">${openingUrl}</a><br>
+            Resume Checkpoint: <a href="${input.actionUrl}" style="color: #6366f1;">${input.actionUrl}</a>
         </div>
     </div>
 </body>
@@ -185,13 +202,16 @@ Hi ${input.candidateName || "Candidate"},
 JobPilot has auto-filled 50%+ of your application for ${input.jobTitle} at ${input.companyName}.
 A human verification checkpoint or custom question requires your direct action.
 
+🔗 OFFICIAL JOB OPENING PAGE:
+${openingUrl}
+
 ✓ PRE-FILLED BY JOBPILOT: Name, Email, Phone, Tailored ATS Resume, Location
 ⏳ REMAINING TO COMPLETE: ${remainingItems.join(", ")}
 
-Complete the remaining details directly at the paused step link below so execution can resume:
+👉 CLICK TO CONTINUE WHERE PIPELINE LEFT OFF AND FILL REMAINING DETAILS:
 ${input.actionUrl}
 
-Once completed, JobPilot will continue executing your submission session.
+After submitting your response, JobPilot will automatically resume execution and complete your application workflow.
 `;
 
         await this.deliver({ to: input.to, subject, text, html });

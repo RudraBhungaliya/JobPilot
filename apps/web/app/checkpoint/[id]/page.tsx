@@ -23,9 +23,7 @@ import {
   Send,
   HelpCircle,
   Clock,
-  ChevronRight,
 } from "lucide-react";
-import { INITIAL_APPLICATIONS } from "@/lib/mock-data";
 
 export default function CheckpointPage() {
   const params = useParams();
@@ -33,9 +31,12 @@ export default function CheckpointPage() {
   const applicationId = String(params?.id || "");
 
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [appData, setAppData] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
 
   // Form states for intervention resolution
   const [captchaVerified, setCaptchaVerified] = useState(true);
@@ -44,18 +45,35 @@ export default function CheckpointPage() {
   const [approvedSubmit, setApprovedSubmit] = useState(true);
 
   useEffect(() => {
-    async function loadApplication() {
+    async function loadData() {
       setLoading(true);
-      try {
-        // 1. Try fetching from live backend
-        const res = await fetch(`/api/v1/applications/${applicationId}`, {
-          headers: { Accept: "application/json" },
-        }).catch(() => null);
+      setNotFound(false);
+      setErrorMessage(null);
 
-        if (res && res.ok) {
-          const json = await res.json();
-          if (json?.data || json?.application) {
-            const app = json.data || json.application;
+      try {
+        // Fetch application and candidate profile in parallel from real PostgreSQL backend
+        const [appRes, profRes] = await Promise.all([
+          fetch(`/api/v1/applications/${applicationId}`, {
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          }).catch(() => null),
+          fetch(`/api/v1/profile`, {
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          }).catch(() => null),
+        ]);
+
+        if (profRes && profRes.ok) {
+          const profJson = await profRes.json();
+          if (profJson?.data) {
+            setProfile(profJson.data);
+          }
+        }
+
+        if (appRes && appRes.ok) {
+          const json = await appRes.json();
+          const app = json.data || json.application;
+          if (app) {
             setAppData(app);
             initAnswers(app);
             setLoading(false);
@@ -63,42 +81,11 @@ export default function CheckpointPage() {
           }
         }
 
-        // 2. Fallback to mock applications or synthesis
-        const found = INITIAL_APPLICATIONS.find((a) => a.id === applicationId);
-        if (found) {
-          setAppData(found);
-          initAnswers(found);
-        } else {
-          // Synthetic fallback for any arbitrary ID
-          const synthetic = {
-            id: applicationId,
-            jobTitle: "Software Development Engineer - Platform & Distributed Systems",
-            company: { name: "Razorpay", tier: "S" },
-            companyName: "Razorpay",
-            location: "Bengaluru, Karnataka, India",
-            atsProvider: "Greenhouse",
-            jobUrl: "https://job-boards.greenhouse.io/razorpaysoftwareprivatelimited/jobs/4721861005",
-            status: "WAITING_FOR_USER",
-            failureReason: "Security Challenge / Cloudflare Turnstile detected on application portal. Human confirmation required.",
-            matchScore: 95,
-            questions: [
-              {
-                id: "q-1",
-                label: "Why are you interested in joining our team?",
-                aiProposedValue: "I am passionate about high-scale distributed systems and building resilient merchant payment rails. My experience in Go, TypeScript, and microservices aligns directly with your mission.",
-              },
-              {
-                id: "q-2",
-                label: "What is your earliest joining date or notice period?",
-                aiProposedValue: "Immediately / 15 days notice",
-              },
-            ],
-          };
-          setAppData(synthetic);
-          initAnswers(synthetic);
-        }
-      } catch (err) {
+        setNotFound(true);
+      } catch (err: any) {
         console.error("Error loading checkpoint:", err);
+        setErrorMessage(err.message || "Failed to load checkpoint data");
+        setNotFound(true);
       } finally {
         setLoading(false);
       }
@@ -108,19 +95,25 @@ export default function CheckpointPage() {
       const initial: Record<string, string> = {};
       if (app.questions && Array.isArray(app.questions)) {
         for (const q of app.questions) {
-          initial[q.id || q.field || q.label] = q.aiProposedValue || "";
+          const key = q.id || q.field || q.selector || q.label;
+          initial[key] = q.userEditedValue || q.aiProposedValue || "";
+        }
+      } else if (app.humanActions?.[0]?.requiredFields && Array.isArray(app.humanActions[0].requiredFields)) {
+        for (const f of app.humanActions[0].requiredFields) {
+          initial[f] = "";
         }
       }
       setAnswers(initial);
     }
 
     if (applicationId) {
-      loadApplication();
+      loadData();
     }
   }, [applicationId]);
 
   const handleResolveAndResume = async () => {
     setSubmitting(true);
+    setErrorMessage(null);
     try {
       const payload = {
         answers: {
@@ -132,7 +125,7 @@ export default function CheckpointPage() {
         },
         metadata: {
           checkpoint: "RESOLVED",
-          source: "CHECKPOINT_UI",
+          source: "CHECKPOINT_PAGE",
         },
       };
 
@@ -140,16 +133,22 @@ export default function CheckpointPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      }).catch(() => null);
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || `Failed to resolve checkpoint (status ${res.status})`);
+      }
 
       setSuccess(true);
 
-      // Give visual celebration feedback then return to pipeline
+      // Return user to pipeline tracking tab after clearing checkpoint
       setTimeout(() => {
         router.push(`/?tab=pipeline&checkpointResolved=${encodeURIComponent(applicationId)}`);
       }, 1500);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to resolve checkpoint:", err);
+      setErrorMessage(err.message || "Error resuming automation.");
       setSubmitting(false);
     }
   };
@@ -160,20 +159,74 @@ export default function CheckpointPage() {
         <RefreshCw className="w-8 h-8 text-amber-400 animate-spin" />
         <div className="text-center space-y-1">
           <h2 className="text-base font-bold text-white">Loading Application Checkpoint...</h2>
-          <p className="text-xs text-slate-400">Retrieving half-filled form state and Playwright session</p>
+          <p className="text-xs text-slate-400 font-mono">Retrieving active session for #{applicationId.slice(0, 12)}</p>
         </div>
       </div>
     );
   }
 
-  const company = appData?.company?.name || appData?.companyName || "Employer";
-  const jobTitle = appData?.jobTitle || appData?.title || "Job Application";
-  const portalUrl = appData?.checkpointUrl || appData?.jobUrl || appData?.canonicalUrl || appData?.url;
-  const reason = appData?.failureReason || appData?.reason || "Human confirmation required before final submission.";
+  if (notFound || !appData) {
+    return (
+      <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-6 space-y-5">
+        <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-xl">
+          <AlertTriangle className="w-7 h-7" />
+        </div>
+        <div className="text-center space-y-2 max-w-md">
+          <h1 className="text-lg font-bold text-white">Application Checkpoint Not Found</h1>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Application <code className="font-mono text-amber-300">#{applicationId}</code> was not found in the active database.
+            It may have already been resolved, submitted, or cancelled.
+          </p>
+          {errorMessage && (
+            <p className="text-xs text-rose-400 font-mono mt-2 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+              {errorMessage}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-3 pt-2">
+          <Link
+            href="/?tab=interventions"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Go to Interventions Hub</span>
+          </Link>
+          <Link
+            href="/?tab=dashboard"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] transition"
+          >
+            <span>Dashboard</span>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const company = appData.company?.name || appData.companyName || "Employer";
+  const jobTitle = appData.jobTitle || appData.title || "Job Application";
+  const openingPageUrl = appData.jobUrl || appData.checkpointUrl || appData.canonicalUrl || appData.url;
+  const reason = appData.failureReason || appData.reason || "Human confirmation required before final submission.";
 
   const isCaptcha = /captcha|security|cloudflare|turnstile|recaptcha/i.test(reason);
   const is2fa = /2fa|otp|passcode|code|sms/i.test(reason);
-  const questionsList = appData?.questions || [];
+  const questionsList = appData.questions && appData.questions.length > 0
+    ? appData.questions
+    : (appData.humanActions?.[0]?.requiredFields || []).map((f: string) => ({
+        id: f,
+        label: f,
+        field: f,
+        aiProposedValue: "",
+      }));
+
+  const candidateName = profile?.firstName
+    ? `${profile.firstName} ${profile.lastName || ""}`.trim()
+    : "Candidate";
+  const candidateEmail = profile?.email || "candidate@jobpilot.ai";
+  const candidatePhone = profile?.phone || "Pre-filled from profile";
+  const candidateLocation = profile?.city
+    ? `${profile.city}${profile.state ? `, ${profile.state}` : ""}${profile.country ? `, ${profile.country}` : ""}`
+    : appData.location || "Bengaluru, India";
+  const resumeTitle = appData.resumeVersionUsed || (profile?.skills?.length ? `${profile.skills.length} Extracted Skills Attached` : "Tailored ATS Resume Attached (PDF)");
 
   return (
     <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col">
@@ -182,7 +235,7 @@ export default function CheckpointPage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
-              href="/?tab=reviews"
+              href="/?tab=interventions"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -198,15 +251,15 @@ export default function CheckpointPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            {portalUrl && (
+            {openingPageUrl && (
               <a
-                href={portalUrl}
+                href={openingPageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] transition"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 transition shadow-sm"
               >
-                <ExternalLink className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Open Live Portal Tab</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Official Opening Page ↗</span>
               </a>
             )}
           </div>
@@ -242,7 +295,7 @@ export default function CheckpointPage() {
           </div>
         </div>
 
-        {/* 2-Column Split: Left = Half-Filled Form State; Right = Checkpoint Resolution Gate */}
+        {/* 2-Column Split: Left = Pre-Filled Form State; Right = Checkpoint Resolution Gate */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column (5 cols): Half-Filled Application State */}
           <div className="lg:col-span-5 space-y-5">
@@ -254,12 +307,12 @@ export default function CheckpointPage() {
                   <h2 className="text-sm font-bold text-white">Autofilled by Playwright Agent</h2>
                 </div>
                 <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Ready to Submit
+                  Data Preserved
                 </span>
               </div>
 
               <p className="text-xs text-slate-400">
-                The autonomous browser agent navigated to {company}&apos;s portal and populated all standard candidate fields from your profile.
+                The autonomous browser agent navigated to {company}&apos;s portal and populated standard candidate fields from your profile.
               </p>
 
               <div className="space-y-2.5 text-xs">
@@ -268,7 +321,7 @@ export default function CheckpointPage() {
                     <User className="w-3.5 h-3.5 text-slate-400" />
                     <span>Candidate Name</span>
                   </div>
-                  <span className="font-semibold text-white">Rudra Bhungaliya</span>
+                  <span className="font-semibold text-white">{candidateName}</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
@@ -276,7 +329,7 @@ export default function CheckpointPage() {
                     <Mail className="w-3.5 h-3.5 text-slate-400" />
                     <span>Contact Email</span>
                   </div>
-                  <span className="font-semibold text-white">rudra.bhungaliya@gmail.com</span>
+                  <span className="font-semibold text-white">{candidateEmail}</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
@@ -284,7 +337,7 @@ export default function CheckpointPage() {
                     <Phone className="w-3.5 h-3.5 text-slate-400" />
                     <span>Phone Number</span>
                   </div>
-                  <span className="font-semibold text-white">+91 98765 43210</span>
+                  <span className="font-semibold text-white">{candidatePhone}</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
@@ -292,53 +345,70 @@ export default function CheckpointPage() {
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
                     <span>Location</span>
                   </div>
-                  <span className="font-semibold text-white">Bengaluru, Karnataka, India</span>
+                  <span className="font-semibold text-white">{candidateLocation}</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
                   <div className="flex items-center gap-2.5 text-emerald-300">
                     <FileText className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Tailored Resume (PDF)</span>
+                    <span>Tailored Resume</span>
                   </div>
-                  <span className="font-mono text-[11px] font-bold text-emerald-300">Attached (98 KB)</span>
+                  <span className="font-mono text-[11px] font-bold text-emerald-300">{resumeTitle}</span>
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                  <div className="flex items-center gap-2.5 text-slate-300">
-                    <Globe className="w-3.5 h-3.5 text-blue-400" />
-                    <span>LinkedIn Profile</span>
+                {profile?.linkedin && (
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                    <div className="flex items-center gap-2.5 text-slate-300">
+                      <Globe className="w-3.5 h-3.5 text-blue-400" />
+                      <span>LinkedIn Profile</span>
+                    </div>
+                    <span className="font-semibold text-blue-300 truncate max-w-[180px]">{profile.linkedin}</span>
                   </div>
-                  <span className="font-semibold text-blue-300 truncate max-w-[180px]">linkedin.com/in/rudra</span>
-                </div>
+                )}
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                  <div className="flex items-center gap-2.5 text-slate-300">
-                    <Code2 className="w-3.5 h-3.5 text-slate-300" />
-                    <span>GitHub / Portfolio</span>
+                {profile?.github && (
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                    <div className="flex items-center gap-2.5 text-slate-300">
+                      <Code2 className="w-3.5 h-3.5 text-slate-300" />
+                      <span>GitHub</span>
+                    </div>
+                    <span className="font-semibold text-slate-200 truncate max-w-[180px]">{profile.github}</span>
                   </div>
-                  <span className="font-semibold text-slate-200 truncate max-w-[180px]">github.com/RudraBhungaliya</span>
-                </div>
+                )}
               </div>
             </div>
 
             {/* Execution Trace Timeline */}
             <div className="rounded-2xl border border-white/[0.08] bg-[#0c0f18] p-5 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Agent Session Timeline
+                Agent Session Logs
               </h3>
               <div className="space-y-3 text-xs">
-                <div className="flex items-start gap-2.5 text-slate-300">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-white">Target Opening Located:</span> {company} requisition
-                  </div>
-                </div>
-                <div className="flex items-start gap-2.5 text-slate-300">
-                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-white">Browser Form Populated:</span> 7 fields mapped cleanly
-                  </div>
-                </div>
+                {appData.telemetryLogs && appData.telemetryLogs.length > 0 ? (
+                  appData.telemetryLogs.slice(0, 5).map((log: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2.5 text-slate-300">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-white">{log.step}:</span> {log.detail}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <>
+                    <div className="flex items-start gap-2.5 text-slate-300">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-white">Target Opening Located:</span> {company} career portal
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2.5 text-slate-300">
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold text-white">Browser Form Populated:</span> Core applicant fields mapped
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div className="flex items-start gap-2.5 text-amber-300">
                   <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
@@ -364,6 +434,25 @@ export default function CheckpointPage() {
                 </div>
               </div>
 
+              {/* Direct Link to Job Opening */}
+              {openingPageUrl && (
+                <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3.5 flex items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="font-bold text-sky-200 block">Employer Job Opening Page</span>
+                    <span className="text-[11px] text-slate-300 truncate block max-w-sm">{openingPageUrl}</span>
+                  </div>
+                  <a
+                    href={openingPageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 shrink-0 transition"
+                  >
+                    <span>View Opening</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
+
               {/* 1. Security / CAPTCHA Challenge */}
               {isCaptcha && (
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
@@ -379,10 +468,10 @@ export default function CheckpointPage() {
                     </div>
                   </div>
 
-                  {portalUrl && (
+                  {openingPageUrl && (
                     <div className="pt-1">
                       <a
-                        href={portalUrl}
+                        href={openingPageUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition"
@@ -413,7 +502,7 @@ export default function CheckpointPage() {
                     <div>
                       <div className="text-xs font-bold text-blue-200">Two-Factor Authentication Passcode</div>
                       <p className="text-xs text-slate-300 mt-0.5">
-                        Enter the 6-digit verification code sent to your phone or email by the employer ATS.
+                        Enter the verification code sent to your phone or email by the employer ATS.
                       </p>
                     </div>
                   </div>
@@ -431,7 +520,7 @@ export default function CheckpointPage() {
                 </div>
               )}
 
-              {/* 3. Custom Employer Questions (with AI pre-fill) */}
+              {/* 3. Custom Employer Questions */}
               {questionsList.length > 0 && (
                 <div className="space-y-4">
                   <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
@@ -444,18 +533,18 @@ export default function CheckpointPage() {
                     return (
                       <div key={qKey} className="rounded-xl border border-white/[0.08] bg-[#121624] p-4 space-y-2">
                         <label className="block text-xs font-semibold text-slate-200">
-                          {q.label || "Screening Question"}
+                          {q.label || q.field || "Screening Question"}
                         </label>
                         <textarea
                           rows={3}
                           value={answers[qKey] ?? q.aiProposedValue ?? ""}
                           onChange={(e) => setAnswers({ ...answers, [qKey]: e.target.value })}
                           className="w-full rounded-xl bg-black/40 border border-white/[0.1] p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 leading-relaxed"
-                          placeholder="Your answer..."
+                          placeholder="Provide answer for this requirement..."
                         />
                         <div className="flex items-center gap-1.5 text-[11px] text-amber-300/80">
                           <Sparkles className="w-3 h-3" />
-                          <span>AI pre-filled based on your profile & skills. You can edit directly.</span>
+                          <span>Submitted directly to Playwright pipeline upon resumption.</span>
                         </div>
                       </div>
                     );
@@ -476,6 +565,12 @@ export default function CheckpointPage() {
                   Authorize JobPilot to resume and finalize application submission to <strong className="text-white">{company}</strong>.
                 </label>
               </div>
+
+              {errorMessage && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300">
+                  {errorMessage}
+                </div>
+              )}
 
               {/* Submit / Resume Button */}
               <div className="pt-2">
@@ -501,7 +596,7 @@ export default function CheckpointPage() {
                   ) : (
                     <>
                       <Send className="w-4 h-4" />
-                      <span>Submit & Continue Pipeline</span>
+                      <span>Submit Details & Continue Pipeline</span>
                     </>
                   )}
                 </button>

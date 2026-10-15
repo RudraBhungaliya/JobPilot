@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    const count = typeof data?.count === "number" ? data.count : (typeof data?.unreadCount === "number" ? data.unreadCount : 0);
+    return NextResponse.json({ success: true, count, unreadCount: count });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, unreadCount: 0, message: err.message || "Failed to fetch unread count" },

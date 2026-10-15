@@ -170,7 +170,7 @@ export class ApplicationStateMachine {
             if (candidateEmail) {
                 try {
                     const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-                    const actionUrl = `${frontendUrl}/?tab=pipeline&checkpointId=${application.id}`;
+                    const actionUrl = `${frontendUrl}/checkpoint/${application.id}`;
                     const prof = application.user.profile;
                     const alreadyFilledFields = [
                         { label: "Candidate Name", value: candidateName },
@@ -191,6 +191,7 @@ export class ApplicationStateMachine {
                         jobTitle: application.job.title,
                         companyName: application.job.company.name,
                         actionUrl,
+                        jobOpeningUrl: application.job.url,
                         reason: req.reason || "Employer ATS portal requested interactive CAPTCHA / 2FA / Custom Verification.",
                         verificationType: req.metadata?.verificationType || "Interactive Security Checkpoint",
                         jobLocation: application.job.location,

@@ -36,20 +36,7 @@ export function JobSearchLoopsView({
   onNavigateToDiscovery,
   onSelectLoop,
 }: JobSearchLoopsViewProps) {
-  const fallbackResumes: ResumeVersion[] = [
-    {
-      id: "primary-candidate-cv",
-      name: "Primary Candidate CV.pdf",
-      roleFocus: "Full Stack Software Engineer",
-      updatedAt: "Active",
-      fileSize: "184 KB",
-      isDefault: true,
-      topSkills: ["TypeScript", "React", "Next.js", "Node.js", "PostgreSQL"],
-      atsScore: 94,
-    },
-  ];
-
-  const activeResumes = resumes && resumes.length > 0 ? resumes : fallbackResumes;
+  const activeResumes = resumes || [];
   const activeProfile = {
     fullName: profile?.fullName || "Candidate",
     email: profile?.email || "candidate@jobpilot.ai",

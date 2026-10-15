@@ -15,7 +15,11 @@ export async function PATCH(request: NextRequest) {
       },
     });
 
-    const data = await res.json();
+    if (res.status === 204 || res.ok) {
+      return NextResponse.json({ success: true, message: "All notifications marked read" });
+    }
+
+    const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {
     return NextResponse.json(
