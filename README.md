@@ -4,6 +4,10 @@ JobPilot is a production-grade, end-to-end autonomous career automation platform
 
 Built around a modern TypeScript monorepo architecture, JobPilot integrates **Next.js 16**, **Express 5**, **PostgreSQL via Prisma ORM**, **LangGraph workflow state graphs**, **Playwright headless browser pools with anti-bot fingerprint masking**, and a **Human-in-the-Loop (HITL) interactive checkpoint engine**.
 
+<div align="center">
+  <img src="docs/architecture/jobpilot-architecture.svg" alt="JobPilot System Architecture" width="100%" style="border-radius: 12px; border: 1px solid #1e293b; box-shadow: 0 20px 40px rgba(0,0,0,0.8);" />
+</div>
+
 ---
 
 ## Table of Contents
@@ -80,59 +84,90 @@ Traditional job automation scripts rely on brittle web-scraping heuristics, subm
 
 JobPilot is organized as a monorepo with clean separation between the frontend presentation cockpit, the backend orchestration engine, and the shared database access layer.
 
+<div align="center">
+  <img src="docs/architecture/jobpilot-architecture.svg" alt="JobPilot System Architecture Diagram" width="100%" style="border-radius: 12px; border: 1px solid #1e293b; box-shadow: 0 20px 40px rgba(0,0,0,0.8);" />
+</div>
+
+<br/>
+
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': { 'darkMode': true, 'background': '#0a0d14', 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#38bdf8', 'lineColor': '#38bdf8', 'secondaryColor': '#0f172a', 'tertiaryColor': '#111827' }}}%%
 flowchart TD
-    subgraph ClientLayer["Frontend Cockpit (Next.js 16)"]
+    subgraph ClientLayer["🖥️ Frontend Cockpit (Next.js 16)"]
         UI["Web Dashboard (React 19 / Tailwind v4)"]
-        SSE_Client["SSE Stream Listener"]
+        SSE_Client["SSE Telemetry Listener"]
         HITL_Portal["Checkpoint Resolver (/checkpoint/:id)"]
     end
 
-    subgraph GatewayLayer["API & Security Gateway (Express 5)"]
+    subgraph GatewayLayer["🛡️ API Gateway & Security (Express 5)"]
+        Ingress["Ingress Router (Port 8000)"]
         Auth["JWT / Checkpoint Auth Middleware"]
-        PinoLogger["Structured Logging (Pino)"]
-        CorsHelmet["CORS / Helmet / Compression"]
+        PinoLogger["Pino Structured Diagnostics"]
     end
 
-    subgraph EngineLayer["Core Orchestration Engine"]
-        StateMachine["Application State Machine (Audit Guard)"]
-        SubmitService["Application Submit Service"]
-        LoopEngine["Job Search Loop Engine (Cron)"]
-        CandidateService["Candidate Context Builder"]
-        AIEngine["Tailoring & ATS Evaluation (Gemini / OpenAI)"]
+    subgraph MonorepoCore["⚙️ Orchestration Engine (apps/server)"]
+        StateMachine["State Machine (Audit Guard & Invariants)"]
+        QueueWorker["Queue Worker (Pessimistic Row Locking)"]
+        RateLimiter["Bottleneck Rate Limiter (3/hr per Domain)"]
+        LoopEngine["Loop Scheduler (Cron Role Ingestion)"]
+        SSEBroadcaster["SSE Event Emitter (application.status)"]
     end
 
-    subgraph ExecutionLayer["Execution & Automation"]
-        QueueWorker["Application Queue Worker (Bottleneck Rate Limiter)"]
-        AdapterRegistry["Apply Adapter Registry"]
-        BrowserPool["Playwright Browser Manager (Stealth Chromium)"]
+    subgraph CloudSatellites["☁️ Database & Intelligence"]
+        Postgres[("PostgreSQL 16 (Prisma @prisma/pg)")]
+        AIEngine["Gemini & OpenAI LLM (Tailoring & ATS Scorecards)"]
     end
 
-    subgraph PersistenceLayer["Data & External Services"]
-        Prisma["Prisma ORM (@jobpilot/database)"]
-        Postgres[("PostgreSQL 14+ Database")]
-        ResendGateway["Email Gateway (Resend / SMTP)"]
-        LiveATS["External ATS Portals (Greenhouse / Ashby / Lever)"]
+    subgraph ExecutionLayer["🤖 Execution & Browser Pool (Playwright)"]
+        AdapterRegistry["ApplyAdapterRegistry (Direct REST / DOM)"]
+        BrowserPool["BrowserPool (Stealth Chromium Contexts)"]
+        DomAdapter["UniversalDomAdapter (Autofill & Uploads)"]
     end
 
-    UI -->|REST API / Credentials| GatewayLayer
-    SSE_Client <-->|GET /api/v1/events| GatewayLayer
-    HITL_Portal -->|Token-Scoped POST| GatewayLayer
+    subgraph ExternalTargets["🏢 Target Employer Systems"]
+        LiveATS["Employer ATS Portals (Greenhouse, Ashby, Lever, Workday)"]
+    end
 
-    GatewayLayer --> EngineLayer
-    EngineLayer --> Prisma
-    EngineLayer --> QueueWorker
-    EngineLayer --> AIEngine
+    subgraph NotificationLayer["✉️ Notification Gateway"]
+        EmailGateway["Resend & SMTP Email Service (Idempotent Alerts)"]
+    end
 
-    QueueWorker --> AdapterRegistry
+    UI -->|REST / Cookies| Ingress
+    Ingress --> Auth
+    Auth --> StateMachine
+    Auth --> QueueWorker
+    Auth --> LoopEngine
+
+    QueueWorker --> RateLimiter
+    RateLimiter -->|Paced Execution| AdapterRegistry
     AdapterRegistry -->|Direct REST Submission| LiveATS
-    AdapterRegistry -->|DOM Automation Fallback| BrowserPool
-    BrowserPool -->|Playwright Session| LiveATS
+    AdapterRegistry -->|Headless Fallback| BrowserPool
+    BrowserPool --> DomAdapter
+    DomAdapter -->|Autofill & File Chooser| LiveATS
 
-    StateMachine -->|Idempotent Alerts| ResendGateway
-    StateMachine -->|Transactional Updates| Prisma
-    Prisma --> Postgres
-    EngineLayer -->|application.status_changed| GatewayLayer
+    LiveATS -->|Official Receipt / Confirmation Code| StateMachine
+    LiveATS -.->|CAPTCHA / Interactive Challenge| BrowserPool
+    BrowserPool -.->|Trigger Intervention| StateMachine
+
+    StateMachine -->|Commit Status & Audit Logs| Postgres
+    StateMachine -->|Idempotent Confirmation Alert| EmailGateway
+    StateMachine -.->|Checkpoint Resolution Link| EmailGateway
+    EmailGateway -.->|Email Delivered| HITL_Portal
+
+    HITL_Portal -->|POST /resolve-checkpoint| Ingress
+    LoopEngine --> AIEngine
+    AIEngine --> Postgres
+
+    SSEBroadcaster -.->|application.status_changed| SSE_Client
+
+    classDef clientClass fill:#111827,stroke:#38bdf8,stroke-width:1.5px,color:#f8fafc;
+    classDef coreClass fill:#1e293b,stroke:#475569,stroke-width:1.5px,color:#f8fafc;
+    classDef targetClass fill:#0f172a,stroke:#10b981,stroke-width:1.5px,color:#34d399;
+    classDef alertClass fill:#78350f,stroke:#f59e0b,stroke-width:1.5px,color:#fbbf24;
+
+    class UI,SSE_Client clientClass;
+    class HITL_Portal alertClass;
+    class LiveATS targetClass;
 ```
 
 ### End-to-End Processing Stages
