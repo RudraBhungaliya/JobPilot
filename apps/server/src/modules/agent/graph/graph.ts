@@ -116,11 +116,6 @@ const workflow = new StateGraph(
     )
 
     .addEdge(
-        "evaluate",
-        "planner",
-    )
-
-    .addEdge(
         "rank",
         "planner",
     )

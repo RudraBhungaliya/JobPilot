@@ -102,11 +102,12 @@ export class UniversalDomAdapter implements DomAtsAdapter {
 
             // Handle file upload
             if (type === "file") {
-              if (input.resume?.fileUrl || input.resume?.path) {
+              if (input.resume?.fileUrl || input.resume?.path || input.resumeBuffer) {
                 try {
                   await resumeUploadTool.upload(page, {
-                    fileUrl: input.resume.fileUrl || input.resume.path,
-                    originalName: input.resume.originalName || "resume.pdf",
+                    fileUrl: input.resume?.fileUrl || input.resume?.path || "",
+                    originalName: input.resume?.originalName || "resume.pdf",
+                    buffer: input.resumeBuffer,
                   });
                   this.lastFillCount++;
                   stepFilledCount++;
@@ -122,6 +123,20 @@ export class UniversalDomAdapter implements DomAtsAdapter {
 
             const mapped = candidateMapper.resolve(name || id, labelText || name || id, profile);
             let value = mapped.value;
+
+            // Handle terms / consent / authorization defaults if unmapped
+            if (!value) {
+              const lowerLabel = (labelText || name || id).toLowerCase();
+              if (/terms|agree|consent|certif|confirm|privac|acknowledg/i.test(lowerLabel)) {
+                value = "yes";
+              } else if (/authoriz|legally|eligib|work in/i.test(lowerLabel)) {
+                value = "yes";
+              } else if (/sponsor|visa/i.test(lowerLabel)) {
+                value = profile?.sponsorshipRequired ? "yes" : "no";
+              } else if (/18 or older|age 18|legal age/i.test(lowerLabel)) {
+                value = "yes";
+              }
+            }
 
             // Fallback to grounded AI answer
             if (!value && profile) {
@@ -147,16 +162,21 @@ export class UniversalDomAdapter implements DomAtsAdapter {
               stepFilledCount++;
             } else if (type === "checkbox") {
               const lower = value.toLowerCase();
-              const shouldCheck = lower === "true" || lower === "yes" || lower === "1" || lower === "agree";
+              const shouldCheck = lower === "true" || lower === "yes" || lower === "1" || lower === "agree" || lower === "on";
               if (shouldCheck) {
                 await el.check().catch(() => el.click().catch(() => {}));
                 this.lastFillCount++;
                 stepFilledCount++;
               }
             } else if (type === "radio") {
-              await el.check().catch(() => el.click().catch(() => {}));
-              this.lastFillCount++;
-              stepFilledCount++;
+              const lower = value.toLowerCase();
+              const radioVal = (await el.getAttribute("value") || "").toLowerCase();
+              const shouldCheck = radioVal === lower || (lower === "yes" && (radioVal === "1" || radioVal === "true")) || (lower === "no" && (radioVal === "0" || radioVal === "false")) || !radioVal;
+              if (shouldCheck) {
+                await el.check().catch(() => el.click().catch(() => {}));
+                this.lastFillCount++;
+                stepFilledCount++;
+              }
             } else {
               await el.fill(value).catch(() => el.type(value).catch(() => {}));
               this.lastFillCount++;
@@ -167,10 +187,10 @@ export class UniversalDomAdapter implements DomAtsAdapter {
           }
         }
 
-        // Check if there is a 'Next' or 'Continue' wizard button
+        // Check for 'Next' or 'Continue' wizard button
         const nextBtn = page.locator(
           'button:has-text("Next"), button:has-text("Continue"), ' +
-          'button:has-text("Save & Continue"), input[value="Next" i], input[value="Continue" i]'
+          'button:has-text("Save & Continue"), button:has-text("Next Step"), input[value="Next" i], input[value="Continue" i]'
         ).first();
 
         const hasNext = await nextBtn.isVisible().catch(() => false);
@@ -183,7 +203,8 @@ export class UniversalDomAdapter implements DomAtsAdapter {
         // Final submission step
         const submitBtn = page.locator(
           'button:has-text("Submit Application"), button:has-text("Submit"), ' +
-          'button:has-text("Apply"), input[type="submit"], button[type="submit"]'
+          'button:has-text("Apply"), button:has-text("Apply Now"), button:has-text("Send Application"), ' +
+          'input[type="submit"], button[type="submit"], [data-automation-id="submit-button"], [data-qa="btn-submit"]'
         ).first();
 
         if (await submitBtn.isVisible().catch(() => false)) {
@@ -197,9 +218,16 @@ export class UniversalDomAdapter implements DomAtsAdapter {
             reason: "external verification check",
           }));
 
+          let confirmationId: string | undefined = undefined;
+          if (verification.verified) {
+            const bodyText = await page.locator("body").innerText().catch(() => "");
+            const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
+            confirmationId = confirmationMatch ? confirmationMatch[1] : ((verification as any).confirmationCode || (verification as any).confirmationId || undefined);
+          }
+
           return {
             success: verification.verified,
-            confirmationId: (verification as any).confirmationCode || (verification as any).confirmationId || `univ-${Date.now().toString(36)}`,
+            confirmationId,
             requiresBrowserFallback: !verification.verified,
             reason: verification.verified ? undefined : verification.reason,
           };
@@ -209,9 +237,9 @@ export class UniversalDomAdapter implements DomAtsAdapter {
       }
 
       return {
-        success: this.lastFillCount > 0,
-        confirmationId: `univ-${Date.now().toString(36)}`,
-        requiresBrowserFallback: false,
+        success: false,
+        requiresBrowserFallback: true,
+        reason: `Universal DOM apply mapped ${this.lastFillCount} field(s); pending verified employer submission confirmation.`,
       };
     } catch (err: any) {
       const msg = err instanceof Error ? err.message : String(err);

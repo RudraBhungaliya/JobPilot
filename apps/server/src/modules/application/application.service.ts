@@ -125,6 +125,7 @@ class ApplicationService {
             questions,
             tailoringNotes: raw.tailoringNotes || undefined,
             telemetryLogs: logs,
+            profile: raw.user?.profile || raw.profile || undefined,
         };
     }
 

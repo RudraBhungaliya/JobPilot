@@ -12,10 +12,20 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const backendUrl = getBackendApiUrl();
 
-    const backendRes = await fetch(`${backendUrl}/api/v1/applications/${id}/resolve-checkpoint`, {
+    const url = new URL(req.url);
+    const checkpointToken = req.headers.get("x-checkpoint-token") || url.searchParams.get("token") || body?.token || "";
+
+    const backendEndpoint = checkpointToken
+      ? `${backendUrl}/api/v1/applications/${id}/resolve-checkpoint?token=${encodeURIComponent(checkpointToken)}`
+      : `${backendUrl}/api/v1/applications/${id}/resolve-checkpoint`;
+
+    const backendRes = await fetch(backendEndpoint, {
       method: "POST",
-      headers: getBackendHeaders(req, { "Content-Type": "application/json" }),
-      body: JSON.stringify(body),
+      headers: getBackendHeaders(req, {
+        "Content-Type": "application/json",
+        ...(checkpointToken ? { "X-Checkpoint-Token": checkpointToken } : {}),
+      }),
+      body: JSON.stringify({ ...body, ...(checkpointToken ? { token: checkpointToken } : {}) }),
     });
 
     const json = await backendRes.json().catch(() => ({}));

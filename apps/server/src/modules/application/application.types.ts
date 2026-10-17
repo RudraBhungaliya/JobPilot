@@ -93,6 +93,7 @@ export interface BackendApplicationDTO {
     questions: QuestionAnswerDTO[];
     tailoringNotes?: TailoringNotesDTO;
     telemetryLogs: TelemetryLogDTO[];
+    profile?: any;
 }
 
 export interface JobApplication {

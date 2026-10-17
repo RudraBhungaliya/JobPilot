@@ -152,7 +152,9 @@ class ApplyNode {
 
             // DISPATCH EMAIL ALERT TO USER
             const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-            const interventionUrl = `${frontendUrl}/checkpoint/${application.id}`;
+            const { generateCheckpointToken } = await import("../../auth/auth.tokens.js");
+            const token1 = generateCheckpointToken(application.id, state.userId);
+            const interventionUrl = `${frontendUrl}/checkpoint/${application.id}?token=${token1}`;
             await emailService.sendHumanInterventionAlert({
               to: candidateEmail,
               candidateName,
@@ -238,7 +240,9 @@ class ApplyNode {
 
             // DISPATCH EMAIL ALERT TO USER
             const frontendUrl2 = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-            const interventionUrl2 = `${frontendUrl2}/checkpoint/${application.id}`;
+            const { generateCheckpointToken: genToken2 } = await import("../../auth/auth.tokens.js");
+            const token2 = genToken2(application.id, state.userId);
+            const interventionUrl2 = `${frontendUrl2}/checkpoint/${application.id}?token=${token2}`;
             await emailService.sendHumanInterventionAlert({
               to: candidateEmail,
               candidateName,
@@ -306,6 +310,30 @@ class ApplyNode {
               applicationId: application.id,
               jobId: job.id,
               metadata: { type: "SUBMISSION_APPROVAL", filledFieldsCount: filledCount },
+            });
+
+            // DISPATCH EMAIL ALERT TO USER
+            const frontendUrl3 = process.env.WEB_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+            const { generateCheckpointToken: genToken3 } = await import("../../auth/auth.tokens.js");
+            const token3 = genToken3(application.id, state.userId);
+            const interventionUrl3 = `${frontendUrl3}/checkpoint/${application.id}?token=${token3}`;
+            await emailService.sendHumanInterventionAlert({
+              to: candidateEmail,
+              candidateName,
+              jobTitle: job.title,
+              companyName: job.company,
+              actionUrl: interventionUrl3,
+              jobOpeningUrl: job.url,
+              reason: `Final submission review: ${filledCount} field(s) were pre-filled with your profile. Please review and authorize submission.`,
+              verificationType: "Pre-Submission Approval",
+              applicationId: application.id,
+              alreadyFilledFields: [
+                { label: "Candidate Name", value: candidateName },
+                { label: "Contact Email", value: candidateEmail },
+                { label: "Job Location", value: job.location || "Bengaluru, India" },
+                { label: "Tailored Resume", value: "Verified & Attached (PDF)" },
+              ],
+              remainingFields: ["Final Approval & Submission Authorization"],
             });
 
             applications.push(waitingApp);

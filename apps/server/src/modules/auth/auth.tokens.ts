@@ -41,3 +41,32 @@ export function verifyAccessToken(token: string): JwtPayload {
 export function verifyRefreshToken(token: string): JwtPayload {
     return jwt.verify(token, getRefreshTokenSecret()) as JwtPayload;
 }
+
+export interface CheckpointTokenPayload {
+    applicationId: string;
+    userId: string;
+    purpose: "checkpoint_access";
+}
+
+export function generateCheckpointToken(applicationId: string, userId: string): string {
+    const payload: CheckpointTokenPayload = {
+        applicationId,
+        userId,
+        purpose: "checkpoint_access",
+    };
+    return jwt.sign(payload, getAccessTokenSecret(), {
+        expiresIn: "24h",
+    });
+}
+
+export function verifyCheckpointToken(token: string): CheckpointTokenPayload {
+    const payload = jwt.verify(token, getAccessTokenSecret()) as any;
+    if (payload.purpose !== "checkpoint_access" || !payload.applicationId || !payload.userId) {
+        throw new Error("Invalid checkpoint access token payload.");
+    }
+    return {
+        applicationId: payload.applicationId,
+        userId: payload.userId,
+        purpose: "checkpoint_access",
+    };
+}

@@ -91,6 +91,42 @@ export class LoopController {
     }
   };
 
+  pause = async (req: Request, res: Response) => {
+    try {
+      const userId = await this.getUserId(req);
+      const loopId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const loop = await loopService.updateLoop(userId, loopId, { status: "PAUSED" });
+      return res.json({
+        success: true,
+        data: loop,
+        message: `Loop "${loop.name}" has been paused.`,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Failed to pause loop.",
+      });
+    }
+  };
+
+  resume = async (req: Request, res: Response) => {
+    try {
+      const userId = await this.getUserId(req);
+      const loopId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+      const loop = await loopService.updateLoop(userId, loopId, { status: "ACTIVE" });
+      return res.json({
+        success: true,
+        data: loop,
+        message: `Loop "${loop.name}" has been resumed.`,
+      });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Failed to resume loop.",
+      });
+    }
+  };
+
   run = async (req: Request, res: Response) => {
     try {
       const userId = await this.getUserId(req);

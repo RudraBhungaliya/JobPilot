@@ -8,13 +8,21 @@ export async function GET(
 ) {
   const { id } = await params;
   const authHeader = request.headers.get("authorization") || "";
+  const checkpointToken = request.headers.get("x-checkpoint-token") || "";
+  const url = new URL(request.url);
+  const token = checkpointToken || url.searchParams.get("token") || "";
 
   try {
-    const res = await fetch(`${BACKEND_API_URL}/api/v1/applications/${id}`, {
+    const backendEndpoint = token 
+      ? `${BACKEND_API_URL}/api/v1/applications/${id}?token=${encodeURIComponent(token)}`
+      : `${BACKEND_API_URL}/api/v1/applications/${id}`;
+
+    const res = await fetch(backendEndpoint, {
       method: "GET",
       headers: {
         "Accept": "application/json",
         ...(authHeader ? { "Authorization": authHeader } : {}),
+        ...(token ? { "X-Checkpoint-Token": token } : {}),
       },
       cache: "no-store",
     });

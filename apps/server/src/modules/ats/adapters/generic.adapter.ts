@@ -79,8 +79,13 @@ export class GenericATSAdapter extends BaseATSAdapter {
                 } else if (/github/i.test(label)) {
                     await locator.fill(candidateData.github);
                 } else if (field.type === "checkbox" || field.type === "radio") {
-                    // Consent and authorization require an explicit saved answer or user action.
-                    continue;
+                    if (/terms|agree|consent|certif|confirm|privac|acknowledg/i.test(label) || /authoriz|legally|eligib|work in/i.test(label) || /18 or older|age 18/i.test(label)) {
+                        await locator.check().catch(() => locator.click().catch(() => {}));
+                    } else if (/sponsor|visa/i.test(label)) {
+                        if (profile.sponsorshipRequired) {
+                            await locator.check().catch(() => locator.click().catch(() => {}));
+                        }
+                    }
                 } else if (field.type === "textarea" || field.type === "text") {
                     const answer = tailoredAnswers[field.label] || tailoredAnswers[field.name];
                     if (answer) {
@@ -94,15 +99,16 @@ export class GenericATSAdapter extends BaseATSAdapter {
 
         // Upload resume if present
         try {
-            const fileInput = page.locator('input[type="file"]').first();
-            if (await fileInput.count() > 0 && context.resumeFilePath) {
-                await fileInput.setInputFiles(context.resumeFilePath);
-            }
+            const { default: resumeUploadTool } = await import("../../agent/tools/resume-upload.tool.js");
+            await resumeUploadTool.upload(page, {
+                fileUrl: context.resumeFilePath || "",
+                originalName: "resume.pdf",
+            });
         } catch {
             // Ignore
         }
 
-        const submitBtn = page.locator('button[type="submit"], input[type="submit"], button:has-text("Submit"), button:has-text("Apply")').first();
+        const submitBtn = page.locator('button:has-text("Submit Application"), button:has-text("Submit"), button:has-text("Apply Now"), button:has-text("Apply"), input[type="submit"], button[type="submit"], [data-automation-id="submit-button"]').first();
         if (!(await submitBtn.isVisible({ timeout: 3000 }))) {
             return { success: false, status: "FAILED", failureReason: "No supported submit control was found." };
         }

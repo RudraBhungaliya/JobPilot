@@ -99,6 +99,18 @@ class ResumeParserService {
                 }
             }
 
+            if (ext === ".docx" || ext === ".doc") {
+                try {
+                    const mammoth = await import("mammoth");
+                    const result = await mammoth.extractRawText({ buffer: fileBuffer });
+                    if (result && result.value && result.value.trim().length > 10) {
+                        return result.value.trim();
+                    }
+                } catch (docErr) {
+                    console.warn("[ResumeParser] DOCX extraction notice:", docErr);
+                }
+            }
+
             const utfText = fileBuffer.toString("utf-8");
             return utfText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
         } catch (err) {

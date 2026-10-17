@@ -169,13 +169,13 @@ class JobController {
                     department: (job as any).department || "Engineering",
                     category: (job as any).category || (job.company.match(/Google|Microsoft|Amazon|Uber|Atlassian/i) ? "TIER_1_MNC" : "TIER_2_UNICORN"),
                     categoryLabel: (job as any).categoryLabel || (job.company.match(/Google|Microsoft|Amazon|Uber|Atlassian/i) ? "Tier 1 MNC" : "Semi-MNC / Unicorn"),
-                    salaryINR: (job as any).salaryINR || "₹45,000/mo stipend • ₹22 - 32 LPA",
-                    matchScore: evaluation.matchScore || (job as any).matchScore || 88,
-                    matchedSkills: evaluation.matchedSkills,
-                    missingSkills: evaluation.missingSkills,
+                    salaryINR: (job as any).salaryINR || undefined,
+                    salaryRange: (job as any).salaryRange || undefined,
+                    matchScore: evaluation.matchScore ?? ((job as any).matchScore ?? null),
+                    matchedSkills: evaluation.matchedSkills || [],
+                    missingSkills: evaluation.missingSkills || [],
                     evaluationStatus: evaluation.status,
                     evaluationReason: evaluation.reason,
-                    salaryRange: undefined,
                 };
             }));
 
