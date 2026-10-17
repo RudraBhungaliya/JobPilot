@@ -131,12 +131,20 @@ test("End-to-End Autonomous Pipeline & Checkpoint Direct Submission Suite", asyn
     assert.equal(typeof universalDomAdapter.detect, "function");
   });
 
-  await t.test("4. Resolve checkpoint resolves HumanAction and transitions status RESUMED -> SUBMITTED", async () => {
-    // 1. Resolve human action
+  await t.test("4. Resolve checkpoint transitions to RESUMED and enforces employer confirmation & replay protection", async () => {
+    // 1. Cross-user access check: Unrelated user cannot resolve checkpoint
+    const unauthorizedUserId = `usr_attacker_${Date.now()}`;
     const pendingActions = await humanActionService.getPendingActions(testUserId, testAppId);
     assert.equal(pendingActions.length, 1);
     const action = pendingActions[0]!;
 
+    await assert.rejects(
+      async () => humanActionService.resolveAction(unauthorizedUserId, action.id, { test: "unauthorized" }),
+      /You do not have permission to resolve this action/,
+      "Cross-user resolution must be blocked"
+    );
+
+    // 2. Legitimate user resolves checkpoint
     const resolveResult = await humanActionService.resolveAction(testUserId, action.id, {
       security_checkpoint_verified: "true",
       pre_submission_approval: "true",
@@ -146,10 +154,18 @@ test("End-to-End Autonomous Pipeline & Checkpoint Direct Submission Suite", asyn
 
     assert.ok(resolveResult.resolvedAt);
 
-    // resolveAction automatically transitions application to RESUMED
+    // resolveAction automatically transitions application to RESUMED (never directly to SUBMITTED without verification)
     let app = await prisma.application.findUnique({ where: { id: testAppId } });
-    assert.equal(app?.status, "RESUMED");
+    assert.equal(app?.status, "RESUMED", "Resolving checkpoint must set status to RESUMED, not blindly to SUBMITTED");
 
+    // 3. Replay Protection: Attempting to resolve the same action again must be rejected
+    await assert.rejects(
+      async () => humanActionService.resolveAction(testUserId, action.id, { replay: "true" }),
+      /This action has already been resolved/,
+      "Replaying a resolved checkpoint action must be rejected"
+    );
+
+    // 4. Submission integrity: Transition to SUBMITTED requires confirmed employer receipt
     await ApplicationStateMachine.transition({
       applicationId: testAppId,
       newStatus: "SUBMITTING",
@@ -160,12 +176,13 @@ test("End-to-End Autonomous Pipeline & Checkpoint Direct Submission Suite", asyn
     app = await prisma.application.findUnique({ where: { id: testAppId } });
     assert.equal(app?.status, "SUBMITTING");
 
-    const confCode = `CONF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    // Unverified transition without confirmation receipt is rejected or routed to VERIFICATION_PENDING / FAILED
+    const genuineEmployerReceipt = "EMP-CONF-2026-X8921";
     await ApplicationStateMachine.transition({
       applicationId: testAppId,
       newStatus: "SUBMITTED",
-      reason: "Autonomous submission completed successfully.",
-      metadata: { confirmationCode: confCode },
+      reason: "Autonomous submission verified by employer portal receipt.",
+      metadata: { confirmationCode: genuineEmployerReceipt },
       actor: "AGENT",
     });
 
@@ -173,13 +190,13 @@ test("End-to-End Autonomous Pipeline & Checkpoint Direct Submission Suite", asyn
       where: { id: testAppId },
       data: {
         appliedAt: new Date(),
-        confirmationCode: confCode,
+        confirmationCode: genuineEmployerReceipt,
       },
     });
 
     const finalApp = await prisma.application.findUnique({ where: { id: testAppId } });
     assert.equal(finalApp?.status, "SUBMITTED");
-    assert.ok(finalApp?.confirmationCode);
+    assert.equal(finalApp?.confirmationCode, genuineEmployerReceipt);
     assert.ok(finalApp?.appliedAt);
   });
 

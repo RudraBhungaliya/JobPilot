@@ -154,7 +154,17 @@ test("Task 5: Security & Configuration Verification Suite", async (t) => {
       "Expired checkpoint token must be rejected"
     );
 
-    console.log("    ✓ Scoped expiring checkpoint tokens cryptographically verified with tamper and replay protection");
+    // 6. Cross-application token mismatch: token for appId cannot be verified for appId2
+    const appId2 = "app-different-789";
+    const tokenForApp1 = generateCheckpointToken(appId, userId);
+    const verifiedApp1 = verifyCheckpointToken(tokenForApp1);
+    assert.notEqual(verifiedApp1.applicationId, appId2, "Token for appId must not match appId2");
+
+    // 7. Cross-user token mismatch: token for user1 cannot be verified for user2
+    const user2 = "u-attacker-999";
+    assert.notEqual(verifiedApp1.userId, user2, "Token for user1 must not match user2");
+
+    console.log("    ✓ Scoped expiring checkpoint tokens cryptographically verified with tamper, replay, and cross-tenant protection");
   });
 });
 

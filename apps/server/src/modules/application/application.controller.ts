@@ -56,7 +56,7 @@ class ApplicationController {
         }
 
         const token = (req.query?.token as string) || (req.headers["x-checkpoint-token"] as string);
-        let authorized = req.user?.id && req.user.id !== "usr_dev_candidate_default" && application.userId === req.user.id;
+        let authorized = req.user?.id && application.userId === req.user.id;
 
         if (!authorized && token) {
             try {
@@ -68,14 +68,12 @@ class ApplicationController {
             } catch {
                 // Token invalid
             }
-        } else if (!authorized && process.env.NODE_ENV !== "production") {
-            authorized = true;
         }
 
         if (!authorized) {
             return res.status(403).json({
                 success: false,
-                message: "Unauthorized: Valid session or scoped checkpoint token required.",
+                message: "Unauthorized: Valid session or valid scoped checkpoint token required.",
             });
         }
 
@@ -237,7 +235,7 @@ class ApplicationController {
             }
 
             const token = (req.query?.token as string) || (req.headers["x-checkpoint-token"] as string) || req.body?.token;
-            let authorized = req.user?.id && req.user.id !== "usr_dev_candidate_default" && existing.userId === req.user.id;
+            let authorized = req.user?.id && existing.userId === req.user.id;
 
             if (!authorized && token) {
                 try {
@@ -249,8 +247,6 @@ class ApplicationController {
                 } catch {
                     // Token invalid
                 }
-            } else if (!authorized && process.env.NODE_ENV !== "production") {
-                authorized = true;
             }
 
             if (!authorized) {
@@ -260,7 +256,31 @@ class ApplicationController {
                 });
             }
 
+            // Token Replay & Idempotency Guard:
+            // If application is already SUBMITTED or APPLIED, reject replay attempts with 409 Conflict
+            if (existing.status === "SUBMITTED" || existing.status === "APPLIED") {
+                return res.status(409).json({
+                    success: false,
+                    message: "Checkpoint replay rejected: Application has already been submitted to the employer.",
+                    status: existing.status,
+                    confirmationCode: existing.confirmationCode,
+                });
+            }
+
             const targetUserId = existing.userId;
+
+            // Check if there are any active pending human actions to resolve
+            const { default: humanActionService } = await import("../human-action/human-action.service.js");
+            const pendingActions = await humanActionService.getPendingActions(targetUserId, id);
+
+            if (pendingActions.length === 0 && existing.status !== "WAITING_FOR_USER" && existing.status !== "REVIEW_REQUIRED") {
+                return res.status(409).json({
+                    success: false,
+                    message: "Checkpoint replay rejected: This checkpoint action has already been resolved.",
+                    status: existing.status,
+                });
+            }
+
             const answers = req.body?.answers || req.body?.metadata || { checkpoint: "RESOLVED" };
 
             // 1. Resolve pending human action if present
@@ -412,12 +432,15 @@ class ApplicationController {
             }
 
             const updatedApp = await applicationService.getApplication(id);
+            const currentStatus = updatedApp?.status || "RESUMED";
 
             return res.status(200).json({
                 success: true,
-                message: "Verification checkpoint resolved. Application submitted directly.",
+                message: currentStatus === "SUBMITTED"
+                    ? "Verification checkpoint resolved. Application submitted and verified by employer."
+                    : `Verification checkpoint resolved. Application status: ${currentStatus}.`,
                 data: updatedApp || updatedQueue,
-                status: updatedApp?.status || "SUBMITTED",
+                status: currentStatus,
                 confirmationCode: updatedApp?.confirmationCode,
             });
         } catch (error: any) {
