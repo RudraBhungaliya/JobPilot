@@ -42,6 +42,8 @@ export default function CheckpointPage() {
   const [notFound, setNotFound] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  const [resumedSuccess, setResumedSuccess] = useState(false);
+  const [resumedMessage, setResumedMessage] = useState<string | null>(null);
   const [confirmationCode, setConfirmationCode] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [appData, setAppData] = useState<any>(null);
@@ -239,14 +241,26 @@ export default function CheckpointPage() {
         }
       }
 
-      const conf = resData.confirmationCode || resData.data?.confirmationCode || `jp-${Date.now().toString(36)}`;
-      setConfirmationCode(conf);
-      setSubmittedSuccess(true);
-      setSubmitting(false);
+      const returnedStatus = resData.status || resData.data?.status;
+      const conf = resData.confirmationCode || resData.data?.confirmationCode || null;
 
-      if (appData) {
-        setAppData({ ...appData, status: "SUBMITTED", confirmationCode: conf });
+      if (returnedStatus === "SUBMITTED" || returnedStatus === "APPLIED") {
+        setConfirmationCode(conf);
+        setSubmittedSuccess(true);
+        setResumedSuccess(false);
+        if (appData) {
+          setAppData({ ...appData, status: returnedStatus, confirmationCode: conf });
+        }
+      } else {
+        setConfirmationCode(conf);
+        setSubmittedSuccess(false);
+        setResumedSuccess(true);
+        setResumedMessage(resData.message || "Verification checkpoint resolved. Application resumed and queued for automated submission.");
+        if (appData) {
+          setAppData({ ...appData, status: returnedStatus || "RESUMED", confirmationCode: conf });
+        }
       }
+      setSubmitting(false);
     } catch (err: any) {
       console.error("Failed to resolve checkpoint and submit:", err);
       setErrorMessage(err.message || "Error submitting application.");
@@ -430,18 +444,18 @@ export default function CheckpointPage() {
 
             {/* Step 4 */}
             <div className={`flex items-center gap-2 p-2 rounded-lg border ${
-              submittedSuccess
+              submittedSuccess || resumedSuccess
                 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
                 : "bg-amber-500/10 border-amber-500/30 text-amber-300"
             }`}>
-              {submittedSuccess ? (
+              {submittedSuccess || resumedSuccess ? (
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
               ) : (
                 <Clock className="w-4 h-4 shrink-0 text-amber-400 animate-pulse" />
               )}
               <div className="truncate">
                 <div className="text-[11px] font-bold leading-tight">4. Human Checkpoint</div>
-                <div className="text-[10px] opacity-80">{submittedSuccess ? "Verified ✓" : "Action Needed"}</div>
+                <div className="text-[10px] opacity-80">{submittedSuccess || resumedSuccess ? "Verified ✓" : "Action Needed"}</div>
               </div>
             </div>
 
@@ -449,20 +463,56 @@ export default function CheckpointPage() {
             <div className={`col-span-2 md:col-span-1 flex items-center gap-2 p-2 rounded-lg border ${
               submittedSuccess
                 ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-200"
+                : resumedSuccess
+                ? "bg-sky-500/10 border-sky-500/30 text-sky-300"
                 : "bg-slate-800/50 border-slate-700/50 text-slate-400"
             }`}>
               {submittedSuccess ? (
                 <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+              ) : resumedSuccess ? (
+                <RefreshCw className="w-4 h-4 shrink-0 text-sky-400 animate-spin" />
               ) : (
                 <Send className="w-4 h-4 shrink-0 text-slate-500" />
               )}
               <div className="truncate">
                 <div className="text-[11px] font-bold leading-tight">5. Final Submit</div>
-                <div className="text-[10px] opacity-80">{submittedSuccess ? "Directly Submitted ✓" : "Direct On Agree"}</div>
+                <div className="text-[10px] opacity-80">{submittedSuccess ? "Directly Submitted ✓" : resumedSuccess ? "Resumed in Queue" : "Direct On Agree"}</div>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Resumed Banner if resumed in queue */}
+        {resumedSuccess && !submittedSuccess && (
+          <div className="rounded-xl border border-sky-500/30 bg-sky-950/20 p-5 space-y-3 shadow-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                  <RefreshCw className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white">Checkpoint Resolved & Pipeline Resumed!</h2>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    {resumedMessage || `Your details and authorization have been recorded. JobPilot has resumed submission to ${company}.`}
+                  </p>
+                  <p className="text-[11px] text-sky-400 font-mono mt-1">
+                    Status: {appData?.status || "RESUMED"} • A confirmation email will be dispatched to your inbox upon employer acceptance.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Link
+                href="/?tab=pipeline"
+                className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 transition shadow-sm flex items-center gap-1.5"
+              >
+                <span>Track in Application Pipeline</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Success Banner if submitted */}
         {submittedSuccess && (
@@ -771,6 +821,16 @@ export default function CheckpointPage() {
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Application Submitted — View in Pipeline</span>
+                    </Link>
+                  </div>
+                ) : resumedSuccess ? (
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href="/?tab=pipeline"
+                      className="w-full py-3 px-4 rounded-lg text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 transition shadow-sm flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>Checkpoint Resolved — Track Execution in Pipeline</span>
                     </Link>
                   </div>
                 ) : (

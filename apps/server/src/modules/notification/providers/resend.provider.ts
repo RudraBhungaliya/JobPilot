@@ -62,12 +62,18 @@ export class ResendEmailProvider implements IEmailProvider {
 
             if (error) {
                 // If Resend sandbox restricts recipient to verified account email
-                if (error.message?.includes("rud28b@gmail.com") && !to.includes("rud28b@gmail.com")) {
+                const hasRecipients = to.length > 0 && to.some(r => typeof r === "string" && r.trim().length > 0);
+                const isSandboxRestriction = hasRecipients && !to.includes("rud28b@gmail.com") && (
+                    error.message?.includes("rud28b@gmail.com") ||
+                    error.message?.toLowerCase().includes("testing email") ||
+                    error.message?.toLowerCase().includes("only send")
+                );
+                if (isSandboxRestriction) {
                     console.log("[ResendEmailProvider] Sandbox restriction: routing alert to verified owner rud28b@gmail.com");
                     const retry = await this.client.emails.send({
                         from: "JobPilot AI <onboarding@resend.dev>",
                         to: ["rud28b@gmail.com"],
-                        subject: `[Target: ${to.join(", ")}] ${options.subject}`,
+                        subject: options.subject,
                         html: options.html ?? options.text ?? "",
                         text: options.text,
                     });

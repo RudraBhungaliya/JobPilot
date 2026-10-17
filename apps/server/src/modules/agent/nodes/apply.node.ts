@@ -57,7 +57,9 @@ class ApplyNode {
         where: { id: state.userId },
         include: { profile: true },
       });
-      if (user?.email) candidateEmail = user.email;
+      if (user?.profile?.email || user?.email) {
+        candidateEmail = user.profile?.email || user.email!;
+      }
       if (user?.profile?.firstName) {
         candidateName = `${user.profile.firstName} ${user.profile.lastName || ""}`.trim();
       }

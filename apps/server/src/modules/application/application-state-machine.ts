@@ -169,8 +169,10 @@ export class ApplicationStateMachine {
 
             if (candidateEmail) {
                 try {
-                    const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-                    const actionUrl = `${frontendUrl}/checkpoint/${application.id}`;
+                    const frontendUrl = process.env.WEB_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+                    const { generateCheckpointToken } = await import("../auth/auth.tokens.js");
+                    const checkpointToken = generateCheckpointToken(application.id, application.userId);
+                    const actionUrl = `${frontendUrl}/checkpoint/${application.id}?token=${checkpointToken}`;
                     const prof = application.user.profile;
                     const alreadyFilledFields = [
                         { label: "Candidate Name", value: candidateName },
@@ -201,6 +203,33 @@ export class ApplicationStateMachine {
                     });
                 } catch (emailErr) {
                     console.error("[StateMachine] Failed to send email alert:", emailErr);
+                }
+            }
+        }
+
+        // 4. Dispatch real confirmation email notification when application is submitted to employer
+        if (req.newStatus === "SUBMITTED" || req.newStatus === "APPLIED") {
+            const candidateEmail = application.user.profile?.email || application.user.email;
+            const candidateName = application.user.profile?.firstName
+                ? `${application.user.profile.firstName} ${application.user.profile.lastName || ""}`.trim()
+                : "Candidate";
+
+            if (candidateEmail) {
+                try {
+                    const confirmationCode = req.metadata?.confirmationCode || application.confirmationCode || null;
+                    await emailService.sendApplicationStatusAlert({
+                        to: candidateEmail,
+                        candidateName,
+                        jobTitle: application.job.title,
+                        companyName: application.job.company.name,
+                        status: "SUBMITTED",
+                        details: req.reason || `Official Employer Confirmation Reference: ${confirmationCode || "Verified via Automation Pipeline"}`,
+                        confirmationCode: confirmationCode || undefined,
+                        jobLocation: application.job.location,
+                        applicationId: application.id,
+                    });
+                } catch (emailErr) {
+                    console.error("[StateMachine] Failed to send submission status alert email:", emailErr);
                 }
             }
         }

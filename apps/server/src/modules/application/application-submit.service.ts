@@ -477,20 +477,28 @@ class ApplicationSubmitService {
         // Trigger confirmation email to candidate
         try {
             const { default: emailService } = await import("../notification/email.service.js");
-            const candidateEmail = raw.profile?.email || raw.user?.email;
+            let candidateEmail = raw.profile?.email || raw.user?.email;
+            if (!candidateEmail) {
+                const prof = await prisma.profile.findFirst({ where: { userId } }).catch(() => null);
+                candidateEmail = prof?.email;
+            }
             if (candidateEmail) {
                 await emailService.sendApplicationStatusAlert({
                     to: candidateEmail,
-                    candidateName: raw.profile?.firstName ? `${raw.profile.firstName} ${raw.profile.lastName || ""}` : "Candidate",
+                    candidateName: raw.profile?.firstName ? `${raw.profile.firstName} ${raw.profile.lastName || ""}`.trim() : "Candidate",
                     jobTitle,
                     companyName,
                     status: "SUBMITTED",
                     details: confirmationId
                         ? `Official Confirmation Reference: ${confirmationId}`
                         : "Your application was verified and submitted via autonomous automation pipeline.",
+                    confirmationCode: confirmationId,
+                    applicationId,
                 });
             }
-        } catch {}
+        } catch (err: any) {
+            logger.warn("[ApplicationSubmitService] Confirmation alert notice:", err.message);
+        }
     }
 
     private async _transitionFailed(
@@ -664,8 +672,10 @@ class ApplicationSubmitService {
             const { default: emailService } = await import("../notification/email.service.js");
             const candidateEmail = raw.profile?.email || raw.user?.email;
             if (candidateEmail) {
-                const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-                const actionUrl = `${frontendUrl}/checkpoint/${applicationId}`;
+                const frontendUrl = process.env.WEB_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+                const { generateCheckpointToken } = await import("../auth/auth.tokens.js");
+                const checkpointToken = generateCheckpointToken(applicationId, userId);
+                const actionUrl = `${frontendUrl}/checkpoint/${applicationId}?token=${checkpointToken}`;
                 const prof = raw.profile;
                 const alreadyFilledFields = [
                     { label: "Candidate Name", value: prof?.firstName ? `${prof.firstName} ${prof.lastName || ""}` : "Candidate" },
