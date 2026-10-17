@@ -455,50 +455,24 @@ class ApplicationSubmitService {
         companyName: string,
         confirmationId?: string,
     ): Promise<void> {
-        await applicationService.updateApplication(applicationId, {
-            status: "SUBMITTED",
-            appliedAt: new Date(),
-            failureReason: null,
-            confirmationCode: confirmationId ?? null,
+        const { default: ApplicationStateMachine } = await import("./application-state-machine.js");
+        await ApplicationStateMachine.transition({
+            applicationId,
+            newStatus: "SUBMITTED",
+            reason: `Application submitted for ${jobTitle} at ${companyName}`,
+            metadata: {
+                confirmationCode: confirmationId,
+                verifiedSubmission: true,
+            },
+            actor: "ATS_AGENT",
         });
+
         await auditService.create(userId, {
             action: "APPLICATION_SUBMITTED",
             description: `Application submitted for ${jobTitle} at ${companyName}`,
             applicationId,
             jobId: raw.jobId,
         });
-        await notificationService.create(userId, {
-            type: "APPLICATION_SUBMITTED",
-            title: "Application submitted",
-            message: `Your application for ${jobTitle} at ${companyName} was submitted.`,
-            applicationId,
-        });
-
-        // Trigger confirmation email to candidate
-        try {
-            const { default: emailService } = await import("../notification/email.service.js");
-            let candidateEmail = raw.profile?.email || raw.user?.email;
-            if (!candidateEmail) {
-                const prof = await prisma.profile.findFirst({ where: { userId } }).catch(() => null);
-                candidateEmail = prof?.email;
-            }
-            if (candidateEmail) {
-                await emailService.sendApplicationStatusAlert({
-                    to: candidateEmail,
-                    candidateName: raw.profile?.firstName ? `${raw.profile.firstName} ${raw.profile.lastName || ""}`.trim() : "Candidate",
-                    jobTitle,
-                    companyName,
-                    status: "SUBMITTED",
-                    details: confirmationId
-                        ? `Official Confirmation Reference: ${confirmationId}`
-                        : "Your application was verified and submitted via autonomous automation pipeline.",
-                    confirmationCode: confirmationId,
-                    applicationId,
-                });
-            }
-        } catch (err: any) {
-            logger.warn("[ApplicationSubmitService] Confirmation alert notice:", err.message);
-        }
     }
 
     private async _transitionFailed(

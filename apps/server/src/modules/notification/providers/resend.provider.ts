@@ -61,19 +61,25 @@ export class ResendEmailProvider implements IEmailProvider {
                 });
 
             if (error) {
-                // If Resend sandbox restricts recipient to verified account email
+                // Configurable Sandbox Routing:
+                // Only allowed in non-production when RESEND_SANDBOX_REDIRECT_EMAIL is explicitly defined.
+                // In production, redirection is strictly disabled to prevent unintended delivery.
+                const isProduction = process.env.NODE_ENV === "production";
+                const sandboxRedirect = process.env.RESEND_SANDBOX_REDIRECT_EMAIL?.trim();
                 const hasRecipients = to.length > 0 && to.some(r => typeof r === "string" && r.trim().length > 0);
-                const isSandboxRestriction = hasRecipients && !to.includes("rud28b@gmail.com") && (
-                    error.message?.includes("rud28b@gmail.com") ||
+
+                const isSandboxRestriction = !isProduction && Boolean(sandboxRedirect) && hasRecipients && !to.includes(sandboxRedirect!) && (
+                    error.message?.includes(sandboxRedirect!) ||
                     error.message?.toLowerCase().includes("testing email") ||
                     error.message?.toLowerCase().includes("only send")
                 );
-                if (isSandboxRestriction) {
-                    console.log("[ResendEmailProvider] Sandbox restriction: routing alert to verified owner rud28b@gmail.com");
+
+                if (isSandboxRestriction && sandboxRedirect) {
+                    console.warn(`[ResendEmailProvider] Development sandbox routing: explicitly redirecting alert from [${to.join(", ")}] to configured RESEND_SANDBOX_REDIRECT_EMAIL [${sandboxRedirect}]`);
                     const retry = await this.client.emails.send({
                         from: "JobPilot AI <onboarding@resend.dev>",
-                        to: ["rud28b@gmail.com"],
-                        subject: options.subject,
+                        to: [sandboxRedirect],
+                        subject: `[SANDBOX ROUTED -> ${sandboxRedirect} | Intended: ${to.join(", ")}] ${options.subject}`,
                         html: options.html ?? options.text ?? "",
                         text: options.text,
                     });

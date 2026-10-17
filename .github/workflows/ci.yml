@@ -1,0 +1,91 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-and-test:
+    name: Build, Audit & Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: jobpilot
+          POSTGRES_PASSWORD: jobpilot_secret_password
+          POSTGRES_DB: jobpilot_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Setup Database Schema
+        env:
+          DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
+        run: |
+          pnpm --filter @jobpilot/database exec prisma generate
+          pnpm --filter @jobpilot/database exec prisma db push --skip-generate
+
+      - name: Build Server
+        run: pnpm --filter @jobpilot/server build
+
+      - name: Build Web Application
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NODE_ENV: production
+        run: pnpm --filter @jobpilot/web build
+
+      - name: Run Regression & Unit Tests
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
+          JWT_SECRET: jobpilot-test-only-secret-not-for-production
+          REQUIRE_SUBMISSION_APPROVAL: "false"
+          DEV_AUTH_ENABLED: "true"
+        run: |
+          pnpm --filter @jobpilot/server test

@@ -60,6 +60,7 @@ export class ApplicationStateMachine {
                 job: {
                     include: { company: true },
                 },
+                resume: true,
             },
         });
 
@@ -70,12 +71,39 @@ export class ApplicationStateMachine {
         const currentStatus = application.status as ApplicationStatus;
         const allowedTargets = VALID_TRANSITIONS[currentStatus] || [];
 
-        // Allow idempotent transition to same status or validated target
-        if (currentStatus !== req.newStatus && !allowedTargets.includes(req.newStatus)) {
+        // Evidence-backed transition enforcement and false-success prevention (Requirement 3)
+        if (req.newStatus === "SUBMITTED" || req.newStatus === "APPLIED") {
+            const allowedSubmissionSources: ApplicationStatus[] = ["SUBMITTING", "VERIFICATION_PENDING", "RUNNING", "SUBMITTED", "APPLIED"];
+            if (!allowedSubmissionSources.includes(currentStatus)) {
+                throw new Error(
+                    `Invalid state transition: Cannot transition application ${req.applicationId} to ${req.newStatus} from ${currentStatus}. Must pass through submission pipeline.`
+                );
+            }
+
+            const confirmationCode =
+                (req.metadata?.confirmationCode as string) ||
+                (req.metadata?.confirmationId as string) ||
+                application.confirmationCode;
+            const hasEvidence =
+                Boolean(confirmationCode && confirmationCode.trim().length > 0) ||
+                Boolean(req.metadata?.verifiedSubmission) ||
+                Boolean(req.metadata?.submissionEvidence);
+
+            if (!hasEvidence) {
+                throw new Error(
+                    `False-success prevention: Cannot transition application ${req.applicationId} to ${req.newStatus} without verified employer confirmation evidence or confirmation code.`
+                );
+            }
+        } else if (currentStatus !== req.newStatus && !allowedTargets.includes(req.newStatus)) {
             console.warn(
                 `[StateMachine] Invalid transition from ${currentStatus} to ${req.newStatus} for application ${req.applicationId}. Proceeding with forced override for worker resiliency.`
             );
         }
+
+        const confirmationCodeToPersist =
+            (req.metadata?.confirmationCode as string) ||
+            (req.metadata?.confirmationId as string) ||
+            application.confirmationCode;
 
         // 1. Transactionally update application status and insert transition log
         const [updatedApp, transitionRecord] = await prisma.$transaction([
@@ -83,8 +111,9 @@ export class ApplicationStateMachine {
                 where: { id: req.applicationId },
                 data: {
                     status: req.newStatus,
-                    appliedAt: req.newStatus === "APPLIED" || req.newStatus === "SUBMITTED" ? new Date() : application.appliedAt,
+                    appliedAt: req.newStatus === "APPLIED" || req.newStatus === "SUBMITTED" ? (application.appliedAt || new Date()) : application.appliedAt,
                     failureReason: req.newStatus === "FAILED" ? req.reason : application.failureReason,
+                    confirmationCode: confirmationCodeToPersist,
                 },
             }),
             prisma.applicationStatusTransition.create({
@@ -160,77 +189,133 @@ export class ApplicationStateMachine {
             // Non-blocking realtime event failure
         }
 
-        // 3. Dispatch real email notification if human intervention is required
+        // 3. Dispatch real email notification if human intervention is required (Idempotent)
         if (req.newStatus === "WAITING_FOR_USER" || req.newStatus === "VERIFICATION_PENDING") {
-            const candidateEmail = application.user.profile?.email || application.user.email;
-            const candidateName = application.user.profile?.firstName
-                ? `${application.user.profile.firstName} ${application.user.profile.lastName || ""}`
-                : "Candidate";
+            const alreadyNotifiedIntervention = await prisma.notification.findFirst({
+                where: {
+                    applicationId: application.id,
+                    type: "HUMAN_ACTION_REQUIRED",
+                    createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
+                },
+            });
 
-            if (candidateEmail) {
-                try {
-                    const frontendUrl = process.env.WEB_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-                    const { generateCheckpointToken } = await import("../auth/auth.tokens.js");
-                    const checkpointToken = generateCheckpointToken(application.id, application.userId);
-                    const actionUrl = `${frontendUrl}/checkpoint/${application.id}?token=${checkpointToken}`;
-                    const prof = application.user.profile;
-                    const alreadyFilledFields = [
-                        { label: "Candidate Name", value: candidateName },
-                        { label: "Contact Email", value: candidateEmail },
-                        { label: "Phone Number", value: prof?.phone || "Pre-filled from Profile" },
-                        { label: "Target Location", value: prof?.city || application.job.location || "Bengaluru, Karnataka, India" },
-                        { label: "Tailored ATS Resume", value: (application as any).resume?.title || "Tailored ATS Resume Attached (PDF)" },
-                        { label: "Synced Profiles", value: prof?.linkedin || prof?.github ? "LinkedIn & GitHub Attached" : "Profile Verified" },
-                    ];
+            const shouldSendInterventionAlert = !alreadyNotifiedIntervention && currentStatus !== "WAITING_FOR_USER";
 
-                    const remainingFields = req.metadata?.missingFields || [
-                        req.reason || "Additional employer screening questions or interactive verification checkpoint."
-                    ];
+            if (shouldSendInterventionAlert) {
+                const candidateEmail = application.user.profile?.email || application.user.email;
+                const candidateName = application.user.profile?.firstName
+                    ? `${application.user.profile.firstName} ${application.user.profile.lastName || ""}`
+                    : "Candidate";
 
-                    await emailService.sendHumanInterventionAlert({
-                        to: candidateEmail,
-                        candidateName,
-                        jobTitle: application.job.title,
-                        companyName: application.job.company.name,
-                        actionUrl,
-                        jobOpeningUrl: application.job.url,
-                        reason: req.reason || "Employer ATS portal requested interactive CAPTCHA / 2FA / Custom Verification.",
-                        verificationType: req.metadata?.verificationType || "Interactive Security Checkpoint",
-                        jobLocation: application.job.location,
-                        applicationId: application.id,
-                        alreadyFilledFields,
-                        remainingFields,
-                    });
-                } catch (emailErr) {
-                    console.error("[StateMachine] Failed to send email alert:", emailErr);
+                if (candidateEmail) {
+                    try {
+                        const frontendUrl = process.env.WEB_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+                        const { generateCheckpointToken } = await import("../auth/auth.tokens.js");
+                        const checkpointToken = generateCheckpointToken(application.id, application.userId);
+                        const actionUrl = `${frontendUrl}/checkpoint/${application.id}?token=${checkpointToken}`;
+                        const prof = application.user.profile;
+                        const alreadyFilledFields = [
+                            { label: "Candidate Name", value: candidateName },
+                            { label: "Contact Email", value: candidateEmail },
+                            { label: "Phone Number", value: prof?.phone || "Pre-filled from Profile" },
+                            { label: "Target Location", value: prof?.city || application.job.location || "Bengaluru, Karnataka, India" },
+                            { label: "Tailored ATS Resume", value: application.resume?.title || "Tailored ATS Resume Attached (PDF)" },
+                            { label: "Synced Profiles", value: prof?.linkedin || prof?.github ? "LinkedIn & GitHub Attached" : "Profile Verified" },
+                        ];
+
+                        const remainingFields = req.metadata?.missingFields || [
+                            req.reason || "Additional employer screening questions or interactive verification checkpoint."
+                        ];
+
+                        await emailService.sendHumanInterventionAlert({
+                            to: candidateEmail,
+                            candidateName,
+                            jobTitle: application.job.title,
+                            companyName: application.job.company.name,
+                            actionUrl,
+                            jobOpeningUrl: application.job.url,
+                            reason: req.reason || "Employer ATS portal requested interactive CAPTCHA / 2FA / Custom Verification.",
+                            verificationType: req.metadata?.verificationType || "Interactive Security Checkpoint",
+                            jobLocation: application.job.location,
+                            applicationId: application.id,
+                            alreadyFilledFields,
+                            remainingFields,
+                        });
+
+                        await prisma.notification.create({
+                            data: {
+                                userId: application.userId,
+                                applicationId: application.id,
+                                type: "HUMAN_ACTION_REQUIRED",
+                                title: `Action Required: ${application.job.title} at ${application.job.company.name}`,
+                                message: `Human checkpoint needed: ${req.reason || "Interactive verification"}`,
+                            },
+                        });
+                    } catch (emailErr) {
+                        console.error("[StateMachine] Non-fatal human intervention email alert failure:", emailErr);
+                    }
                 }
             }
         }
 
-        // 4. Dispatch real confirmation email notification when application is submitted to employer
+        // 4. Idempotent submission confirmation email dispatch (Requirements 1, 2, 4)
         if (req.newStatus === "SUBMITTED" || req.newStatus === "APPLIED") {
-            const candidateEmail = application.user.profile?.email || application.user.email;
-            const candidateName = application.user.profile?.firstName
-                ? `${application.user.profile.firstName} ${application.user.profile.lastName || ""}`.trim()
-                : "Candidate";
+            const alreadyNotified = await prisma.notification.findFirst({
+                where: {
+                    applicationId: application.id,
+                    type: "APPLICATION_SUBMITTED",
+                },
+            });
 
-            if (candidateEmail) {
-                try {
-                    const confirmationCode = req.metadata?.confirmationCode || application.confirmationCode || null;
-                    await emailService.sendApplicationStatusAlert({
-                        to: candidateEmail,
-                        candidateName,
-                        jobTitle: application.job.title,
-                        companyName: application.job.company.name,
-                        status: "SUBMITTED",
-                        details: req.reason || `Official Employer Confirmation Reference: ${confirmationCode || "Verified via Automation Pipeline"}`,
-                        confirmationCode: confirmationCode || undefined,
-                        jobLocation: application.job.location,
-                        applicationId: application.id,
-                    });
-                } catch (emailErr) {
-                    console.error("[StateMachine] Failed to send submission status alert email:", emailErr);
+            // Suppress duplicate emails on duplicate state transitions, retries, or progression from SUBMITTED to APPLIED
+            const shouldSendSubmissionAlert = !alreadyNotified && currentStatus !== "SUBMITTED" && currentStatus !== "APPLIED";
+
+            if (shouldSendSubmissionAlert) {
+                const candidateEmail = application.user.profile?.email || application.user.email;
+                const candidateName = application.user.profile?.firstName
+                    ? `${application.user.profile.firstName} ${application.user.profile.lastName || ""}`.trim()
+                    : "Candidate";
+
+                if (candidateEmail) {
+                    try {
+                        const confirmationCode =
+                            (req.metadata?.confirmationCode as string) ||
+                            (req.metadata?.confirmationId as string) ||
+                            updatedApp.confirmationCode ||
+                            application.confirmationCode ||
+                            null;
+
+                        await emailService.sendApplicationStatusAlert({
+                            to: candidateEmail,
+                            candidateName,
+                            jobTitle: application.job.title,
+                            companyName: application.job.company.name,
+                            status: "SUBMITTED",
+                            details: req.reason || `Official Employer Confirmation Reference: ${confirmationCode || "Verified via Automation Pipeline"}`,
+                            confirmationCode: confirmationCode || undefined,
+                            jobLocation: application.job.location,
+                            applicationId: application.id,
+                            resumeTitle: application.resume?.title || "Tailored ATS Resume (PDF)",
+                            appliedAt: updatedApp.appliedAt || new Date(),
+                        });
+
+                        // Persist notification record for audit trail and idempotency guarantee
+                        await prisma.notification.create({
+                            data: {
+                                userId: application.userId,
+                                applicationId: application.id,
+                                type: "APPLICATION_SUBMITTED",
+                                title: `Application Submitted: ${application.job.title} at ${application.job.company.name}`,
+                                message: `Your application has been verified and submitted to ${application.job.company.name}. Confirmation reference: ${confirmationCode || "Verified"}`,
+                            },
+                        });
+                    } catch (emailErr) {
+                        // REQUIREMENT 2: Non-fatal email error MUST NOT corrupt application state or trigger duplicate submissions
+                        console.error("[StateMachine] Non-fatal submission status alert notification failure:", emailErr);
+                    }
                 }
+            } else {
+                console.log(`[StateMachine] Idempotent notification suppressed for application ${application.id} (already notified or already submitted)`);
             }
         }
 

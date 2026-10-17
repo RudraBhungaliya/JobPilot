@@ -27,6 +27,8 @@ export interface ApplicationSummaryAlertInput {
     confirmationCode?: string;
     jobLocation?: string;
     applicationId?: string;
+    resumeTitle?: string;
+    appliedAt?: Date | string;
 }
 
 class EmailService {
@@ -229,8 +231,10 @@ After submitting your response, JobPilot will automatically resume execution and
 
         const frontendUrl = process.env.WEB_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
         const dashboardUrl = `${frontendUrl}/?tab=pipeline`;
-        const confirmationRef = input.confirmationCode || "CONF-" + Date.now().toString(36).toUpperCase();
-        const timestampStr = new Date().toUTCString();
+        const confirmationRef = input.confirmationCode || "OFFICIAL-SUBMISSION-CONFIRMED";
+        const appliedDate = input.appliedAt ? new Date(input.appliedAt) : new Date();
+        const timestampStr = appliedDate.toUTCString();
+        const resumeAttachedDesc = input.resumeTitle ? `✓ ${input.resumeTitle}` : "✓ Attached & Uploaded (PDF)";
 
         const html = isSuccess ? `
 <!DOCTYPE html>
@@ -290,7 +294,7 @@ After submitting your response, JobPilot will automatically resume execution and
             </div>
             <div style="display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px;">
                 <span style="color: #94a3b8;">Tailored ATS Resume:</span>
-                <span style="color: #34d399; font-weight: 600;">✓ Attached & Uploaded (PDF)</span>
+                <span style="color: #34d399; font-weight: 600;">${resumeAttachedDesc}</span>
             </div>
         </div>
 
@@ -324,7 +328,7 @@ After submitting your response, JobPilot will automatically resume execution and
 `;
 
         const text = isSuccess
-            ? `✅ Application Submitted: ${input.jobTitle} at ${input.companyName}\n\nHi ${input.candidateName},\n\nYour application has been successfully submitted and verified on the employer portal.\nConfirmation Reference: ${confirmationRef}\nSubmitted at: ${timestampStr}\nDetails: ${input.details || ""}\n\nTrack your application in the dashboard: ${dashboardUrl}`
+            ? `✅ Application Submitted: ${input.jobTitle} at ${input.companyName}\n\nHi ${input.candidateName},\n\nYour application has been successfully submitted and verified on the employer portal.\nConfirmation Reference: ${confirmationRef}\nResume: ${resumeAttachedDesc}\nSubmitted at: ${timestampStr}\nDetails: ${input.details || ""}\n\nTrack your application in the dashboard: ${dashboardUrl}`
             : `Hi ${input.candidateName},\n\nYour application for ${input.jobTitle} at ${input.companyName} status is now: ${input.status}.\n${input.details || ""}`;
 
         await this.deliver({ to: input.to, subject, text, html });
