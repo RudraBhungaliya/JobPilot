@@ -94,16 +94,16 @@ export class LeverDomAdapter implements DomAtsAdapter {
         };
       }
 
-      if (input.resumeBuffer) {
-        const fileInput = page.locator('input[type="file"]').first();
-        if (await fileInput.isVisible().catch(() => false)) {
-          try {
-            await fileInput.setInputFiles({
-              name: input.resume?.originalName || "resume.pdf",
-              mimeType: input.resumeContentType || "application/pdf",
-              buffer: Buffer.from(input.resumeBuffer),
-            });
-          } catch {}
+      if (input.resume?.fileUrl || input.resume?.path || input.resumeBuffer) {
+        try {
+          const { default: resumeUploadTool } = await import("../../agent/tools/resume-upload.tool.js");
+          await resumeUploadTool.upload(page, {
+            fileUrl: input.resume?.fileUrl || input.resume?.path || "",
+            originalName: input.resume?.originalName || "resume.pdf",
+            buffer: input.resumeBuffer,
+          });
+        } catch (upErr: any) {
+          logger.debug({ upErr }, "LeverDomAdapter file upload note");
         }
       }
 

@@ -107,10 +107,11 @@ export class LeverAdapter extends BaseATSAdapter {
 
         // 8. Upload Real Resume
         try {
-            const fileInput = page.locator('input[type="file"]').first();
-            if (await fileInput.count() > 0 && context.resumeFilePath) {
-                await fileInput.setInputFiles(context.resumeFilePath);
-            }
+            const { default: resumeUploadTool } = await import("../../agent/tools/resume-upload.tool.js");
+            await resumeUploadTool.upload(page, {
+                fileUrl: context.resumeFilePath || "",
+                originalName: "resume.pdf",
+            });
         } catch (uploadErr: any) {
             console.warn("[LeverAdapter] Resume upload notice:", uploadErr.message);
         }

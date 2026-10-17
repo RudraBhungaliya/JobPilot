@@ -14,6 +14,8 @@ router.get("/:id", loopController.getById);
 router.patch("/:id", loopController.update);
 router.delete("/:id", loopController.delete);
 router.post("/:id/run", loopController.run);
+router.post("/:id/pause", loopController.pause);
+router.post("/:id/resume", loopController.resume);
 router.post("/:id/match", loopController.matchJobs);
 router.get("/:id/matches", loopController.getMatches);
 router.post("/:id/sync", loopController.syncPipeline);

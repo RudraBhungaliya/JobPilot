@@ -42,40 +42,18 @@ class CrawlerService {
 
         for (const sourceJob of sourceJobs) {
             try {
-                let parsedJob: ParsedJob | undefined;
-
-                try {
-                    const { html, redirectedUrl } = await pageFetcherService.fetch(sourceJob.url);
-                    if (html && html.trim()) {
-                        const platform = this.detect(redirectedUrl, html);
-                        parsedJob = await parserService.parse({
-                            url: redirectedUrl,
-                            html,
-                            platform,
-                        });
-                    }
-                } catch (error) {
-                    if (error instanceof Error) {
-                        // The source record remains usable because it is an actual provider response.
-                    }
-                }
-
-                if (!parsedJob || !parsedJob.title?.trim() || !parsedJob.company?.trim() || !parsedJob.url) {
-                    parsedJob = {
-                        title: sourceJob.title,
-                        company: sourceJob.company,
+                if (sourceJob?.title?.trim() && sourceJob?.company?.trim() && sourceJob?.url) {
+                    parsedJobs.push({
+                        title: sourceJob.title.trim(),
+                        company: sourceJob.company.trim(),
                         location: sourceJob.location || "",
-                        description: sourceJob.description,
+                        description: sourceJob.description || "",
                         url: sourceJob.url,
                         platform: this.detect(sourceJob.url),
-                    };
-                }
-
-                if (parsedJob?.title?.trim() && parsedJob.company?.trim() && parsedJob.url) {
-                    parsedJobs.push(parsedJob);
+                    });
                 }
             } catch (err) {
-                console.error(`Failed to crawl job at ${sourceJob.url}:`, err);
+                console.error(`Failed to process job at ${sourceJob.url}:`, err);
             }
         }
 

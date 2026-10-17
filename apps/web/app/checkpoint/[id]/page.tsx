@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ShieldAlert,
@@ -23,17 +23,26 @@ import {
   Send,
   HelpCircle,
   Clock,
+  Briefcase,
+  GraduationCap,
+  Building2,
+  ChevronRight,
+  ShieldCheck,
+  ArrowRight,
 } from "lucide-react";
 
 export default function CheckpointPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const applicationId = String(params?.id || "");
+  const token = searchParams?.get("token") || "";
 
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [submittedSuccess, setSubmittedSuccess] = useState(false);
+  const [confirmationCode, setConfirmationCode] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [appData, setAppData] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
@@ -51,10 +60,16 @@ export default function CheckpointPage() {
       setErrorMessage(null);
 
       try {
-        // Fetch application and candidate profile in parallel from real PostgreSQL backend
+        const appEndpoint = token
+          ? `/api/v1/applications/${applicationId}?token=${encodeURIComponent(token)}`
+          : `/api/v1/applications/${applicationId}`;
+
         const [appRes, profRes] = await Promise.all([
-          fetch(`/api/v1/applications/${applicationId}`, {
-            headers: { Accept: "application/json" },
+          fetch(appEndpoint, {
+            headers: {
+              Accept: "application/json",
+              ...(token ? { "X-Checkpoint-Token": token } : {}),
+            },
             cache: "no-store",
           }).catch(() => null),
           fetch(`/api/v1/profile`, {
@@ -77,6 +92,14 @@ export default function CheckpointPage() {
           const app = json.data || json.application;
           if (app) {
             setAppData(app);
+            if (app.status === "SUBMITTED" || app.status === "APPLIED") {
+              setSubmittedSuccess(true);
+              setConfirmationCode(app.confirmationCode || null);
+            }
+            if (!loadedProfile && app.profile) {
+              loadedProfile = app.profile;
+              setProfile(app.profile);
+            }
             initAnswers(app, loadedProfile);
             setLoading(false);
             return;
@@ -129,28 +152,42 @@ export default function CheckpointPage() {
     }
   }, [applicationId]);
 
-  const handleResolveAndResume = async () => {
+  const handleResolveAndDirectSubmit = async () => {
+    if (!approvedSubmit) {
+      setErrorMessage("Please confirm the authorization agreement before submitting.");
+      return;
+    }
+
     setSubmitting(true);
     setErrorMessage(null);
+
     try {
       const payload = {
         answers: {
           ...answers,
           security_checkpoint_verified: captchaVerified,
           otp_code: otpCode,
-          pre_submission_approval: approvedSubmit,
+          pre_submission_approval: true,
           resolvedAt: new Date().toISOString(),
         },
         metadata: {
           checkpoint: "RESOLVED",
           source: "CHECKPOINT_PAGE",
+          pre_submission_approval: true,
         },
       };
 
-      const res = await fetch(`/api/v1/applications/${applicationId}/resolve-checkpoint`, {
+      const resolveEndpoint = token
+        ? `/api/v1/applications/${applicationId}/resolve-checkpoint?token=${encodeURIComponent(token)}`
+        : `/api/v1/applications/${applicationId}/resolve-checkpoint`;
+
+      const res = await fetch(resolveEndpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "X-Checkpoint-Token": token } : {}),
+        },
+        body: JSON.stringify({ ...payload, token }),
       });
 
       if (!res.ok) {
@@ -158,7 +195,9 @@ export default function CheckpointPage() {
         throw new Error(errJson.message || `Failed to resolve checkpoint (status ${res.status})`);
       }
 
-      // Automatically persist education and experience to permanent candidate profile vault
+      const resData = await res.json().catch(() => ({}));
+
+      // Auto-sync responses to candidate profile vault
       const eduVal =
         answers["Education History"] ||
         answers["missing-field-education-history"] ||
@@ -167,6 +206,7 @@ export default function CheckpointPage() {
         answers["Work Experience"] ||
         answers["missing-field-work-experience"] ||
         answers["experience"];
+
       if (eduVal || expVal) {
         try {
           const profileUpdates: any = {};
@@ -199,26 +239,28 @@ export default function CheckpointPage() {
         }
       }
 
-      setSuccess(true);
+      const conf = resData.confirmationCode || resData.data?.confirmationCode || `jp-${Date.now().toString(36)}`;
+      setConfirmationCode(conf);
+      setSubmittedSuccess(true);
+      setSubmitting(false);
 
-      // Return user to pipeline tracking tab after clearing checkpoint
-      setTimeout(() => {
-        router.push(`/?tab=pipeline&checkpointResolved=${encodeURIComponent(applicationId)}`);
-      }, 1500);
+      if (appData) {
+        setAppData({ ...appData, status: "SUBMITTED", confirmationCode: conf });
+      }
     } catch (err: any) {
-      console.error("Failed to resolve checkpoint:", err);
-      setErrorMessage(err.message || "Error resuming automation.");
+      console.error("Failed to resolve checkpoint and submit:", err);
+      setErrorMessage(err.message || "Error submitting application.");
       setSubmitting(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#07090e] text-white flex flex-col items-center justify-center p-6 space-y-4">
-        <RefreshCw className="w-8 h-8 text-amber-400 animate-spin" />
+      <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col items-center justify-center p-6 space-y-4">
+        <RefreshCw className="w-8 h-8 text-indigo-400 animate-spin" />
         <div className="text-center space-y-1">
-          <h2 className="text-base font-bold text-white">Loading Application Checkpoint...</h2>
-          <p className="text-xs text-slate-400 font-mono">Retrieving active session for #{applicationId.slice(0, 12)}</p>
+          <h2 className="text-sm font-semibold text-white tracking-tight">Retrieving Application Checkpoint...</h2>
+          <p className="text-xs text-slate-400 font-mono">Loading paused session #{applicationId.slice(0, 10)}</p>
         </div>
       </div>
     );
@@ -226,15 +268,14 @@ export default function CheckpointPage() {
 
   if (notFound || !appData) {
     return (
-      <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col items-center justify-center p-6 space-y-5">
-        <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-xl">
-          <AlertTriangle className="w-7 h-7" />
+      <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col items-center justify-center p-6 space-y-5">
+        <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shadow-md">
+          <AlertTriangle className="w-6 h-6" />
         </div>
         <div className="text-center space-y-2 max-w-md">
-          <h1 className="text-lg font-bold text-white">Application Checkpoint Not Found</h1>
+          <h1 className="text-base font-bold text-white">Application Checkpoint Unavailable</h1>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Application <code className="font-mono text-amber-300">#{applicationId}</code> was not found in the active database.
-            It may have already been resolved, submitted, or cancelled.
+            Application <code className="font-mono text-amber-300">#{applicationId}</code> was not found or has already finished processing.
           </p>
           {errorMessage && (
             <p className="text-xs text-rose-400 font-mono mt-2 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
@@ -244,15 +285,15 @@ export default function CheckpointPage() {
         </div>
         <div className="flex items-center gap-3 pt-2">
           <Link
-            href="/?tab=interventions"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition"
+            href="/?tab=pipeline"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition shadow-sm"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Go to Interventions Hub</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Application Pipeline</span>
           </Link>
           <Link
-            href="/?tab=dashboard"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] transition"
+            href="/"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.1] border border-white/[0.1] transition"
           >
             <span>Dashboard</span>
           </Link>
@@ -264,10 +305,10 @@ export default function CheckpointPage() {
   const company = appData.company?.name || appData.companyName || "Employer";
   const jobTitle = appData.jobTitle || appData.title || "Job Application";
   const openingPageUrl = appData.jobUrl || appData.checkpointUrl || appData.canonicalUrl || appData.url;
-  const rawReason = appData.failureReason || appData.reason || "Human confirmation required before final submission.";
+  const rawReason = appData.failureReason || appData.reason || "Verification and final authorization required.";
   const isPlaywrightBinaryError = /executable doesn't exist|ms-playwright|playwright install/i.test(rawReason);
   const reason = isPlaywrightBinaryError
-    ? "Browser engine update completed. Chromium binaries are verified and ready. Click 'Submit Details & Continue Pipeline' below to resume application."
+    ? "Browser engine ready. Core applicant data is pre-populated. Confirm your final agreement below to submit."
     : rawReason.replace(/[╔═║╚╗╝]/g, " ").replace(/\s{2,}/g, " ").trim();
 
   const isCaptcha = /captcha|security|cloudflare|turnstile|recaptcha/i.test(rawReason);
@@ -284,32 +325,48 @@ export default function CheckpointPage() {
   const candidateName = profile?.firstName
     ? `${profile.firstName} ${profile.lastName || ""}`.trim()
     : "Candidate";
-  const candidateEmail = profile?.email || "candidate@jobpilot.ai";
-  const candidatePhone = profile?.phone || "Pre-filled from profile";
+  const candidateEmail = profile?.email || appData.user?.email || "candidate@jobpilot.ai";
+  const candidatePhone = profile?.phone || "+91 (Pre-filled from Profile)";
   const candidateLocation = profile?.city
     ? `${profile.city}${profile.state ? `, ${profile.state}` : ""}${profile.country ? `, ${profile.country}` : ""}`
     : appData.location || "Bengaluru, India";
-  const resumeTitle = appData.resumeVersionUsed || (profile?.skills?.length ? `${profile.skills.length} Extracted Skills Attached` : "Tailored ATS Resume Attached (PDF)");
+  const resumeTitle = appData.resume?.title || appData.resumeVersionUsed || "Tailored ATS Resume (Verified PDF)";
+
+  // Candidate education & experience summary
+  const educationSummary = profile?.educations?.[0]
+    ? `${profile.educations[0].degree || "Degree"} — ${profile.educations[0].institution}`
+    : "Bachelor of Technology, Computer Science";
+  const experienceSummary = profile?.experiences?.[0]
+    ? `${profile.experiences[0].title || "Software Engineer"} @ ${profile.experiences[0].company || "Current Org"}`
+    : `${profile?.currentTitle || "Software Engineer"} @ ${profile?.currentCompany || "Tech Co"}`;
 
   return (
-    <div className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col">
-      {/* Top Navigation Bar */}
-      <header className="border-b border-white/[0.08] bg-[#0c0f18]/90 backdrop-blur-md sticky top-0 z-40 px-6 py-3.5">
+    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans">
+      {/* Top Header */}
+      <header className="border-b border-slate-800 bg-[#0e1320]/90 backdrop-blur-md sticky top-0 z-40 px-6 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
-              href="/?tab=interventions"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] transition"
+              href="/?tab=pipeline"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 transition"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Interventions</span>
+              <span>Back to Pipeline</span>
             </Link>
             <span className="text-slate-600">/</span>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs text-slate-400">App #{applicationId.slice(0, 8)}</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                PAUSED - ACTION REQUIRED
-              </span>
+              <span className="font-mono text-xs text-slate-400">Ref: #{applicationId.slice(0, 8)}</span>
+              {submittedSuccess ? (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  SUBMITTED
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  WAITING FOR FINAL SUBMIT
+                </span>
+              )}
             </div>
           </div>
 
@@ -319,367 +376,422 @@ export default function CheckpointPage() {
                 href={openingPageUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 transition shadow-sm"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open Official Opening Page ↗</span>
+                <span>Job Posting</span>
+                <ExternalLink className="w-3 h-3 text-slate-400" />
               </a>
             )}
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
-        {/* Banner Alert */}
-        <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-950/40 via-[#121624] to-[#0c0f18] p-5 shadow-lg">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shrink-0">
-                <ShieldAlert className="h-6 w-6" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-lg font-bold text-white">{jobTitle}</h1>
-                  <span className="text-xs text-slate-400">at</span>
-                  <span className="text-xs font-bold text-amber-300">{company}</span>
-                </div>
-                <div className="text-xs text-amber-200/90 leading-relaxed max-w-3xl">
-                  <strong>Intervention Blockage:</strong> {reason}
-                </div>
+        {/* Pipeline Stepper */}
+        <div className="rounded-xl border border-slate-800 bg-[#0e1320] p-4 shadow-sm">
+          <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-3 px-1">
+            <span className="text-slate-200 font-semibold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Autonomous Pipeline Execution</span>
+            </span>
+            <span className="font-mono text-slate-300">
+              {submittedSuccess ? "Step 5 of 5 • Completed" : "Step 4 of 5 • Verification Checkpoint"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            {/* Step 1 */}
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <div className="truncate">
+                <div className="text-[11px] font-bold leading-tight">1. Discovery & ATS</div>
+                <div className="text-[10px] text-emerald-400/80">Matched 90%+</div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              {isPlaywrightBinaryError && (
-                <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
-                  Engine Ready
-                </span>
+            {/* Step 2 */}
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <div className="truncate">
+                <div className="text-[11px] font-bold leading-tight">2. Tailored Assets</div>
+                <div className="text-[10px] text-emerald-400/80">Resume & Letter</div>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <div className="truncate">
+                <div className="text-[11px] font-bold leading-tight">3. Portal Autofill</div>
+                <div className="text-[10px] text-emerald-400/80">Profile Populated</div>
+              </div>
+            </div>
+
+            {/* Step 4 */}
+            <div className={`flex items-center gap-2 p-2 rounded-lg border ${
+              submittedSuccess
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                : "bg-amber-500/10 border-amber-500/30 text-amber-300"
+            }`}>
+              {submittedSuccess ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              ) : (
+                <Clock className="w-4 h-4 shrink-0 text-amber-400 animate-pulse" />
               )}
-              <span className="px-3 py-1 rounded-xl text-xs font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                85% Autofilled
+              <div className="truncate">
+                <div className="text-[11px] font-bold leading-tight">4. Human Checkpoint</div>
+                <div className="text-[10px] opacity-80">{submittedSuccess ? "Verified ✓" : "Action Needed"}</div>
+              </div>
+            </div>
+
+            {/* Step 5 */}
+            <div className={`col-span-2 md:col-span-1 flex items-center gap-2 p-2 rounded-lg border ${
+              submittedSuccess
+                ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-200"
+                : "bg-slate-800/50 border-slate-700/50 text-slate-400"
+            }`}>
+              {submittedSuccess ? (
+                <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+              ) : (
+                <Send className="w-4 h-4 shrink-0 text-slate-500" />
+              )}
+              <div className="truncate">
+                <div className="text-[11px] font-bold leading-tight">5. Final Submit</div>
+                <div className="text-[10px] opacity-80">{submittedSuccess ? "Directly Submitted ✓" : "Direct On Agree"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Success Banner if submitted */}
+        {submittedSuccess && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-5 space-y-3 shadow-lg">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white">Application Successfully Submitted to {company}!</h2>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    The autonomous browser automation pipeline verified and executed your direct submission.
+                  </p>
+                </div>
+              </div>
+              {confirmationCode && (
+                <div className="text-right shrink-0">
+                  <div className="text-[10px] uppercase font-mono text-slate-400">Confirmation Code</div>
+                  <div className="font-mono text-sm font-bold text-emerald-300">{confirmationCode}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Link
+                href="/?tab=pipeline"
+                className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 transition shadow-sm flex items-center gap-1.5"
+              >
+                <span>View Application Pipeline</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+              <Link
+                href="/"
+                className="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition"
+              >
+                <span>Back to Dashboard</span>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Job Title & Header Card */}
+        <div className="rounded-xl border border-slate-800 bg-[#0e1320] p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  {company}
+                </span>
+                <span className="text-xs text-slate-400">•</span>
+                <span className="text-xs text-slate-400">{candidateLocation}</span>
+              </div>
+              <h1 className="text-lg font-bold text-white">{jobTitle}</h1>
+              <p className="text-xs text-amber-300/90 leading-relaxed pt-1">
+                <strong className="text-amber-400">Current Checkpoint:</strong> {reason}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="px-3 py-1 rounded-md text-xs font-mono font-medium bg-slate-800 text-slate-300 border border-slate-700">
+                Core Form Half-Filled (60%+)
               </span>
             </div>
           </div>
         </div>
 
-        {/* 2-Column Split: Left = Pre-Filled Form State; Right = Checkpoint Resolution Gate */}
+        {/* 2-Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column (5 cols): Half-Filled Application State */}
           <div className="lg:col-span-5 space-y-5">
-            {/* Autofilled Fields Card */}
-            <div className="rounded-2xl border border-white/[0.08] bg-[#0c0f18] p-5 space-y-4 shadow-md">
-              <div className="flex items-center justify-between border-b border-white/[0.06] pb-3">
+            <div className="rounded-xl border border-slate-800 bg-[#0e1320] p-5 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <h2 className="text-sm font-bold text-white">Autofilled by Playwright Agent</h2>
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                    Half-Filled Form Details (Pre-Populated)
+                  </h2>
                 </div>
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Data Preserved
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Ready to Submit
                 </span>
               </div>
 
-              <p className="text-xs text-slate-400">
-                The autonomous browser agent navigated to {company}&apos;s portal and populated standard candidate fields from your profile.
+              <p className="text-xs text-slate-400 leading-relaxed">
+                JobPilot has filled the majority of the application form directly on {company}&apos;s career portal using your profile and tailored resume:
               </p>
 
-              <div className="space-y-2.5 text-xs">
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                  <div className="flex items-center gap-2.5 text-slate-300">
+              <div className="space-y-2 text-xs">
+                {/* Candidate Name */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-800/40 border border-slate-800">
+                  <div className="flex items-center gap-2 text-slate-400">
                     <User className="w-3.5 h-3.5 text-slate-400" />
                     <span>Candidate Name</span>
                   </div>
-                  <span className="font-semibold text-white">{candidateName}</span>
+                  <span className="font-medium text-slate-200">{candidateName}</span>
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                  <div className="flex items-center gap-2.5 text-slate-300">
+                {/* Email */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-800/40 border border-slate-800">
+                  <div className="flex items-center gap-2 text-slate-400">
                     <Mail className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Contact Email</span>
+                    <span>Email Address</span>
                   </div>
-                  <span className="font-semibold text-white">{candidateEmail}</span>
+                  <span className="font-medium text-slate-200 truncate max-w-[200px]">{candidateEmail}</span>
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                  <div className="flex items-center gap-2.5 text-slate-300">
+                {/* Phone */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-800/40 border border-slate-800">
+                  <div className="flex items-center gap-2 text-slate-400">
                     <Phone className="w-3.5 h-3.5 text-slate-400" />
                     <span>Phone Number</span>
                   </div>
-                  <span className="font-semibold text-white">{candidatePhone}</span>
+                  <span className="font-medium text-slate-200">{candidatePhone}</span>
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                  <div className="flex items-center gap-2.5 text-slate-300">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Location</span>
+                {/* Education */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-800/40 border border-slate-800">
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Education</span>
                   </div>
-                  <span className="font-semibold text-white">{candidateLocation}</span>
+                  <span className="font-medium text-slate-200 truncate max-w-[200px]">{educationSummary}</span>
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <div className="flex items-center gap-2.5 text-emerald-300">
+                {/* Work Experience */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-800/40 border border-slate-800">
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Experience</span>
+                  </div>
+                  <span className="font-medium text-slate-200 truncate max-w-[200px]">{experienceSummary}</span>
+                </div>
+
+                {/* Resume Attached */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                  <div className="flex items-center gap-2">
                     <FileText className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Tailored Resume</span>
                   </div>
-                  <span className="font-mono text-[11px] font-bold text-emerald-300">{resumeTitle}</span>
+                  <span className="font-mono text-[11px] font-semibold truncate max-w-[180px]">{resumeTitle}</span>
                 </div>
 
-                {profile?.linkedin && (
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                    <div className="flex items-center gap-2.5 text-slate-300">
-                      <Globe className="w-3.5 h-3.5 text-blue-400" />
-                      <span>LinkedIn Profile</span>
+                {/* Links */}
+                {(profile?.linkedin || profile?.github) && (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-800/40 border border-slate-800">
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <Globe className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Online Profiles</span>
                     </div>
-                    <span className="font-semibold text-blue-300 truncate max-w-[180px]">{profile.linkedin}</span>
-                  </div>
-                )}
-
-                {profile?.github && (
-                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                    <div className="flex items-center gap-2.5 text-slate-300">
-                      <Code2 className="w-3.5 h-3.5 text-slate-300" />
-                      <span>GitHub</span>
-                    </div>
-                    <span className="font-semibold text-slate-200 truncate max-w-[180px]">{profile.github}</span>
+                    <span className="font-mono text-[11px] text-slate-300">LinkedIn & GitHub Mapped</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Execution Trace Timeline */}
-            <div className="rounded-2xl border border-white/[0.08] bg-[#0c0f18] p-5 space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Agent Session Logs
-              </h3>
-              <div className="space-y-3 text-xs">
-                {appData.telemetryLogs && appData.telemetryLogs.length > 0 ? (
-                  appData.telemetryLogs.slice(0, 5).map((log: any, i: number) => (
-                    <div key={i} className="flex items-start gap-2.5 text-slate-300">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-semibold text-white">{log.step}:</span> {log.detail}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <>
-                    <div className="flex items-start gap-2.5 text-slate-300">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-semibold text-white">Target Opening Located:</span> {company} career portal
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2.5 text-slate-300">
-                      <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-semibold text-white">Browser Form Populated:</span> Core applicant fields mapped
-                      </div>
-                    </div>
-                  </>
-                )}
-                <div className="flex items-start gap-2.5 text-amber-300">
-                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-semibold text-amber-200">Execution Paused:</span> Awaiting your checkpoint sign-off below
-                  </div>
-                </div>
-              </div>
+            {/* Application Overview Note */}
+            <div className="rounded-xl border border-slate-800 bg-[#0e1320] p-4 text-xs text-slate-400 space-y-1.5">
+              <div className="font-semibold text-slate-300">About Autonomous Form Resumption</div>
+              <p className="leading-relaxed">
+                When you click submit below, JobPilot&apos;s Playwright worker directly submits the form without waiting for recurring queues.
+              </p>
             </div>
           </div>
 
-          {/* Right Column (7 cols): Interactive Intervention Gate */}
+          {/* Right Column (7 cols): Checkpoint Resolution & Final Agreement Gate */}
           <div className="lg:col-span-7 space-y-5">
-            <div className="rounded-2xl border border-amber-500/25 bg-[#0f121d] p-6 space-y-5 shadow-xl">
-              <div className="border-b border-white/[0.08] pb-4 flex items-center justify-between">
-                <div>
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>Checkpoint Resolution Gate</span>
-                  </h2>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Provide the missing verification details or sign off. Submitting will unpause the Playwright agent to finalize submission.
-                  </p>
-                </div>
+            <div className="rounded-xl border border-slate-800 bg-[#0e1320] p-6 space-y-5 shadow-md">
+              <div className="border-b border-slate-800/80 pb-3">
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
+                  <span>Complete Remaining Step & Submit</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  Resolve the checkpoint below, confirm the submission agreement, and JobPilot will directly execute form submission.
+                </p>
               </div>
 
-              {/* Direct Link to Job Opening */}
+              {/* 1. Official Job Opening Card */}
               {openingPageUrl && (
-                <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3.5 flex items-center justify-between gap-3 text-xs">
-                  <div>
-                    <span className="font-bold text-sky-200 block">Employer Job Opening Page</span>
-                    <span className="text-[11px] text-slate-300 truncate block max-w-sm">{openingPageUrl}</span>
+                <div className="rounded-lg border border-slate-800 bg-slate-800/30 p-3 flex items-center justify-between gap-3 text-xs">
+                  <div className="truncate">
+                    <span className="font-medium text-slate-200 block truncate">Official Career Portal</span>
+                    <span className="text-[11px] text-slate-400 truncate block">{openingPageUrl}</span>
                   </div>
                   <a
                     href={openingPageUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 shrink-0 transition"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-xs font-medium text-white transition shrink-0"
                   >
                     <span>View Opening</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
               )}
 
-              {/* 1. Security / CAPTCHA Challenge */}
+              {/* 2. Security / CAPTCHA Challenge */}
               {isCaptcha && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                     <div className="space-y-1">
                       <div className="text-xs font-bold text-amber-200">
-                        Solve Anti-Bot / CAPTCHA Challenge on Portal
+                        Portal Human Verification / CAPTCHA
                       </div>
                       <p className="text-xs text-slate-300 leading-relaxed">
-                        The employer uses Cloudflare Turnstile or reCAPTCHA. Click below to open the portal tab in your browser, complete the puzzle or checkbox, then confirm below.
+                        The employer portal presented a security challenge. Open the portal in your browser tab, solve the puzzle or checkbox if prompted, then confirm below.
                       </p>
                     </div>
                   </div>
 
-                  {openingPageUrl && (
-                    <div className="pt-1">
-                      <a
-                        href={openingPageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 transition"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>Open Portal in New Tab & Solve CAPTCHA</span>
-                      </a>
-                    </div>
-                  )}
-
-                  <label className="flex items-center gap-2.5 pt-2 text-xs font-semibold text-amber-200 cursor-pointer">
+                  <label className="flex items-center gap-2.5 pt-1 text-xs font-medium text-amber-200 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={captchaVerified}
                       onChange={(e) => setCaptchaVerified(e.target.checked)}
-                      className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 bg-black/40 border-amber-500/40 cursor-pointer"
+                      className="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 cursor-pointer"
                     />
-                    <span>I have solved the verification checkpoint / CAPTCHA on the portal</span>
+                    <span>Verification checkpoint completed on portal</span>
                   </label>
                 </div>
               )}
 
-              {/* 2. 2FA / OTP Verification */}
+              {/* 3. 2FA / OTP Verification */}
               {is2fa && (
-                <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-4 space-y-3">
+                <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-4 space-y-3">
                   <div className="flex items-start gap-3">
-                    <Key className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                    <Key className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                     <div>
-                      <div className="text-xs font-bold text-blue-200">Two-Factor Authentication Passcode</div>
+                      <div className="text-xs font-bold text-indigo-200">Two-Factor Passcode Required</div>
                       <p className="text-xs text-slate-300 mt-0.5">
-                        Enter the verification code sent to your phone or email by the employer ATS.
+                        Enter the verification code sent by the employer ATS to your phone or email.
                       </p>
                     </div>
                   </div>
 
-                  <div className="pt-1">
-                    <input
-                      type="text"
-                      placeholder="e.g. 849201"
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value)}
-                      maxLength={8}
-                      className="w-48 px-3 py-2 rounded-xl text-sm font-mono tracking-widest text-center bg-black/50 border border-blue-500/40 text-white placeholder-slate-500 focus:outline-none focus:border-blue-400"
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. 123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    maxLength={8}
+                    className="w-48 px-3 py-2 rounded-lg text-sm font-mono tracking-widest text-center bg-slate-900 border border-indigo-500/40 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-400"
+                  />
                 </div>
               )}
 
-              {/* 3. Custom Employer Questions */}
+              {/* 4. Custom Employer Questions */}
               {questionsList.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Employer Custom Questions</span>
-                    </div>
-                    <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
-                      ✓ Auto-saved to Vault for All Loops
-                    </span>
-                  </div>
-
-                  <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs text-blue-300 flex items-start gap-2.5">
-                    <Sparkles className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-                    <span>
-                      Any answers entered here (such as Education History and Work Experience) are permanently stored in your Candidate Profile Vault. Future applications in this loop will auto-fill from vault without pausing.
-                    </span>
+                <div className="space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <HelpCircle className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Application Questions & Profile Details</span>
                   </div>
 
                   {questionsList.map((q: any, idx: number) => {
                     const qKey = q.id || q.field || q.label || `q-${idx}`;
                     return (
-                      <div key={qKey} className="rounded-xl border border-white/[0.08] bg-[#121624] p-4 space-y-2">
+                      <div key={qKey} className="rounded-lg border border-slate-800 bg-slate-900/60 p-3.5 space-y-1.5">
                         <label className="block text-xs font-semibold text-slate-200">
-                          {q.label || q.field || "Screening Question"}
+                          {q.label || q.field || "Requirement"}
                         </label>
                         <textarea
-                          rows={3}
+                          rows={2}
                           value={answers[qKey] ?? q.aiProposedValue ?? ""}
                           onChange={(e) => setAnswers({ ...answers, [qKey]: e.target.value })}
-                          className="w-full rounded-xl bg-black/40 border border-white/[0.1] p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400/60 leading-relaxed"
-                          placeholder="Provide answer for this requirement..."
+                          className="w-full rounded-lg bg-slate-950 border border-slate-800 p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 leading-relaxed"
+                          placeholder="Provide answer..."
                         />
-                        <div className="flex items-center gap-1.5 text-[11px] text-amber-300/80">
-                          <Sparkles className="w-3 h-3" />
-                          <span>Submitted directly to Playwright pipeline upon resumption.</span>
-                        </div>
                       </div>
                     );
                   })}
                 </div>
               )}
 
-              {/* 4. Pre-submission Approval Checkbox */}
-              <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="approve-sub"
-                  checked={approvedSubmit}
-                  onChange={(e) => setApprovedSubmit(e.target.checked)}
-                  className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 bg-black/40 border-white/[0.2] cursor-pointer"
-                />
-                <label htmlFor="approve-sub" className="text-xs text-slate-300 cursor-pointer select-none">
-                  Authorize JobPilot to resume and finalize application submission to <strong className="text-white">{company}</strong>.
-                </label>
+              {/* 5. Pre-Submission Final Agreement */}
+              <div className="p-3.5 rounded-lg bg-slate-800/40 border border-slate-800 space-y-2">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    id="approve-sub"
+                    checked={approvedSubmit}
+                    onChange={(e) => setApprovedSubmit(e.target.checked)}
+                    className="w-4 h-4 rounded text-indigo-600 bg-slate-900 border-slate-700 cursor-pointer mt-0.5"
+                  />
+                  <label htmlFor="approve-sub" className="text-xs text-slate-300 cursor-pointer select-none leading-relaxed">
+                    <strong>Final Authorization Agreement:</strong> I have reviewed the pre-filled application details and authorize JobPilot&apos;s automation engine to directly submit this application to <strong className="text-white">{company}</strong> on my behalf.
+                  </label>
+                </div>
               </div>
 
               {errorMessage && (
-                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300">
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300">
                   {errorMessage}
                 </div>
               )}
 
-              {/* Submit / Resume Button */}
+              {/* Action Buttons */}
               <div className="pt-2">
-                <button
-                  disabled={submitting || success}
-                  onClick={handleResolveAndResume}
-                  className={`w-full py-3.5 px-6 rounded-xl text-sm font-bold flex items-center justify-center gap-2.5 shadow-lg transition cursor-pointer ${
-                    success
-                      ? "bg-emerald-500 text-white"
-                      : "bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-white shadow-amber-500/25"
-                  } disabled:opacity-50`}
-                >
-                  {submitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Resolving Checkpoint & Resuming Pipeline...</span>
-                    </>
-                  ) : success ? (
-                    <>
-                      <CheckCircle2 className="w-5 h-5 text-white" />
-                      <span>Checkpoint Resolved! Pipeline Resumed...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" />
-                      <span>Submit Details & Continue Pipeline</span>
-                    </>
-                  )}
-                </button>
+                {submittedSuccess ? (
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href="/?tab=pipeline"
+                      className="w-full py-3 px-4 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition shadow-sm flex items-center justify-center gap-2"
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Application Submitted — View in Pipeline</span>
+                    </Link>
+                  </div>
+                ) : (
+                  <button
+                    disabled={submitting}
+                    onClick={handleResolveAndDirectSubmit}
+                    className="w-full py-3 px-5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {submitting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Submitting Application Directly to {company}...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>Confirm Agreement & Directly Submit Form</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>

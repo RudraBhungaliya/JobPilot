@@ -43,21 +43,51 @@ class ResumeUploadTool {
           throw new Error("Resume file URL or buffer is missing.");
         }
 
-        const input = this._locator(page, 'input[type="file"]').first();
+        let uploadPayload: any = null;
 
         if (resume.buffer) {
-          await input.setInputFiles({
+          uploadPayload = {
             name: resume.originalName || "resume.pdf",
             mimeType: resume.contentType || "application/pdf",
             buffer: Buffer.from(resume.buffer),
-          });
-        } else {
-          await input.setInputFiles(resume.fileUrl);
+          };
+        } else if (resume.fileUrl) {
+          const { existsSync, readFileSync } = await import("node:fs");
+          if (existsSync(resume.fileUrl)) {
+            uploadPayload = resume.fileUrl;
+          } else if (/^https?:\/\//i.test(resume.fileUrl)) {
+            try {
+              const res = await fetch(resume.fileUrl);
+              if (res.ok) {
+                const arrBuf = await res.arrayBuffer();
+                uploadPayload = {
+                  name: resume.originalName || "resume.pdf",
+                  mimeType: resume.contentType || "application/pdf",
+                  buffer: Buffer.from(arrBuf),
+                };
+              }
+            } catch {
+              // Remote file fetch error
+            }
+          }
+
+          if (!uploadPayload) {
+            throw new Error(`Genuine resume file is missing or unreadable (${resume.originalName || "resume file"}). Please attach a valid PDF or DOCX resume before submitting.`);
+          }
+        }
+
+        if (uploadPayload) {
+          await inputs.first().setInputFiles(uploadPayload);
         }
         return;
-      } catch (err) {
+      } catch (err: any) {
         lastError = err;
-        if (attempt < maxAttempts - 1) await page.waitForTimeout(500);
+        if (err.message && err.message.includes("Genuine resume file is missing")) {
+          throw err;
+        }
+        if (attempt < maxAttempts - 1 && typeof page.waitForTimeout === "function") {
+          await page.waitForTimeout(500);
+        }
       }
     }
     throw lastError instanceof Error ? lastError : new Error("Resume upload failed.");

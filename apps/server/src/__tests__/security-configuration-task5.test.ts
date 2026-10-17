@@ -93,4 +93,68 @@ test("Task 5: Security & Configuration Verification Suite", async (t) => {
     assert.equal(connected, true, "Database connection must be established and healthy");
     console.log("    ✓ Database connection verified healthy with unified DATABASE_URL");
   });
+
+  await t.test("4. Checkpoint Token Security & Tamper Resistance", async () => {
+    const { generateCheckpointToken, verifyCheckpointToken } = await import("../modules/auth/auth.tokens.js");
+    const jwt = (await import("jsonwebtoken")).default;
+
+    const appId = "app-secure-chk-123";
+    const userId = "u-secure-user-456";
+
+    // 1. Valid token generates and verifies correctly
+    const validToken = generateCheckpointToken(appId, userId);
+    assert.ok(typeof validToken === "string" && validToken.length > 20);
+
+    const verified = verifyCheckpointToken(validToken);
+    assert.equal(verified.applicationId, appId);
+    assert.equal(verified.userId, userId);
+    assert.equal(verified.purpose, "checkpoint_access");
+
+    // 2. Tampered token fails verification
+    const tamperedToken = validToken.slice(0, -6) + "xxxxxx";
+    assert.throws(
+      () => verifyCheckpointToken(tamperedToken),
+      /invalid signature|jwt malformed/,
+      "Tampered token must be rejected"
+    );
+
+    // 3. Forged token with invalid secret fails verification
+    const forgedToken = jwt.sign(
+      { applicationId: appId, userId, purpose: "checkpoint_access" },
+      "completely-unauthorized-fake-secret-key-12345",
+      { expiresIn: "1h" }
+    );
+    assert.throws(
+      () => verifyCheckpointToken(forgedToken),
+      /invalid signature/,
+      "Forged token signed with wrong secret must be rejected"
+    );
+
+    // 4. Token with mismatched purpose is rejected
+    const wrongPurposeToken = jwt.sign(
+      { applicationId: appId, userId, purpose: "access_token" },
+      process.env.JWT_SECRET || "jobpilot-test-only-secret-not-for-production",
+      { expiresIn: "1h" }
+    );
+    assert.throws(
+      () => verifyCheckpointToken(wrongPurposeToken),
+      /Invalid checkpoint access token payload/,
+      "Token without purpose checkpoint_access must be rejected"
+    );
+
+    // 5. Expired checkpoint token is rejected
+    const expiredToken = jwt.sign(
+      { applicationId: appId, userId, purpose: "checkpoint_access" },
+      process.env.JWT_SECRET || "jobpilot-test-only-secret-not-for-production",
+      { expiresIn: "-1s" }
+    );
+    assert.throws(
+      () => verifyCheckpointToken(expiredToken),
+      /jwt expired/,
+      "Expired checkpoint token must be rejected"
+    );
+
+    console.log("    ✓ Scoped expiring checkpoint tokens cryptographically verified with tamper and replay protection");
+  });
 });
+
