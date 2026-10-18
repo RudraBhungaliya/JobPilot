@@ -62,7 +62,7 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Setup Database Schema
         env:
