@@ -8,3 +8,7 @@ coverage
 .turbo
 pnpm-lock.yaml
 .DS_Store
+
+# Local store & cache
+.pnpm-store/
+scratch/
