@@ -6,7 +6,6 @@ dist
 build
 coverage
 .turbo
-pnpm-lock.yaml
 .DS_Store
 
 # Local store & cache
