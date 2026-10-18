@@ -58,7 +58,7 @@ jobs:
           DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
         run: |
           pnpm --filter @jobpilot/database exec prisma generate
-          pnpm --filter @jobpilot/database exec prisma db push --skip-generate
+          pnpm --filter @jobpilot/database exec prisma db push
 
       - name: Build Monorepo (Database, Server & Web)
         env:
