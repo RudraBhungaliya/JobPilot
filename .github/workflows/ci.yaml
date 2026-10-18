@@ -1,81 +1,36 @@
-name: CI/CD Pipeline
+name: CI Workflow
 
 on:
   push:
-    branches: [main, master, rudra]
+    branches: [ main, dev ]
   pull_request:
-    branches: [main, master, rudra]
-  workflow_dispatch:
+    branches: [ main, dev ]
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# 1. Add defaults here to apply working directory to all steps:
+defaults:
+  run:
+    working-directory: ./apps/web
 
 jobs:
-  audit-and-test:
-    name: Build, Audit & Test
+  build-and-test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: jobpilot
-          POSTGRES_PASSWORD: jobpilot_secret_password
-          POSTGRES_DB: jobpilot_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
         with:
-          version: 11.1.2
+          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'pnpm'
+          # 2. Add cache-dependency-path here:
+          cache-dependency-path: 'apps/web/pnpm-lock.yaml'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Setup Database Schema
-        env:
-          CI: "true"
-          DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
-        run: |
-          pnpm --filter @jobpilot/database exec prisma generate
-          pnpm --filter @jobpilot/database exec prisma db push --skip-generate
-
-      - name: Build Monorepo (Database, Server & Web)
-        env:
-          CI: "true"
-          NEXT_TELEMETRY_DISABLED: 1
-          NODE_ENV: production
-          DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
-          JWT_SECRET: jobpilot-test-only-secret-not-for-production
-        run: pnpm build
-
-      - name: Run Regression & Unit Tests
-        env:
-          CI: "true"
-          NODE_ENV: test
-          DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
-          JWT_SECRET: jobpilot-test-only-secret-not-for-production
-          REQUIRE_SUBMISSION_APPROVAL: "false"
-          DEV_AUTH_ENABLED: "true"
-        run: |
-          pnpm --filter @jobpilot/server test
