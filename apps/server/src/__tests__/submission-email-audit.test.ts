@@ -130,7 +130,6 @@ test("Submission Email Hook & Idempotency Final Audit Suite", async (t) => {
             await prisma.applicationQueue.deleteMany({ where: { applicationId: testApp.id } }).catch(() => {});
             await prisma.application.deleteMany({ where: { id: testApp.id } }).catch(() => {});
         }
-        await prisma.$disconnect();
     });
 
     await t.test("1. Idempotency: Duplicate transitions & queue retries do NOT send duplicate notification emails", async () => {

@@ -2,10 +2,10 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import type { Browser, BrowserContext, Page } from "playwright";
 
-process.env.DATABASE_URL = "postgres://test:test@localhost/test";
-process.env.JWT_SECRET = "test-jwt-secret-for-testing-only";
-process.env.BROWSER_POOL_MAX = "4";
-process.env.NODE_ENV = "test";
+process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://test:test@localhost/test";
+process.env.JWT_SECRET = process.env.JWT_SECRET || "test-jwt-secret-for-testing-only";
+process.env.BROWSER_POOL_MAX = process.env.BROWSER_POOL_MAX || "4";
+process.env.NODE_ENV = process.env.NODE_ENV || "test";
 
 const { resetEnvCacheForTesting } = await import("../config/env.js");
 const { BrowserPool } = await import("../modules/browser/browser.manager.js");

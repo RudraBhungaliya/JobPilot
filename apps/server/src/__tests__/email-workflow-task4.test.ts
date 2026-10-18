@@ -40,9 +40,7 @@ test("Task 4: Email & Human-Intervention Workflow Suite", async (t) => {
     assert.ok(testApp, "Test application must exist in database");
   });
 
-  t.after(async () => {
-    await prisma.$disconnect();
-  });
+
 
   await t.test("1. Live Resend delivery verification with genuine recipient, sender, and checkpoint URL", async () => {
     const targetRecipient = "rud28b@gmail.com";

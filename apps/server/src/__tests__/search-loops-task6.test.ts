@@ -30,7 +30,6 @@ test("Task 6: Search Loops & Scheduling Verification Suite", async (t) => {
     await prisma.job.deleteMany({ where: { userId: { in: [userIdA, userIdB] } } });
     await prisma.company.deleteMany({ where: { userId: { in: [userIdA, userIdB] } } });
     await prisma.user.deleteMany({ where: { id: { in: [userIdA, userIdB] } } });
-    await prisma.$disconnect();
   });
 
   let createdLoop: any = null;
