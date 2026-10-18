@@ -166,4 +166,64 @@ export abstract class BaseATSAdapter {
 
         return tailoring.questionAnswers;
     }
+
+    /**
+     * Shared Playwright form-fill + submit + employer confirmation check.
+     */
+    async runFormPipeline(page: Page, context: ATSExecutionContext): Promise<ATSExecutionResult> {
+        const { default: formTool } = await import("../../agent/tools/form.tool.js");
+        const result = await formTool.completeApplication(page, {
+            userId: context.userId,
+            resumeId: context.resumeId,
+            resume: {
+                fileUrl: context.resumeFilePath,
+                originalName: "resume.pdf",
+            },
+        });
+
+        if (result.humanVerification.detected) {
+            return {
+                success: false,
+                status: "WAITING_FOR_USER",
+                requiresHumanVerification: true,
+                verificationType: result.humanVerification.type,
+                failureReason: result.humanVerification.message || result.reason,
+                metadata: { url: context.url, ats: this.providerName },
+            };
+        }
+
+        if (result.missingFields.length > 0) {
+            return {
+                success: false,
+                status: "WAITING_FOR_USER",
+                failureReason: result.reason || "Required candidate fields could not be filled from profile.",
+                metadata: {
+                    url: context.url,
+                    ats: this.providerName,
+                    missingFields: result.missingFields.map((m) => m.field.label || m.field.name),
+                },
+            };
+        }
+
+        if (result.success) {
+            return {
+                success: true,
+                status: "SUBMITTED",
+                confirmationId: result.confirmationId,
+                metadata: {
+                    ats: this.providerName,
+                    reason: result.reason,
+                    filledCount: result.filledCount,
+                    confirmationUrl: result.confirmationUrl,
+                },
+            };
+        }
+
+        return {
+            success: false,
+            status: "FAILED",
+            failureReason: result.reason || "Application submission could not be verified on external career site.",
+            metadata: { ats: this.providerName, filledCount: result.filledCount },
+        };
+    }
 }

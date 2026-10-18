@@ -1,8 +1,12 @@
-import type { Page } from "playwright";
+import type { Frame, Page } from "playwright";
 
 import candidateTool from "../candidate/candidate.tool.js";
 import candidateService from "../candidate/candidate.service.js";
 import formQuestionAIService from "../../ai/form-question-ai.service.js";
+import resumeUploadTool from "./resume-upload.tool.js";
+import submissionVerificationTool from "./submission-verification.tool.js";
+
+export type FormPage = Page | Frame;
 
 export interface FormField {
     selector: string;
@@ -20,6 +24,53 @@ export interface FormFillResult {
     reason?: string;
 }
 
+export interface CompleteApplicationOptions {
+    userId: string;
+    resumeId?: string;
+    resume?: {
+        fileUrl?: string;
+        originalName?: string;
+        buffer?: Uint8Array;
+        contentType?: string;
+    };
+    maxSteps?: number;
+}
+
+export interface CompleteApplicationResult {
+    success: boolean;
+    confirmationId?: string;
+    confirmationUrl?: string;
+    reason?: string;
+    filledCount: number;
+    fillResults: FormFillResult[];
+    missingFields: { field: FormField; reason: string }[];
+    humanVerification: { detected: boolean; type?: string; message?: string };
+}
+
+type HumanVerificationResult = CompleteApplicationResult["humanVerification"];
+
+const SUBMIT_SELECTOR =
+    'button[type="submit"], input[type="submit"], ' +
+    'button:has-text("Submit Application"), button:has-text("Submit Your Application"), ' +
+    'button:has-text("Send Application"), button:has-text("Submit"), ' +
+    'input[value="Submit Application" i], input[value="Submit" i], ' +
+    '[data-automation-id="submit-button"], [data-qa="btn-submit"], #submit_app';
+
+const NEXT_SELECTOR =
+    'button:has-text("Next"), button:has-text("Continue"), button:has-text("Save and Continue"), ' +
+    'button:has-text("Save & Continue"), button:has-text("Next Step"), ' +
+    'input[value="Next" i], input[value="Continue" i], ' +
+    '[data-automation-id="bottom-navigation-next-button"], [data-automation-id="pageFooterNextButton"]';
+
+const APPLY_SELECTOR =
+    'a:has-text("Apply Now"), button:has-text("Apply Now"), ' +
+    'a:has-text("Apply for this job"), button:has-text("Apply for this job"), ' +
+    'a:has-text("Apply for this role"), button:has-text("Apply for this role"), ' +
+    'a:has-text("Easy Apply"), button:has-text("Easy Apply"), ' +
+    'button:has-text("Apply Manually"), [data-automation-id="applyManually"], ' +
+    'a[href*="apply" i], button[data-automation-id*="apply" i], ' +
+    'a:has-text("Apply"), button:has-text("Apply")';
+
 class FormTool {
     /**
      * Navigates to the job URL, following redirects and clicking 'Apply' buttons if on a landing page.
@@ -30,7 +81,6 @@ class FormTool {
     ): Promise<{ activePage: Page; redirectedUrl: string }> {
         let activePage = page;
 
-        // Listen for popups in case "Apply" opens a new tab
         const popupPromise = page.context().waitForEvent("page", { timeout: 3000 }).catch(() => null);
 
         await activePage.goto(targetUrl, {
@@ -38,8 +88,8 @@ class FormTool {
             timeout: 35000,
         });
 
-        // Give redirects a moment to settle
         await activePage.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
+        await this.dismissInterstitials(activePage);
 
         const popup = await popupPromise;
         if (popup) {
@@ -47,19 +97,10 @@ class FormTool {
             activePage = popup;
         }
 
-        // Check if application form fields are already present
-        const currentInputs = await activePage.locator("input:not([type='hidden']), textarea, select").count();
+        const currentInputs = await this.countFillableInputs(activePage);
 
-        // If no application inputs exist yet, we might be on a job details landing page with an 'Apply' button
         if (currentInputs < 2) {
-            const applyButtons = activePage.locator(
-                'a:has-text("Apply Now"), button:has-text("Apply Now"), ' +
-                'a:has-text("Apply for this job"), button:has-text("Apply for this job"), ' +
-                'a:has-text("Easy Apply"), button:has-text("Easy Apply"), ' +
-                'a[href*="apply" i], button[data-automation-id*="apply" i], ' +
-                'a:has-text("Apply"), button:has-text("Apply")'
-            );
-
+            const applyButtons = activePage.locator(APPLY_SELECTOR);
             const count = await applyButtons.count();
             if (count > 0) {
                 const firstApply = applyButtons.first();
@@ -68,6 +109,7 @@ class FormTool {
                 try {
                     await firstApply.click({ timeout: 5000 });
                     await activePage.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+                    await this.dismissInterstitials(activePage);
 
                     const applyPopup = await popupOnApply;
                     if (applyPopup) {
@@ -86,17 +128,60 @@ class FormTool {
         };
     }
 
-    async detectFields(
-        page: Page,
-    ): Promise<FormField[]> {
+    async dismissInterstitials(page: Page): Promise<void> {
+        const banners = page.locator(
+            'button:has-text("Accept all"), button:has-text("Accept All"), button:has-text("Accept cookies"), ' +
+            'button:has-text("I Accept"), button:has-text("Agree"), button:has-text("Got it"), ' +
+            '#onetrust-accept-btn-handler, [id*="cookie"] button:has-text("Accept")',
+        );
+        if (await banners.first().isVisible().catch(() => false)) {
+            await banners.first().click({ timeout: 1500 }).catch(() => {});
+        }
+    }
+
+    async resolveFormRoot(page: Page): Promise<FormPage> {
+        const iframeSelectors = [
+            "#grnhse_iframe",
+            'iframe[id*="grnhse"]',
+            'iframe[src*="greenhouse"]',
+            'iframe[src*="lever.co"]',
+            'iframe[src*="ashbyhq"]',
+            'iframe[src*="myworkday"]',
+            'iframe[title*="application" i]',
+            'iframe[name*="application" i]',
+        ];
+
+        for (const sel of iframeSelectors) {
+            try {
+                const handle = await page.$(sel);
+                if (!handle) continue;
+                const frame = await handle.contentFrame();
+                if (!frame) continue;
+                const count = await frame.locator("input:not([type='hidden']), textarea, select").count().catch(() => 0);
+                if (count > 0) return frame;
+            } catch {
+                // try next iframe
+            }
+        }
+
+        return page;
+    }
+
+    async detectFields(page: FormPage): Promise<FormField[]> {
         const fields = await page
-            .locator("input, textarea, select")
+            .locator("input, textarea, select, [contenteditable='true'], [role='combobox']")
             .evaluateAll((elements) =>
                 elements.map((element) => {
                     const input = element as HTMLInputElement;
                     const id = input.id;
                     const name = input.name || input.getAttribute("aria-label") || "";
-                    const type = input.type || input.tagName.toLowerCase();
+                    const role = input.getAttribute("role") || "";
+                    const isContentEditable = input.getAttribute("contenteditable") === "true";
+                    const type = isContentEditable
+                        ? "contenteditable"
+                        : role === "combobox"
+                          ? "combobox"
+                          : input.type || input.tagName.toLowerCase();
 
                     let label = "";
                     if (id) {
@@ -118,7 +203,11 @@ class FormTool {
                             ? `#${CSS.escape(id)}`
                             : name
                               ? `${input.tagName.toLowerCase()}[name="${CSS.escape(name)}"]`
-                              : input.tagName.toLowerCase(),
+                              : isContentEditable
+                                ? '[contenteditable="true"]'
+                                : role === "combobox"
+                                  ? '[role="combobox"]'
+                                  : input.tagName.toLowerCase(),
                         name,
                         type,
                         label: label.trim().replace(/\s+/g, " "),
@@ -127,11 +216,14 @@ class FormTool {
                 }),
             );
 
-        return fields;
+        return fields.filter((field) => {
+            const type = field.type.toLowerCase();
+            return type !== "hidden" && type !== "submit" && type !== "button" && type !== "reset" && type !== "image";
+        });
     }
 
     async fillFields(
-        page: Page,
+        page: FormPage,
         fields: FormField[],
         userId: string,
         resumeId?: string,
@@ -145,10 +237,13 @@ class FormTool {
         const resumeText = profileContext.resumeText || undefined;
 
         for (const field of fields) {
+            const type = field.type.toLowerCase();
             if (
-                field.type === "hidden" ||
-                field.type === "submit" ||
-                field.type === "button"
+                type === "hidden" ||
+                type === "submit" ||
+                type === "button" ||
+                type === "file" ||
+                type === "password"
             ) {
                 continue;
             }
@@ -160,6 +255,17 @@ class FormTool {
                     field.label,
                     resumeId,
                 );
+
+            if (!answer.value) {
+                const consentValue = this.defaultConsentValue(field);
+                if (consentValue) {
+                    answer = {
+                        value: consentValue,
+                        source: "PROFILE",
+                        confidence: "HIGH",
+                    };
+                }
+            }
 
             if (
                 !answer.value &&
@@ -209,21 +315,17 @@ class FormTool {
                 ).first();
 
             try {
-                if (
-                    field.type === "checkbox"
-                ) {
+                if (type === "checkbox") {
                     const value = answer.value.toLowerCase();
                     const checked =
                         value === "true" ||
                         value === "yes" ||
                         value === "1" ||
-                        value === "on";
+                        value === "on" ||
+                        value === "agree";
 
                     await locator.setChecked(checked).catch(() => locator.click().catch(() => {}));
-                } else if (
-                    field.type === "radio"
-                ) {
-                    // Look for the specific radio matching this answer
+                } else if (type === "radio") {
                     const radioVal = answer.value.toLowerCase();
                     const groupRadios = page.locator(`input[type="radio"][name="${CSS.escape(field.name)}"]`);
                     const radioCount = await groupRadios.count().catch(() => 0);
@@ -242,10 +344,7 @@ class FormTool {
                     if (!checkedOne) {
                         await locator.check().catch(() => locator.click().catch(() => {}));
                     }
-                } else if (
-                    field.type === "select"
-                ) {
-                    // Try by label, then value, then partial option text
+                } else if (type === "select") {
                     let selected = false;
                     try {
                         await locator.selectOption({ label: answer.value });
@@ -255,7 +354,6 @@ class FormTool {
                             await locator.selectOption({ value: answer.value });
                             selected = true;
                         } catch {
-                            // Find option containing the answer string
                             const options = await locator.locator("option").all();
                             for (const opt of options) {
                                 const text = (await opt.innerText()).toLowerCase();
@@ -270,9 +368,28 @@ class FormTool {
                             }
                         }
                     }
+                    if (!selected) {
+                        throw new Error("No matching select option.");
+                    }
+                } else if (type === "combobox") {
+                    await locator.click({ timeout: 2000 }).catch(() => {});
+                    const option = page.getByRole("option", { name: new RegExp(answer.value, "i") }).first();
+                    if (await option.isVisible().catch(() => false)) {
+                        await option.click();
+                    } else {
+                        await locator.fill(answer.value).catch(async () => {
+                            await locator.pressSequentially(answer.value).catch(() => {});
+                        });
+                    }
+                } else if (type === "contenteditable") {
+                    await locator.click().catch(() => {});
+                    await locator.fill(answer.value).catch(async () => {
+                        await locator.evaluate((el, value) => {
+                            el.textContent = value;
+                        }, answer.value);
+                    });
                 } else {
                     await locator.fill(answer.value).catch(async () => {
-                        // Fallback type
                         await locator.click().catch(() => {});
                         await locator.pressSequentially(answer.value).catch(() => {});
                     });
@@ -324,7 +441,6 @@ class FormTool {
             }
         }
 
-        // Check for 2FA / OTP verification inputs
         try {
             const verificationInputs = page.locator(
                 'input[name*="otp" i], input[name*="2fa" i], input[name*="mfa" i], input[name*="passcode" i], input[name*="pin" i], input[name*="verification" i], input[autocomplete="one-time-code"], [data-testid*="otp" i], [data-testid*="2fa" i]'
@@ -340,7 +456,6 @@ class FormTool {
             // Ignore
         }
 
-        // Check for Email Verification on page
         try {
             const emailVerificationSelectors = [
                 'iframe[src*="email-verify" i]',
@@ -361,7 +476,6 @@ class FormTool {
             // Ignore
         }
 
-        // Check page body text for human challenge indicators
         try {
             const bodyText = (await page.locator("body").innerText()).toLowerCase();
             if (
@@ -420,12 +534,20 @@ class FormTool {
         const missing: { field: FormField; reason: string }[] = [];
 
         for (const field of fields) {
+            const type = field.type.toLowerCase();
+            if (type === "file" || type === "hidden" || type === "submit" || type === "button") {
+                continue;
+            }
+
             const result = fillResults.find(
                 (r) => r.selector === field.selector,
             );
 
             if (!result || !result.filled) {
                 const label = (field.label || field.name).toLowerCase();
+                if (this.defaultConsentValue(field)) {
+                    continue;
+                }
                 const isCustomQuestion =
                     label.includes("why") ||
                     label.includes("tell us") ||
@@ -450,29 +572,174 @@ class FormTool {
         return missing;
     }
 
-    async submit(
-        page: Page,
-    ): Promise<void> {
-        const submit = page.locator(
-            'button[type="submit"], input[type="submit"]',
-        );
-
-        const count =
-            await submit.count();
+    async submit(page: FormPage): Promise<void> {
+        const submit = page.locator(SUBMIT_SELECTOR);
+        const count = await submit.count();
 
         if (count === 0) {
-            throw new Error(
-                "Application submit button not found.",
-            );
+            const roleSubmit = page.getByRole("button", { name: /submit|apply now|send application/i });
+            if ((await roleSubmit.count()) === 0) {
+                throw new Error("Application submit button not found.");
+            }
+            await roleSubmit.first().click();
+        } else {
+            await submit.first().click();
         }
 
-        await submit
-            .first()
-            .click();
+        if ("waitForLoadState" in page) {
+            await (page as Page).waitForLoadState("domcontentloaded").catch(() => {});
+        }
+    }
 
-        await page.waitForLoadState(
-            "domcontentloaded",
-        ).catch(() => {});
+    async completeApplication(
+        page: Page,
+        options: CompleteApplicationOptions,
+    ): Promise<CompleteApplicationResult> {
+        const maxSteps = options.maxSteps ?? 8;
+        const allFillResults: FormFillResult[] = [];
+        let lastMissing: { field: FormField; reason: string }[] = [];
+
+        await this.dismissInterstitials(page);
+
+        for (let step = 0; step < maxSteps; step++) {
+            const humanVerification: HumanVerificationResult =
+                await this.detectHumanVerification(page).catch(
+                    (): HumanVerificationResult => ({ detected: false }),
+                );
+            if (humanVerification.detected) {
+                return {
+                    success: false,
+                    filledCount: allFillResults.filter((r) => r.filled).length,
+                    fillResults: allFillResults,
+                    missingFields: lastMissing,
+                    humanVerification,
+                    reason: humanVerification.message || "Human verification required.",
+                };
+            }
+
+            const root = await this.resolveFormRoot(page);
+            const fields = await this.detectFields(root);
+            const fillResults = await this.fillFields(root, fields, options.userId, options.resumeId);
+            allFillResults.push(...fillResults);
+            lastMissing = this.detectOutsiderRequiredFields(fields, fillResults);
+
+            if (options.resume?.fileUrl || options.resume?.buffer) {
+                await resumeUploadTool.upload(root as Page, {
+                    fileUrl: options.resume.fileUrl || "",
+                    originalName: options.resume.originalName || "resume.pdf",
+                    buffer: options.resume.buffer,
+                    contentType: options.resume.contentType,
+                }).catch(() => {});
+            }
+
+            const nextBtn = root.locator(NEXT_SELECTOR).first();
+            const submitBtn = root.locator(SUBMIT_SELECTOR).first();
+            const hasNext = await nextBtn.isVisible().catch(() => false);
+            const hasSubmit = await submitBtn.isVisible().catch(() => false);
+
+            if (hasNext && (!hasSubmit || step < maxSteps - 1) && step < maxSteps - 1) {
+                const nextLooksLikeSubmit = /submit|apply/i.test((await nextBtn.innerText().catch(() => "")) || "");
+                if (!nextLooksLikeSubmit) {
+                    await nextBtn.click().catch(() => {});
+                    if ("waitForLoadState" in page) {
+                        await page.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+                    }
+                    if (typeof page.waitForTimeout === "function") {
+                        await page.waitForTimeout(600);
+                    }
+                    continue;
+                }
+            }
+
+            if (lastMissing.length > 0 && hasSubmit) {
+                return {
+                    success: false,
+                    filledCount: allFillResults.filter((r) => r.filled).length,
+                    fillResults: allFillResults,
+                    missingFields: lastMissing,
+                    humanVerification: { detected: false },
+                    reason: `Missing candidate info: ${lastMissing.map((m) => m.field.label || m.field.name).join(", ")}`,
+                };
+            }
+
+            if (hasSubmit || hasNext) {
+                try {
+                    await this.submit(root);
+                } catch {
+                    if (hasNext) {
+                        await nextBtn.click().catch(() => {});
+                    } else {
+                        throw new Error("Application submit button not found.");
+                    }
+                }
+
+                if ("waitForLoadState" in page) {
+                    await page.waitForLoadState("domcontentloaded", { timeout: 12000 }).catch(() => {});
+                }
+                if (typeof page.waitForTimeout === "function") {
+                    await page.waitForTimeout(800);
+                }
+
+                const postHv: HumanVerificationResult =
+                    await this.detectHumanVerification(page).catch(
+                        (): HumanVerificationResult => ({ detected: false }),
+                    );
+                if (postHv.detected) {
+                    return {
+                        success: false,
+                        filledCount: allFillResults.filter((r) => r.filled).length,
+                        fillResults: allFillResults,
+                        missingFields: lastMissing,
+                        humanVerification: postHv,
+                        reason: postHv.message || "Human verification required after submit.",
+                    };
+                }
+
+                const verification = await submissionVerificationTool.verify(page);
+                return {
+                    success: verification.verified,
+                    confirmationId: verification.confirmationId,
+                    confirmationUrl: verification.confirmationUrl,
+                    reason: verification.reason,
+                    filledCount: allFillResults.filter((r) => r.filled).length,
+                    fillResults: allFillResults,
+                    missingFields: lastMissing,
+                    humanVerification: { detected: false },
+                };
+            }
+        }
+
+        const verification = await submissionVerificationTool.verify(page).catch(() => ({
+            verified: false,
+            reason: "Application submission could not be verified.",
+            confirmationUrl: page.url(),
+            confirmationId: undefined as string | undefined,
+        }));
+
+        return {
+            success: verification.verified,
+            confirmationId: verification.confirmationId,
+            confirmationUrl: verification.confirmationUrl,
+            reason: verification.reason || "No submit control was found after filling the application form.",
+            filledCount: allFillResults.filter((r) => r.filled).length,
+            fillResults: allFillResults,
+            missingFields: lastMissing,
+            humanVerification: { detected: false },
+        };
+    }
+
+    private async countFillableInputs(page: FormPage): Promise<number> {
+        return page.locator("input:not([type='hidden']), textarea, select").count().catch(() => 0);
+    }
+
+    private defaultConsentValue(field: FormField): string | null {
+        const label = `${field.label} ${field.name}`.toLowerCase();
+        const type = field.type.toLowerCase();
+        if (type !== "checkbox" && type !== "radio") return null;
+        if (/terms|agree|consent|certif|confirm|privac|acknowledg/i.test(label)) return "yes";
+        if (/authoriz|legally|eligib|work in/i.test(label)) return "yes";
+        if (/18 or older|age 18|legal age/i.test(label)) return "yes";
+        return null;
     }
 }
 

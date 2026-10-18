@@ -7,7 +7,9 @@
     "dev": "pnpm --filter @jobpilot/web dev",
     "dev:server": "pnpm --filter @jobpilot/server dev",
     "dev:all": "pnpm --parallel --filter @jobpilot/server --filter @jobpilot/web dev",
-    "build": "pnpm --filter @jobpilot/web build",
+    "build": "pnpm db:generate && pnpm --filter @jobpilot/server build && pnpm --filter @jobpilot/web build",
+    "build:server": "pnpm db:generate && pnpm --filter @jobpilot/server build",
+    "build:web": "pnpm --filter @jobpilot/web build",
     "test": "pnpm --filter @jobpilot/server test",
     "db:push": "pnpm --filter @jobpilot/database exec prisma db push",
     "db:generate": "pnpm --filter @jobpilot/database exec prisma generate",
@@ -16,13 +18,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devEngines": {
-    "packageManager": {
-      "name": "pnpm",
-      "version": "^11.1.2",
-      "onFail": "download"
-    }
-  },
+  "packageManager": "pnpm@11.1.2",
   "type": "module",
   "dependencies": {
     "playwright": "^1.62.1"

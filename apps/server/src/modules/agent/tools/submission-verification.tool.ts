@@ -4,6 +4,7 @@ export interface SubmissionVerificationResult {
   verified: boolean;
   reason: string;
   confirmationUrl: string;
+  confirmationId?: string;
 }
 
 class SubmissionVerificationTool {
@@ -45,11 +46,13 @@ class SubmissionVerificationTool {
           text.includes("confirmation")
         )
       ) {
+        const confirmationId = await this.extractConfirmationId(page, text);
         return {
           verified: true,
           reason:
             "Application confirmation detected.",
           confirmationUrl,
+          confirmationId,
         };
       }
     }
@@ -64,9 +67,16 @@ class SubmissionVerificationTool {
       "application has been submitted",
       "thank you for applying",
       "thanks for applying",
+      "thanks for your application",
+      "thank you for your application",
+      "we've received your application",
+      "we have received your application",
+      "we received your application",
       "your application was submitted",
       "your application has been received",
       "successfully submitted",
+      "application complete",
+      "you applied to",
     ];
 
     const matchedSuccessMessage =
@@ -79,10 +89,19 @@ class SubmissionVerificationTool {
         verified: true,
         reason: `Confirmation text detected: "${matchedSuccessMessage}".`,
         confirmationUrl,
+        confirmationId: this.extractConfirmationIdFromText(bodyText) || this.extractConfirmationIdFromUrl(confirmationUrl),
       };
     }
 
-    // TR-14.3: Already applied detection
+    if (/\/(thanks|thank-you|confirmation|success|submitted|complete)(\/|\?|$)/i.test(confirmationUrl)) {
+      return {
+        verified: true,
+        reason: "Employer confirmation URL detected after submit.",
+        confirmationUrl,
+        confirmationId: this.extractConfirmationIdFromUrl(confirmationUrl),
+      };
+    }
+
     const alreadyAppliedMessages = [
       "already applied",
       "you have already applied",
@@ -111,7 +130,6 @@ class SubmissionVerificationTool {
       "unable to submit",
       "could not submit",
       "error submitting",
-      "invalid",
     ];
 
     const matchedErrorMessage =
@@ -133,6 +151,34 @@ class SubmissionVerificationTool {
         "Application submission could not be verified.",
       confirmationUrl,
     };
+  }
+
+  private async extractConfirmationId(page: Page, seedText: string): Promise<string | undefined> {
+    const fromText = this.extractConfirmationIdFromText(seedText);
+    if (fromText) return fromText;
+    const body = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
+    return this.extractConfirmationIdFromText(body) || this.extractConfirmationIdFromUrl(page.url());
+  }
+
+  extractConfirmationIdFromText(text: string): string | undefined {
+    const confirmationMatch = text.match(
+      /(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i,
+    );
+    return confirmationMatch?.[1];
+  }
+
+  extractConfirmationIdFromUrl(url: string): string | undefined {
+    try {
+      const parsed = new URL(url);
+      const keys = ["confirmation", "confirmationId", "applicationId", "ref", "reference"];
+      for (const key of keys) {
+        const value = parsed.searchParams.get(key);
+        if (value && value.length >= 5) return value;
+      }
+    } catch {
+      // ignore
+    }
+    return undefined;
   }
 }
 

@@ -1,7 +1,6 @@
 import type { Page } from "playwright";
 import { BaseATSAdapter } from "./base.adapter.js";
 import type { ATSExecutionContext, ATSExecutionResult } from "./base.adapter.js";
-import { prisma } from "@jobpilot/database";
 
 export class AshbyAdapter extends BaseATSAdapter {
     readonly providerName = "Ashby";
@@ -14,10 +13,8 @@ export class AshbyAdapter extends BaseATSAdapter {
     async execute(page: Page, context: ATSExecutionContext): Promise<ATSExecutionResult> {
         console.log(`[AshbyAdapter] 🎯 Launching execution on ${context.url} for ${context.jobTitle}`);
 
-        // 1. Open real application URL
         await page.goto(context.url, { waitUntil: "domcontentloaded", timeout: 45000 });
 
-        // Ashby often has an "Apply for this role" button or section
         try {
             const applyBtn = page.locator('button:has-text("Apply for this job"), button:has-text("Apply Now"), a[href*="application"]').first();
             if (await applyBtn.isVisible({ timeout: 2500 })) {
@@ -27,10 +24,8 @@ export class AshbyAdapter extends BaseATSAdapter {
             // Continue
         }
 
-        // 2. Wait for application form container in Ashby
-        await page.waitForSelector('form, [data-testid="application-form"], .ashby-application-form', { timeout: 15000 });
+        await page.waitForSelector('form, [data-testid="application-form"], .ashby-application-form', { timeout: 15000 }).catch(() => {});
 
-        // 3. Security / Human Challenge Check
         const challenge = await this.detectSecurityChallenge(page);
         if (challenge.detected) {
             return {
@@ -43,139 +38,7 @@ export class AshbyAdapter extends BaseATSAdapter {
             };
         }
 
-        // 4. Load real candidate profile & resume
-        const user = await prisma.user.findUnique({
-            where: { id: context.userId },
-            include: { profile: true },
-        });
-
-        const profile = context.candidateProfile || user?.profile;
-        const candidateData = {
-            name: profile ? `${profile.firstName || ""} ${profile.lastName || ""}`.trim() : "",
-            firstName: profile?.firstName || "",
-            lastName: profile?.lastName || "",
-            email: context.candidateProfile?.email || profile?.email || user?.email || "",
-            phone: profile?.phone || "",
-            location: profile?.city ? `${profile.city}, India` : (profile?.location || ""),
-            linkedin: profile?.linkedin || "",
-            github: profile?.github || "",
-            portfolio: profile?.portfolio || "",
-        };
-
-        // 5. Discover Form Fields from Ashby DOM
-        const fields = await this.discoverFormFields(page);
-
-        // 6. Generate Gemini Tailored Answers
-        const tailoredAnswers = await this.generateTailoredAnswers(context, fields);
-
-        // 7. Fill Ashby Fields
-        for (const field of fields) {
-            const label = (field.label || field.name || "").toLowerCase();
-            const locator = page.locator(field.selector).first();
-
-            try {
-                if (!(await locator.isVisible({ timeout: 500 }))) continue;
-
-                if (field.type === "file" || label.includes("resume") || label.includes("cv")) {
-                    continue;
-                }
-
-                if (/full.?name|name/i.test(label) && !/first|last|middle|user/i.test(label)) {
-                    await locator.fill(candidateData.name);
-                } else if (/first.?name/i.test(label)) {
-                    await locator.fill(candidateData.firstName);
-                } else if (/last.?name/i.test(label)) {
-                    await locator.fill(candidateData.lastName);
-                } else if (/email/i.test(label)) {
-                    await locator.fill(candidateData.email);
-                } else if (/phone|mobile/i.test(label)) {
-                    await locator.fill(candidateData.phone);
-                } else if (/location|city/i.test(label)) {
-                    await locator.fill(candidateData.location);
-                } else if (/linkedin/i.test(label)) {
-                    await locator.fill(candidateData.linkedin);
-                } else if (/github/i.test(label)) {
-                    await locator.fill(candidateData.github);
-                } else if (/website|portfolio/i.test(label)) {
-                    if (candidateData.portfolio) await locator.fill(candidateData.portfolio);
-                } else if (field.type === "select") {
-                    const options = field.options || [];
-                    const bestMatch = options.find((o) =>
-                        /yes|authorized|eligible|bengaluru|india|remote/i.test(o)
-                    ) || options[1] || options[0];
-                    if (bestMatch) {
-                        await locator.selectOption({ label: bestMatch }).catch(() => null);
-                    }
-                } else if (field.type === "checkbox" || field.type === "radio") {
-                    if (/authorized|consent|agree|privacy|terms/i.test(label)) {
-                        await locator.check().catch(() => null);
-                    }
-                } else if (field.type === "textarea" || field.type === "text") {
-                    const answer = tailoredAnswers[field.label] || tailoredAnswers[field.name];
-                    if (answer) {
-                        await locator.fill(answer);
-                    }
-                }
-            } catch (err: any) {
-                console.warn(`[AshbyAdapter] Notice filling field ${field.name}:`, err.message);
-            }
-        }
-
-        // 8. Upload Real Resume
-        try {
-            const { default: resumeUploadTool } = await import("../../agent/tools/resume-upload.tool.js");
-            await resumeUploadTool.upload(page, {
-                fileUrl: context.resumeFilePath || "",
-                originalName: "resume.pdf",
-            });
-        } catch (uploadErr: any) {
-            console.warn("[AshbyAdapter] File upload notice:", uploadErr.message);
-        }
-
-        // 9. Submit
-        const submitBtn = page.locator('button[type="submit"], button:has-text("Submit Application"), button:has-text("Submit")').first();
-        if (await submitBtn.isVisible({ timeout: 5000 })) {
-            await submitBtn.click();
-        }
-
-        // 10. Verify Confirmation
-        await page.waitForTimeout(3000);
-
-        const postChallenge = await this.detectSecurityChallenge(page);
-        if (postChallenge.detected) {
-            return {
-                success: false,
-                status: "WAITING_FOR_USER",
-                requiresHumanVerification: true,
-                verificationType: postChallenge.type,
-                failureReason: postChallenge.message,
-            };
-        }
-
-        const { default: submissionVerificationTool } = await import("../../agent/tools/submission-verification.tool.js");
-        const verification = await submissionVerificationTool.verify(page);
-
-        if (verification.verified) {
-            const bodyText = (await page.locator("body").innerText().catch(() => "")).toLowerCase();
-            const confirmationMatch = bodyText.match(/(?:confirmation|application|reference)\s*(?:#|id|number|code)?\s*[:\-]?\s*([a-z0-9\-_]{5,32})/i);
-            const confId = confirmationMatch ? confirmationMatch[1] : (
-                undefined
-            );
-
-            return {
-                success: true,
-                status: "SUBMITTED",
-                confirmationId: confId,
-                metadata: { ats: "Ashby", timestamp: new Date().toISOString(), reason: verification.reason },
-            };
-        }
-
-        return {
-            success: false,
-            status: "FAILED",
-            failureReason: verification.reason || "Ashby submission could not be verified on external portal.",
-            metadata: { ats: "Ashby", url: page.url() },
-        };
+        return this.runFormPipeline(page, context);
     }
 }
 
