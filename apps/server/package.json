@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "NODE_ENV=test JWT_SECRET=jobpilot-test-only-secret-not-for-production REQUIRE_SUBMISSION_APPROVAL=false node --import tsx --test src/__tests__/*.test.ts",
+    "test": "NODE_ENV=test JWT_SECRET=jobpilot-test-only-secret-not-for-production REQUIRE_SUBMISSION_APPROVAL=false node --import tsx --test --test-concurrency=1 src/__tests__/*.test.ts",
     "install:browsers": "playwright install chromium"
   },
   "dependencies": {

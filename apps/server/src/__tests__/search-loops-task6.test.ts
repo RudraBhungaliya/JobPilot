@@ -168,6 +168,18 @@ test("Task 6: Search Loops & Scheduling Verification Suite", async (t) => {
       data: { nextRunAt: new Date(Date.now() - 10000) },
     });
 
+    // Push any other active loops' nextRunAt into the future so only test-targeted loops are due
+    await prisma.jobSearchLoop.updateMany({
+      where: {
+        id: { not: createdLoop.id },
+        status: "ACTIVE",
+        OR: [{ nextRunAt: null }, { nextRunAt: { lte: new Date() } }],
+      },
+      data: {
+        nextRunAt: new Date(Date.now() + 86400000),
+      },
+    });
+
     // Scheduler executeDueLoops should NOT process paused loop
     const origSearchAll = liveAtsService.searchAll;
     let searchCalled = false;
