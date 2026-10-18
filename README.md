@@ -467,7 +467,7 @@ All routes are mounted under `/api/v1` and return standard JSON payloads. Protec
 JobPilot/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml               # GitHub Actions CI/CD pipeline
+│       └── ci.yaml              # GitHub Actions CI/CD pipeline
 ├── apps/
 │   ├── server/                  # Core Express 5 API & Automation Engine
 │   │   ├── src/
@@ -520,7 +520,7 @@ JobPilot/
 
 ### Prerequisites
 
-- **Node.js**: `v20.x` or `v22.x` (LTS recommended)
+- **Node.js**: `v22.x` or later (v22.x LTS recommended for pnpm 11 compatibility)
 - **pnpm**: `v10.x` or `v11.x`
 - **PostgreSQL**: `14.x` to `16.x` running locally or accessible remotely
 - **Playwright Chromium**: Browser binaries installed via CLI
@@ -618,7 +618,7 @@ Configure environment variables in `apps/server/.env` (and `apps/web/.env.local`
 
 ### Continuous Integration (GitHub Actions)
 
-A CI/CD pipeline is configured in [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+A CI/CD pipeline is configured in [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml):
 
 - **Service Container**: Automatically starts an isolated PostgreSQL 16 container.
 - **Dependency Caching**: Caches `pnpm` store based on `pnpm-lock.yaml`.

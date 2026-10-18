@@ -6,13 +6,17 @@
     "types": ["node"],
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true
   },
   "include": [
     "src/**/*"
   ],
   "exclude": [
     "node_modules",
-    "generated"
+    "generated",
+    "dist"
   ]
 }

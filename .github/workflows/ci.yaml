@@ -2,9 +2,10 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, rudra]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, rudra]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,26 +43,26 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-
       - name: Setup Database Schema
         env:
+          CI: "true"
           DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
         run: |
           pnpm --filter @jobpilot/database exec prisma generate
           pnpm --filter @jobpilot/database exec prisma db push --skip-generate
 
-      - name: Build Monorepo (Server & Web)
+      - name: Build Monorepo (Database, Server & Web)
         env:
+          CI: "true"
           NEXT_TELEMETRY_DISABLED: 1
           NODE_ENV: production
           DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
@@ -70,6 +71,7 @@ jobs:
 
       - name: Run Regression & Unit Tests
         env:
+          CI: "true"
           NODE_ENV: test
           DATABASE_URL: postgresql://jobpilot:jobpilot_secret_password@localhost:5432/jobpilot_test?schema=public
           JWT_SECRET: jobpilot-test-only-secret-not-for-production

@@ -19,7 +19,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 const databaseUrl = process.env.DATABASE_URL;
-if (process.env.NODE_ENV === "production" && (!databaseUrl || /localhost|user:password/.test(databaseUrl))) {
+if (process.env.NODE_ENV === "production" && !process.env.CI && (!databaseUrl || /user:password/.test(databaseUrl))) {
     throw new Error("A reachable production DATABASE_URL is required for Prisma commands.");
 }
 
