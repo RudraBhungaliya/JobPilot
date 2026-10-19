@@ -107,25 +107,51 @@ test("Task 3 Application Pipeline & Adapter Verification Suite", async (t) => {
   await t.test("6. HumanAction creation and persistence for security challenges & approvals", async () => {
     let testApp: any = await prisma.application.findFirst({ include: { user: true } });
     if (!testApp) {
-      const user = await prisma.user.findFirst();
-      const job = await prisma.job.findFirst();
-      if (user && job) {
-        let resume = await prisma.resume.findFirst({ where: { userId: user.id } });
-        if (!resume) {
-          resume = await prisma.resume.create({
-            data: { userId: user.id, title: "Default Resume", originalName: "resume.pdf", fileUrl: "https://example.com/resume.pdf" },
-          });
-        }
-        testApp = await prisma.application.create({
+      let user = await prisma.user.findFirst();
+      if (!user) {
+        user = await prisma.user.create({
           data: {
-            userId: user.id,
-            jobId: job.id,
-            resumeId: resume.id,
-            status: "WAITING_FOR_USER",
+            email: `pipeline_test_${Date.now()}@example.com`,
+            password: "dummyhash123",
           },
-          include: { user: true },
         });
       }
+      let company = await prisma.company.findFirst();
+      if (!company) {
+        company = await prisma.company.create({
+          data: {
+            userId: user.id,
+            name: "Pipeline Test Company",
+            domain: "pipelineexample.com",
+          },
+        });
+      }
+      let job = await prisma.job.findFirst();
+      if (!job) {
+        job = await prisma.job.create({
+          data: {
+            userId: user.id,
+            title: "Pipeline Test Job",
+            companyId: company.id,
+            url: "https://example.com/jobs/pipeline-test",
+          },
+        });
+      }
+      let resume = await prisma.resume.findFirst({ where: { userId: user.id } });
+      if (!resume) {
+        resume = await prisma.resume.create({
+          data: { userId: user.id, title: "Default Resume", originalName: "resume.pdf", fileUrl: "https://example.com/resume.pdf" },
+        });
+      }
+      testApp = await prisma.application.create({
+        data: {
+          userId: user.id,
+          jobId: job.id,
+          resumeId: resume.id,
+          status: "WAITING_FOR_USER",
+        },
+        include: { user: true },
+      });
     }
 
     assert.ok(testApp, "Application must exist in database");

@@ -15,29 +15,100 @@ test("Task 4: Email & Human-Intervention Workflow Suite", async (t) => {
   let testApp: any = null;
 
   t.before(async () => {
-    testApp = await prisma.application.findFirst({ include: { user: true, job: { include: { company: true } } } });
-    if (!testApp) {
-      const user = await prisma.user.findFirst();
-      const job = await prisma.job.findFirst({ include: { company: true } });
-      if (user && job) {
-        let resume = await prisma.resume.findFirst({ where: { userId: user.id } });
-        if (!resume) {
-          resume = await prisma.resume.create({
-            data: { userId: user.id, title: "Default Resume", originalName: "resume.pdf", fileUrl: "https://example.com/resume.pdf" },
-          });
-        }
-        testApp = await prisma.application.create({
-          data: {
-            userId: user.id,
-            jobId: job.id,
-            resumeId: resume.id,
-            status: "WAITING_FOR_USER",
+    // 1. Ensure test user exists
+    let user = await prisma.user.findFirst({
+      where: { email: "rud28b@gmail.com" },
+      include: { profile: true },
+    });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: "rud28b@gmail.com",
+          password: "dummyhash123",
+          profile: {
+            create: {
+              firstName: "Rudra",
+              lastName: "Bhungaliya",
+              email: "rud28b@gmail.com",
+            },
           },
-          include: { user: true, job: { include: { company: true } } },
-        });
-      }
+        },
+        include: { profile: true },
+      });
     }
+
+    // 2. Ensure company exists
+    let company = await prisma.company.findFirst();
+    if (!company) {
+      company = await prisma.company.create({
+        data: {
+          userId: user.id,
+          name: "Google",
+          domain: "google.com",
+        },
+      });
+    }
+
+    // 3. Ensure job exists
+    let job = await prisma.job.findFirst({ include: { company: true } });
+    if (!job) {
+      job = await prisma.job.create({
+        data: {
+          userId: user.id,
+          title: "Software Engineer",
+          companyId: company.id,
+          url: "https://careers.google.com/jobs/1",
+        },
+        include: { company: true },
+      });
+    }
+
+    // 4. Ensure resume exists
+    let resume = await prisma.resume.findFirst({ where: { userId: user.id } });
+    if (!resume) {
+      resume = await prisma.resume.create({
+        data: {
+          userId: user.id,
+          title: "Default Resume",
+          originalName: "resume.pdf",
+          fileUrl: "https://example.com/resume.pdf",
+        },
+      });
+    }
+
+    // 5. Ensure application exists in QUEUED status so it can cleanly transition to WAITING_FOR_USER
+    testApp = await prisma.application.findFirst({
+      where: { userId: user.id, jobId: job.id },
+      include: { user: { include: { profile: true } }, job: { include: { company: true } } },
+    });
+
+    if (!testApp) {
+      testApp = await prisma.application.create({
+        data: {
+          userId: user.id,
+          jobId: job.id,
+          resumeId: resume.id,
+          status: "QUEUED",
+        },
+        include: { user: { include: { profile: true } }, job: { include: { company: true } } },
+      });
+    } else {
+      testApp = await prisma.application.update({
+        where: { id: testApp.id },
+        data: { status: "QUEUED" },
+        include: { user: { include: { profile: true } }, job: { include: { company: true } } },
+      });
+    }
+
     assert.ok(testApp, "Test application must exist in database");
+  });
+
+  t.after(async () => {
+    if (testApp) {
+      await prisma.humanAction.deleteMany({ where: { applicationId: testApp.id } }).catch(() => {});
+      await prisma.applicationStatusTransition.deleteMany({ where: { applicationId: testApp.id } }).catch(() => {});
+      await prisma.notification.deleteMany({ where: { applicationId: testApp.id } }).catch(() => {});
+    }
   });
 
 

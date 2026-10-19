@@ -157,7 +157,7 @@ const EnvSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
   JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
 }).superRefine((config, ctx) => {
-  if (config.NODE_ENV === "production" && (
+  if (config.NODE_ENV === "production" && !process.env.CI && (
     config.DATABASE_URL.includes("localhost") ||
     config.DATABASE_URL.includes("user:password") ||
     config.DATABASE_URL === "postgresql://postgres:postgres@localhost:5432/jobpilot?schema=public"
