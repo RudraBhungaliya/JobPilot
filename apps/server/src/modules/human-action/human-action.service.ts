@@ -3,6 +3,7 @@ import applicationRepository from "../application/application.repository.js";
 import auditRepository from "../audit/audit.repository.js";
 import notificationService from "../notification/notification.service.js";
 import { eventEmitter } from "../../core/events/index.js";
+import logger from "../../core/logger/logger.js";
 
 import type {
     CreateHumanActionInput,
@@ -18,6 +19,17 @@ class HumanActionService {
     async createAction(
         input: CreateHumanActionInput,
     ) {
+        // Defensive check: ensure the referenced application exists in the database
+        // before attempting foreign-key insert.
+        const app = await applicationRepository.findById(input.applicationId);
+        if (!app) {
+            logger.warn(
+                { applicationId: input.applicationId, userId: input.userId },
+                "HumanActionService: Referenced application record not found in database; cannot create HumanAction",
+            );
+            return null;
+        }
+
         const humanAction =
             await humanActionRepository.create(input);
 

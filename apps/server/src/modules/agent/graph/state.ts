@@ -49,11 +49,13 @@ export const AgentState = new StateSchema({
     plannerAction: z
         .enum([
             "DISCOVER",
+            "SCRAPE",
             "EVALUATE",
             "FETCH",
             "RANK",
             "TAILOR",
             "APPLY",
+            "AUTO_FILL",
             "VERIFY",
             "PERSIST",
             "RETRY",
@@ -71,6 +73,14 @@ export const AgentState = new StateSchema({
         .default(false),
 
     ranked: z
+        .boolean()
+        .default(false),
+
+    scrapingCompleted: z
+        .boolean()
+        .default(false),
+
+    autofillCompleted: z
         .boolean()
         .default(false),
 

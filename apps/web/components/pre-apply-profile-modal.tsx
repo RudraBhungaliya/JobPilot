@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import {
-  Sparkles,
   GraduationCap,
   Briefcase,
   User,
@@ -73,7 +72,7 @@ function buildInitialProfileData(profile: any): PreApplyProfileData {
   return {
     firstName: profile?.firstName || "",
     lastName: profile?.lastName || "",
-    email: profile?.email || "",
+    email: profile?.email || "rudrabhungaliya@gmail.com",
     phone: profile?.phone || "",
     city: profile?.city || "Ahmedabad",
     country: profile?.country || "India",
@@ -86,8 +85,8 @@ function buildInitialProfileData(profile: any): PreApplyProfileData {
     yearsOfExperience: typeof profile?.yearsOfExperience === "number" ? profile.yearsOfExperience : 0.5,
     experienceDescription: firstExp?.description || profile?.experienceDescription || "SDE Intern @nopCypher",
     skills: skillsList.length > 0 ? skillsList : ["TypeScript", "React", "Node.js", "Next.js", "PostgreSQL", "C++"],
-    linkedin: profile?.linkedin || "https://linkedin.com/in/developer",
-    github: profile?.github || "https://github.com/developer",
+    linkedin: profile?.linkedin || "https://linkedin.com/in/rudrabhungaliya",
+    github: profile?.github || "https://github.com/RudraBhungaliya",
     portfolio: profile?.portfolio || "https://rudra.dev",
     workMode: profile?.workMode || "HYBRID",
     noticePeriodDays: profile?.noticePeriodDays || 30,
@@ -180,6 +179,16 @@ export function PreApplyProfileModal({
           portfolio: finalProfileData.portfolio,
           workAuthorization: finalProfileData.workAuthorization,
           sponsorshipRequired: finalProfileData.sponsorshipRequired,
+          address: profile?.address || undefined,
+          state: profile?.state || undefined,
+          zipCode: profile?.zipCode || undefined,
+          is18OrOlder: profile?.is18OrOlder ?? true,
+          previousEmployee: profile?.previousEmployee ?? false,
+          nonCompeteAgreement: profile?.nonCompeteAgreement ?? false,
+          veteran: profile?.veteran,
+          disability: profile?.disability,
+          gender: profile?.gender,
+          race: profile?.race,
           skills: finalProfileData.skills.map((name) => ({ name })),
           educations: [
             {
@@ -217,8 +226,8 @@ export function PreApplyProfileModal({
         {/* Top Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08] bg-white/[0.02]">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white shadow-glow-blue">
-              <Sparkles size={18} />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+              <User size={18} />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -609,7 +618,7 @@ export function PreApplyProfileModal({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-xs font-medium text-white shadow-glow-blue hover:from-blue-500 hover:to-indigo-500 active:scale-[0.98] transition-all disabled:opacity-50"
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-medium text-white shadow-sm hover:bg-emerald-500 active:scale-[0.98] transition-all disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <span>Saving to Vault & Queueing...</span>

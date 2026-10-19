@@ -28,9 +28,9 @@ export class ResendEmailProvider implements IEmailProvider {
     async send(
         options: SendEmailOptions,
     ): Promise<SendEmailResult> {
-        let from = options.from || this.defaultFrom || "JobPilot AI <onboarding@resend.dev>";
+        let from = options.from || this.defaultFrom || "JobPilot <onboarding@resend.dev>";
         if (/@(gmail|yahoo|hotmail|outlook)\.com/i.test(from) || !from.trim()) {
-            from = "JobPilot AI <onboarding@resend.dev>";
+            from = "JobPilot <onboarding@resend.dev>";
         }
 
         const to = Array.isArray(options.to)
@@ -61,37 +61,68 @@ export class ResendEmailProvider implements IEmailProvider {
                 });
 
             if (error) {
-                // Configurable Sandbox Routing:
-                // Only allowed in non-production when RESEND_SANDBOX_REDIRECT_EMAIL is explicitly defined.
-                // In production, redirection is strictly disabled to prevent unintended delivery.
                 const isProduction = process.env.NODE_ENV === "production";
                 const sandboxRedirect = process.env.RESEND_SANDBOX_REDIRECT_EMAIL?.trim();
                 const hasRecipients = to.length > 0 && to.some(r => typeof r === "string" && r.trim().length > 0);
 
-                const isSandboxRestriction = !isProduction && Boolean(sandboxRedirect) && hasRecipients && !to.includes(sandboxRedirect!) && (
-                    error.message?.includes(sandboxRedirect!) ||
+                const isSandboxRestriction = (
                     error.message?.toLowerCase().includes("testing email") ||
-                    error.message?.toLowerCase().includes("only send")
+                    error.message?.toLowerCase().includes("only send") ||
+                    error.message?.toLowerCase().includes("verify a domain")
                 );
 
-                if (isSandboxRestriction && sandboxRedirect) {
-                    console.warn(`[ResendEmailProvider] Development sandbox routing: explicitly redirecting alert from [${to.join(", ")}] to configured RESEND_SANDBOX_REDIRECT_EMAIL [${sandboxRedirect}]`);
-                    const retry = await this.client.emails.send({
-                        from: "JobPilot AI <onboarding@resend.dev>",
-                        to: [sandboxRedirect],
-                        subject: `[SANDBOX ROUTED -> ${sandboxRedirect} | Intended: ${to.join(", ")}] ${options.subject}`,
-                        html: options.html ?? options.text ?? "",
-                        text: options.text,
-                    });
-                    if (retry.data?.id) {
-                        return { success: true, id: retry.data.id };
+                // In Production: Strict domain verification requirement. Never redirect production candidate emails.
+                if (isProduction) {
+                    if (isSandboxRestriction) {
+                        console.error(
+                            "[ResendEmailProvider Production Notice] Email delivery blocked: sending domain is unverified. " +
+                            "Verify your custom sending domain at resend.com/domains before sending candidate emails in production."
+                        );
+                    } else {
+                        console.error("[ResendEmailProvider Error]", error);
+                    }
+                    return {
+                        success: false,
+                        error: isSandboxRestriction
+                            ? `Production email sending blocked: Sending domain is unverified. Verify domain at resend.com/domains. (${error.message})`
+                            : error.message,
+                    };
+                }
+
+                // In Development: Explicit sandbox routing ONLY when RESEND_SANDBOX_REDIRECT_EMAIL is configured
+                if (isSandboxRestriction && hasRecipients && Boolean(sandboxRedirect)) {
+                    // Extract authorized account email from Resend message if present
+                    const match = error.message?.match(/own email address \(([^)]+)\)/i);
+                    const targetSandbox = match ? match[1].trim() : sandboxRedirect!;
+
+                    if (targetSandbox && !to.includes(targetSandbox)) {
+                        console.warn(
+                            `[ResendEmailProvider] Development sandbox routing: explicitly redirecting alert from [${to.join(", ")}] to authorized development recipient [${targetSandbox}]`
+                        );
+
+                        const retry = await this.client.emails.send({
+                            from: "JobPilot <onboarding@resend.dev>",
+                            to: [targetSandbox],
+                            subject: `[DEV SANDBOX -> ${targetSandbox} | Intended: ${to.join(", ")}] ${options.subject}`,
+                            html: options.html ?? options.text ?? "",
+                            text: options.text,
+                        });
+
+                        if (retry.data?.id) {
+                            return { success: true, id: retry.data.id };
+                        }
+
+                        if (retry.error) {
+                            console.error("[ResendEmailProvider Sandbox Retry Error]", retry.error);
+                            return {
+                                success: false,
+                                error: retry.error.message,
+                            };
+                        }
                     }
                 }
 
-                console.error(
-                    "[ResendEmailProvider Error]",
-                    error,
-                );
+                console.error("[ResendEmailProvider Error]", error);
                 return {
                     success: false,
                     error: error.message,

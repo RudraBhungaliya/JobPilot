@@ -32,7 +32,53 @@ const connectionString =
     "postgresql://postgres:postgres@localhost:5432/jobpilot?schema=public";
 
 
-const pool = new pg.Pool({ connectionString });
+// Sequential query queue per client connection to eliminate concurrent query pipelining
+// and prevent 'Calling client.query() when the client is already executing a query' deprecation in pg@8.23+ and failure in pg@9.0
+const clientQueryQueueSymbol = Symbol("clientQueryQueue");
+const rawClientQuery = pg.Client.prototype.query;
+
+(pg.Client.prototype as any).query = function (...args: any[]) {
+    if ((this as any)._ending || (this as any)._queryable === false) {
+        return rawClientQuery.apply(this, args as any);
+    }
+
+    const prevPromise: Promise<any> = (this as any)[clientQueryQueueSymbol] || Promise.resolve();
+    const hasCallback = typeof args[args.length - 1] === "function";
+
+    if (hasCallback) {
+        const callback = args[args.length - 1];
+        const nextPromise = prevPromise.then(
+            () => new Promise<void>((resolve) => {
+                args[args.length - 1] = (err: any, res: any) => {
+                    resolve();
+                    callback(err, res);
+                };
+                rawClientQuery.apply(this, args as any);
+            }),
+            () => new Promise<void>((resolve) => {
+                args[args.length - 1] = (err: any, res: any) => {
+                    resolve();
+                    callback(err, res);
+                };
+                rawClientQuery.apply(this, args as any);
+            })
+        );
+        (this as any)[clientQueryQueueSymbol] = nextPromise;
+        return;
+    }
+
+    const execute = () => rawClientQuery.apply(this, args as any);
+    const chained = prevPromise.then(execute, execute);
+    (this as any)[clientQueryQueueSymbol] = chained.catch(() => {});
+    return chained;
+};
+
+const pool = new pg.Pool({
+    connectionString,
+    max: parseInt(process.env.PG_POOL_MAX || "10", 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+});
 pool.on("error", (err) => {
     // Prevent unhandled errors from background pool reconnect attempts
     if (process.env.NODE_ENV === "development") {

@@ -18,20 +18,20 @@ test("Submission Email Hook & Idempotency Final Audit Suite", async (t) => {
     t.before(async () => {
         // Find or create test user, job, resume
         testUser = await prisma.user.findFirst({
-            where: { email: "rud28b@gmail.com" },
+            where: { email: "rudrabhungaliya@gmail.com" },
             include: { profile: true },
         });
 
         if (!testUser) {
             testUser = await prisma.user.create({
                 data: {
-                    email: "rud28b@gmail.com",
+                    email: "rudrabhungaliya@gmail.com",
                     password: "dummyhash",
                     profile: {
                         create: {
                             firstName: "Rudra",
                             lastName: "Bhungaliya",
-                            email: "rud28b@gmail.com",
+                            email: "rudrabhungaliya@gmail.com",
                             phone: "+91 9876543210",
                             city: "Bengaluru",
                         },
@@ -314,7 +314,7 @@ test("Submission Email Hook & Idempotency Final Audit Suite", async (t) => {
                     if (payload.to.includes("someone_else@example.com")) {
                         return {
                             data: null,
-                            error: { message: "You can only send testing emails to your own email address (rud28b@gmail.com)" },
+                            error: { message: "You can only send testing emails to your own email address (rudrabhungaliya@gmail.com)" },
                         };
                     }
                     return { data: { id: "resend_msg_sandbox_redirected" }, error: null };
@@ -327,7 +327,7 @@ test("Submission Email Hook & Idempotency Final Audit Suite", async (t) => {
         const prevEnv = process.env.NODE_ENV;
         try {
             process.env.NODE_ENV = "production";
-            process.env.RESEND_SANDBOX_REDIRECT_EMAIL = "rud28b@gmail.com";
+            process.env.RESEND_SANDBOX_REDIRECT_EMAIL = "rudrabhungaliya@gmail.com";
 
             const prodResult = await provider.send({
                 to: "someone_else@example.com",
@@ -360,7 +360,7 @@ test("Submission Email Hook & Idempotency Final Audit Suite", async (t) => {
             assert.equal(noRedirectResult.success, false, "Must not redirect when RESEND_SANDBOX_REDIRECT_EMAIL is not configured");
         } finally {
             process.env.NODE_ENV = prevEnv;
-            process.env.RESEND_SANDBOX_REDIRECT_EMAIL = "rud28b@gmail.com";
+            process.env.RESEND_SANDBOX_REDIRECT_EMAIL = "rudrabhungaliya@gmail.com";
         }
     });
 });

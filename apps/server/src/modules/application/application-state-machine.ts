@@ -106,8 +106,8 @@ export class ApplicationStateMachine {
             application.confirmationCode;
 
         // 1. Transactionally update application status and insert transition log
-        const [updatedApp, transitionRecord] = await prisma.$transaction([
-            prisma.application.update({
+        const [updatedApp, transitionRecord] = await prisma.$transaction(async (tx) => {
+            const updated = await tx.application.update({
                 where: { id: req.applicationId },
                 data: {
                     status: req.newStatus,
@@ -115,8 +115,9 @@ export class ApplicationStateMachine {
                     failureReason: req.newStatus === "FAILED" ? req.reason : application.failureReason,
                     confirmationCode: confirmationCodeToPersist,
                 },
-            }),
-            prisma.applicationStatusTransition.create({
+            });
+
+            const transition = await tx.applicationStatusTransition.create({
                 data: {
                     applicationId: req.applicationId,
                     previousStatus: currentStatus,
@@ -125,8 +126,10 @@ export class ApplicationStateMachine {
                     metadata: req.metadata || {},
                     actor: req.actor || "SYSTEM",
                 },
-            }),
-        ]);
+            });
+
+            return [updated, transition];
+        });
 
         // 1b. Synchronize persistent ApplicationQueue record to prevent state drift
         try {

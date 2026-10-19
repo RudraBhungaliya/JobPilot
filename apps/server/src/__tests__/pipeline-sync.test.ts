@@ -122,7 +122,10 @@ test("Application Pipeline Sync Module Suite", async (suite) => {
     return trans;
   };
 
-  (prisma.$transaction as any) = async (ops: any[]) => {
+  (prisma.$transaction as any) = async (ops: any) => {
+    if (typeof ops === "function") {
+      return ops(prisma);
+    }
     return Promise.all(ops);
   };
 
