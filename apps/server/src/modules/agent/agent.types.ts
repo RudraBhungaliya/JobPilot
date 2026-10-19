@@ -8,6 +8,8 @@ export interface AgentJob {
     description?: string;
     location?: string;
     score?: number;
+    source?: string;
+    platform?: string;
 }
 
 export interface AgentJobSearchResult {

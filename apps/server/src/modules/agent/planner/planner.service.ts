@@ -16,6 +16,53 @@ class PlannerService {
     async decide(
         state: AgentStateType,
     ): Promise<PlannerDecision> {
+        // Enforce maximum iteration bounds to prevent cyclic deadlocks
+        if (state.history.length >= 20) {
+            return {
+                action: "END",
+                reason: "Workflow reached maximum execution iteration threshold.",
+            };
+        }
+
+        if (state.application?.status === "WAITING_FOR_USER" || state.plannerAction === "WAITING_FOR_USER") {
+            return {
+                action: "WAITING_FOR_USER",
+                reason: "Application paused awaiting candidate intervention.",
+            };
+        }
+
+        if (state.scrapingCompleted && state.jobs.length === 0) {
+            return {
+                action: "END",
+                reason: "Scraping completed and no active openings were found matching query.",
+            };
+        }
+
+        if (state.autofillCompleted) {
+            return {
+                action: "END",
+                reason: "Agentic autofill workflow completed.",
+            };
+        }
+
+        const isScrapeQuery = /(?:scrape|scraping|career portal|portal|career page)/i.test(state.query || "");
+        if (state.jobs.length === 0 && !state.scrapingCompleted && (state.plannerAction === "SCRAPE" || isScrapeQuery)) {
+            return {
+                action: "SCRAPE",
+                reason: "Web scraping tech openings from company career portals and MNC sites.",
+            };
+        }
+
+        const hasWebScrapedJob = state.selectedJobs.some(
+            (j) => j.source === "web_scraper" || j.platform === "web",
+        );
+        if (state.selectedJobs.length > 0 && !state.autofillCompleted && (state.plannerAction === "AUTO_FILL" || hasWebScrapedJob)) {
+            return {
+                action: "AUTO_FILL",
+                reason: "Agentic auto data filling for web-scraped openings and company portals.",
+            };
+        }
+
         try {
             const prompt =
                 buildPlannerPrompt({
@@ -40,6 +87,9 @@ class PlannerService {
                         state
                             .tailoringInstructions
                             .length,
+                    scrapingCompleted: state.scrapingCompleted,
+                    autofillCompleted: state.autofillCompleted,
+                    hasWebScrapedJobs: hasWebScrapedJob,
                 });
 
             const response =
@@ -61,7 +111,29 @@ class PlannerService {
     }
 
     private fallbackDecision(state: AgentStateType): PlannerDecision {
+        // Enforce maximum iteration bounds to prevent cyclic deadlocks
+        if (state.history.length >= 20) {
+            return {
+                action: "END",
+                reason: "Workflow reached maximum execution iteration threshold.",
+            };
+        }
+
+        if (state.application?.status === "WAITING_FOR_USER" || state.plannerAction === "WAITING_FOR_USER") {
+            return {
+                action: "WAITING_FOR_USER",
+                reason: "Application paused awaiting candidate intervention.",
+            };
+        }
+
         if (state.errors.length > 0 && state.application && state.application.status === "FAILED") {
+            const retryCount = state.history.filter((h) => h.includes("Retry")).length;
+            if (retryCount >= 2) {
+                return {
+                    action: "END",
+                    reason: "Application reached maximum retry attempts.",
+                };
+            }
             return {
                 action: "RETRY",
                 reason: "Recoverable application error detected.",
@@ -69,9 +141,21 @@ class PlannerService {
         }
 
         if (state.jobs.length === 0) {
+            if (!state.scrapingCompleted && (state.plannerAction === "SCRAPE" || /(?:scrape|scraping|portal|career page)/i.test(state.query || ""))) {
+                return {
+                    action: "SCRAPE",
+                    reason: "Web scraping tech openings from company career portals and MNC sites.",
+                };
+            }
+            if (!state.scrapingCompleted) {
+                return {
+                    action: "DISCOVER",
+                    reason: "Discovering jobs matching query.",
+                };
+            }
             return {
-                action: "DISCOVER",
-                reason: "Discovering jobs matching query.",
+                action: "END",
+                reason: "No active openings found matching search query.",
             };
         }
 
@@ -97,9 +181,24 @@ class PlannerService {
         }
 
         if (state.selectedJobs.length > 0 && !state.application) {
+            const hasWebScrapedJob = state.selectedJobs.some(
+                (j) => j.source === "web_scraper" || j.platform === "web",
+            );
+            if (!state.autofillCompleted && (state.plannerAction === "AUTO_FILL" || hasWebScrapedJob)) {
+                return {
+                    action: "AUTO_FILL",
+                    reason: "Agentic auto data filling for web-scraped openings and company portals.",
+                };
+            }
+            if (!state.autofillCompleted) {
+                return {
+                    action: "APPLY",
+                    reason: "Applying to selected jobs.",
+                };
+            }
             return {
-                action: "APPLY",
-                reason: "Applying to selected jobs.",
+                action: "END",
+                reason: "Application workflow finished for selected jobs.",
             };
         }
 

@@ -42,11 +42,13 @@ ${input.errorCount}
 
 Available actions:
 DISCOVER
+SCRAPE
 EVALUATE
 FETCH
 RANK
 TAILOR
 APPLY
+AUTO_FILL
 VERIFY
 PERSIST
 RETRY
@@ -54,7 +56,7 @@ END
 
 Decision rules:
 
-1. If there are no jobs, choose DISCOVER.
+1. If there are no jobs, choose DISCOVER or SCRAPE (choose SCRAPE when web scraping career sites and MNC portals is preferred).
 
 2. If jobs exist and evaluated is false, choose EVALUATE.
 
@@ -64,7 +66,7 @@ Decision rules:
 
 5. Choose FETCH when additional job information must be retrieved.
 
-6. Choose APPLY only when the browser and application prerequisites are available.
+6. Choose APPLY for standard ATS portals, or AUTO_FILL for agentic multi-step data filling on web-scraped openings and company career pages.
 
 7. Choose VERIFY after an application attempt.
 

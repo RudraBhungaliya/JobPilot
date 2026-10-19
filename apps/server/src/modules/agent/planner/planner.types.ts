@@ -1,10 +1,12 @@
 export type AgentAction =
     | "DISCOVER"
+    | "SCRAPE"
     | "EVALUATE"
     | "FETCH"
     | "RANK"
     | "TAILOR"
     | "APPLY"
+    | "AUTO_FILL"
     | "VERIFY"
     | "PERSIST"
     | "RETRY"

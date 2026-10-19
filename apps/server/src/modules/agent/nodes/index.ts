@@ -1,10 +1,13 @@
 export { default as plannerNode } from "./planner.node.js";
+export { default as scrapeNode } from "./scrape.node.js";
 export { default as discoverNode } from "./discover.node.js";
 export { default as fetchNode } from "./fetch.node.js";
 export { default as evaluateNode } from "./evaluate.node.js";
 export { default as rankNode } from "./rank.node.js";
 export { default as tailorNode } from "./tailor.node.js";
 export { default as applyNode } from "./apply.node.js";
+export { default as autoFillNode } from "./auto-fill.node.js";
 export { default as verifyNode } from "./verify.node.js";
 export { default as persistNode } from "./persist.node.js";
 export { default as retryNode } from "./retry.node.js";
+export { default as waitForUserNode } from "./wait-for-user.node.js";

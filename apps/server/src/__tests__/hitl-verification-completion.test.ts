@@ -22,7 +22,10 @@ test("HITL & Verification Completion Flow Suite", async (t) => {
     auditService.create = async () => ({} as any);
     notificationService.create = async () => ({} as any);
     (prisma as any).auditLog.create = async () => ({ id: "audit-1" });
-    (prisma as any).$transaction = async (ops: any[]) => {
+    (prisma as any).$transaction = async (ops: any) => {
+        if (typeof ops === "function") {
+            return ops(prisma);
+        }
         if (Array.isArray(ops)) {
             return Promise.all(ops.map((op) => (typeof op === "function" ? op() : Promise.resolve(op))));
         }
