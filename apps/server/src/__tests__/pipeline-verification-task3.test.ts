@@ -176,6 +176,7 @@ test("Task 3 Application Pipeline & Adapter Verification Suite", async (t) => {
       ],
     });
 
+    assert.ok(action, "Action must be created");
     const qs = action.questions as any[];
     assert.equal(qs.length, 2);
     assert.equal(qs[0].type, "captcha");
