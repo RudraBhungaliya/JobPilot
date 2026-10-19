@@ -57,11 +57,13 @@ test("Task 4: Email & Human-Intervention Workflow Suite", async (t) => {
           userId: user.id,
           title: "Software Engineer",
           companyId: company.id,
+          location: "Mountain View, CA",
           url: "https://careers.google.com/jobs/1",
         },
         include: { company: true },
       });
     }
+    assert.ok(job, "Job must exist");
 
     // 4. Ensure resume exists
     let resume = await prisma.resume.findFirst({ where: { userId: user.id } });
@@ -75,6 +77,7 @@ test("Task 4: Email & Human-Intervention Workflow Suite", async (t) => {
         },
       });
     }
+    assert.ok(resume, "Resume must exist");
 
     // 5. Ensure application exists in QUEUED status so it can cleanly transition to WAITING_FOR_USER
     testApp = await prisma.application.findFirst({

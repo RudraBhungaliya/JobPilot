@@ -133,6 +133,7 @@ test("Task 3 Application Pipeline & Adapter Verification Suite", async (t) => {
             userId: user.id,
             title: "Pipeline Test Job",
             companyId: company.id,
+            location: "San Francisco, CA",
             url: "https://example.com/jobs/pipeline-test",
           },
         });
