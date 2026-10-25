@@ -36,7 +36,7 @@ export class FetchNode {
                 id: normalizedId,
                 title,
                 company,
-                url,
+                url: normalizedUrl,
                 description: job.description?.trim() || undefined,
                 location: job.location?.trim() || undefined,
                 source: job.source?.trim() || undefined,
