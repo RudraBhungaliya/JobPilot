@@ -17,7 +17,7 @@ describe("FetchNode", () => {
                 id: " job-1 ",
                 title: "  Backend Engineer  ",
                 company: "  Acme  ",
-                url: "https://jobs.acme.test/roles/1/",
+                url: "https://jobs.acme.test/roles/1",
                 description: "  Build APIs  ",
             },
             {
@@ -44,7 +44,7 @@ describe("FetchNode", () => {
             id: "job-1",
             title: "Backend Engineer",
             company: "Acme",
-            url: "https://jobs.acme.test/roles/1/",
+            url: "https://jobs.acme.test/roles/1",
             description: "Build APIs",
             location: undefined,
             source: undefined,
