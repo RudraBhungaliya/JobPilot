@@ -27,6 +27,12 @@ describe("FetchNode", () => {
                 url: "https://jobs.acme.test/roles/1",
             },
             {
+                id: "job-duplicate-url",
+                title: "Duplicate URL",
+                company: "Acme",
+                url: "https://jobs.acme.test/roles/1",
+            },
+            {
                 id: "job-2",
                 title: "Missing URL",
                 company: "Acme",
@@ -44,7 +50,7 @@ describe("FetchNode", () => {
             source: undefined,
             platform: undefined,
         }]);
-        assert.match(update.history?.[0] ?? "", /Fetched 1 valid jobs and skipped 2/);
+        assert.match(update.history?.[0] ?? "", /Fetched 1 valid jobs and skipped 3/);
     });
 
     it("reconciles selected jobs with the fetched set", async () => {
