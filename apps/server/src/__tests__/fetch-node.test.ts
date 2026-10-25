@@ -50,6 +50,7 @@ describe("FetchNode", () => {
             source: undefined,
             platform: undefined,
         }]);
+        assert.equal(update.jobs?.[0]?.description, "Build APIs");
         assert.match(update.history?.[0] ?? "", /Fetched 1 valid jobs and skipped 3/);
     });
 
