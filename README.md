@@ -692,6 +692,12 @@ NODE_ENV=test JWT_SECRET=jobpilot-test-only-secret-not-for-production REQUIRE_SU
 
 ---
 
+## Contributing
+
+Contributions, issues, and feature requests are welcome!
+
+---
+
 ## License
 
 This project is licensed under the ISC License.
