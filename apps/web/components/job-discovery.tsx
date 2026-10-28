@@ -69,6 +69,16 @@ export function JobDiscovery({
     void refresh();
   }, []);
 
+  useEffect(() => {
+    setSavedJobIds((previous) => {
+      const next = new Set(previous);
+      jobs.forEach((job) => {
+        if (job.isSaved) next.add(job.id);
+      });
+      return next;
+    });
+  }, [jobs]);
+
   // Compute selection chance deterministically for each job
   const enrichedJobs = jobs;
 
@@ -112,7 +122,7 @@ export function JobDiscovery({
         return TIER_PRIORITY[a.companyTier] - TIER_PRIORITY[b.companyTier];
       }
       // NEWEST
-      return 0;
+      return new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime();
     });
   }, [enrichedJobs, query, location, workMode, tierFilter, chanceFilter, sortBy]);
 
