@@ -122,7 +122,9 @@ export function JobDiscovery({
         return TIER_PRIORITY[a.companyTier] - TIER_PRIORITY[b.companyTier];
       }
       // NEWEST
-      return new Date(b.discoveredAt).getTime() - new Date(a.discoveredAt).getTime();
+      const bTime = Date.parse(b.discoveredAt);
+      const aTime = Date.parse(a.discoveredAt);
+      return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
     });
   }, [enrichedJobs, query, location, workMode, tierFilter, chanceFilter, sortBy]);
 
