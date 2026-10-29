@@ -37,6 +37,7 @@ export function PipelineBoard({
     "TAILORING",
     "WAITING_FOR_USER",
     "QUEUED",
+    "RUNNING",
     "SUBMITTED",
     "INTERVIEW",
     "OFFER",
@@ -141,7 +142,9 @@ export function PipelineBoard({
                   const isRunning = app.status === "RUNNING";
                   const tierColors = getTierColor(app.company.tier);
                   const currentIdx = stageOrder.indexOf(app.status);
-                  const nextStage = currentIdx < stageOrder.length - 2 ? stageOrder[currentIdx + 1] : null;
+                  const nextStage = currentIdx >= 0 && currentIdx < stageOrder.length - 2
+                    ? stageOrder[currentIdx + 1]
+                    : null;
 
                   return (
                     <div

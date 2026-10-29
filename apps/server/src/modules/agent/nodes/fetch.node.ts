@@ -1,113 +1,113 @@
 import crawlerService from "../../crawler/crawler.service.js";
-import pageFetcherService from "../../crawler/page-fetcher.service.js";
-import parserService from "../../crawler/parser.service.js";
-import detectorService from "../../crawler/detector.service.js";
 import logger from "../../../core/logger/logger.js";
+import { isCanonicalJobUrl } from "../../sources/web-scraper.source.js";
 import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
 import type { AgentJob } from "../agent.types.js";
 
-class FetchNode {
+export class FetchNode {
+    private normalizeJobs(jobs: AgentJob[]): {
+        jobs: AgentJob[];
+        skipped: number;
+    } {
+        const seenIds = new Set<string>();
+        const seenUrls = new Set<string>();
+        const normalizedJobs: AgentJob[] = [];
+        let skipped = 0;
+
+        for (const job of jobs) {
+            const title = job.title?.trim();
+            const company = job.company?.trim();
+            const url = job.url?.trim();
+
+            if (!job.id?.trim() || !title || !company || !url || !isCanonicalJobUrl(url)) {
+                skipped++;
+                continue;
+            }
+
+            let normalizedUrl: string;
+            try {
+                normalizedUrl = new URL(url).toString().replace(/\/$/, "").toLowerCase();
+            } catch {
+                skipped++;
+                continue;
+            }
+
+            const normalizedId = job.id.trim();
+            if (seenIds.has(normalizedId) || seenUrls.has(normalizedUrl)) {
+                skipped++;
+                continue;
+            }
+
+            seenIds.add(normalizedId);
+            seenUrls.add(normalizedUrl);
+            normalizedJobs.push({
+                ...job,
+                id: normalizedId,
+                title,
+                company,
+                url: normalizedUrl,
+                description: job.description?.trim() || undefined,
+                location: job.location?.trim() || undefined,
+                source: job.source?.trim() || undefined,
+                platform: job.platform?.trim() || undefined,
+            });
+        }
+
+        return { jobs: normalizedJobs, skipped };
+    }
+
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        logger.info(
-            { query: state.query, existingJobsCount: state.jobs.length, userId: state.userId },
-            "FetchNode: executing job fetch and detail extraction",
-        );
+        let rawJobs = state.jobs || [];
 
-        // Case 1: If no jobs currently exist in state, crawl matching jobs using the candidate's query
-        if (state.jobs.length === 0) {
-            if (!state.query?.trim()) {
-                return {
-                    history: [
-                        ...state.history,
-                        "FetchNode: No jobs in state and no query provided to crawl.",
-                    ],
-                };
-            }
-
+        // If no jobs exist in state but query is provided, crawl live openings
+        if (rawJobs.length === 0 && state.query?.trim()) {
             try {
                 const crawled = await crawlerService.crawl({
                     keyword: state.query,
                 });
-
-                const mappedJobs: AgentJob[] = crawled.map((c, index) => ({
+                rawJobs = crawled.map((c, index) => ({
                     id: `job-crawled-${Date.now()}-${index}`,
                     title: c.title,
                     company: c.company,
                     location: c.location || "Remote / Various",
                     url: c.url,
-                    description: c.description || "",
+                    description: c.description || undefined,
                     source: "web_scraper",
                     platform: c.platform || "web",
                 }));
-
-                return {
-                    jobs: mappedJobs,
-                    history: [
-                        ...state.history,
-                        `FetchNode: Crawled ${mappedJobs.length} live job requisitions for query "${state.query}".`,
-                    ],
-                };
-            } catch (crawlErr: any) {
+            } catch (err: any) {
                 logger.warn(
-                    { error: crawlErr?.message || crawlErr },
-                    "FetchNode: Crawling failed for query, proceeding with empty jobs",
+                    { error: err?.message || err },
+                    "FetchNode: Crawl error for query",
                 );
-                return {
-                    history: [
-                        ...state.history,
-                        `FetchNode: Failed to crawl jobs: ${crawlErr?.message || "Unknown error"}.`,
-                    ],
-                };
             }
         }
 
-        // Case 2: Deep-fetch details for existing jobs with missing or brief descriptions
-        const updatedJobs = [...state.jobs];
-        let fetchedCount = 0;
+        const { jobs, skipped } = this.normalizeJobs(rawJobs);
+        const validJobIds = new Set(jobs.map((job) => job.id));
+        const selectedJobs = (state.selectedJobs || []).filter((job) => validJobIds.has(job.id));
 
-        for (let i = 0; i < updatedJobs.length; i++) {
-            const job = updatedJobs[i];
-            const needsDeepFetch = !job.description || job.description.trim().length < 100;
-
-            if (needsDeepFetch && job.url) {
-                try {
-                    const { html, redirectedUrl } = await pageFetcherService.fetch(job.url);
-                    if (html && html.trim().length > 0) {
-                        const platform = detectorService.detect(redirectedUrl || job.url, html);
-                        const parsed = await parserService.parse({
-                            url: redirectedUrl || job.url,
-                            html,
-                            platform,
-                        });
-
-                        if (parsed.description && parsed.description.trim().length > (job.description?.length || 0)) {
-                            updatedJobs[i] = {
-                                ...job,
-                                description: parsed.description,
-                                title: parsed.title || job.title,
-                                company: parsed.company || job.company,
-                                location: parsed.location || job.location,
-                                platform: platform || job.platform || "web",
-                            };
-                            fetchedCount++;
-                        }
-                    }
-                } catch (fetchErr: any) {
-                    logger.debug(
-                        { url: job.url, error: fetchErr?.message },
-                        "FetchNode: Non-fatal error deep-fetching job page details",
-                    );
-                }
-            }
+        if (jobs.length === 0) {
+            return {
+                jobs: [],
+                selectedJobs: [],
+                history: [
+                    ...state.history,
+                    skipped > 0
+                        ? `Fetch completed with no valid jobs; skipped ${skipped} invalid or duplicate records.`
+                        : "No jobs found to fetch.",
+                ],
+            };
         }
 
         return {
-            jobs: updatedJobs,
+            jobs,
+            selectedJobs,
             history: [
                 ...state.history,
-                `FetchNode: Evaluated ${updatedJobs.length} jobs, deep-fetched detailed descriptions for ${fetchedCount} job(s).`,
+                `Fetched ${jobs.length} valid jobs${skipped > 0 ? ` and skipped ${skipped} invalid or duplicate records` : ""}.`,
             ],
         };
     }

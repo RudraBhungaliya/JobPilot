@@ -2120,11 +2120,11 @@ Portfolio: ${profile.portfolio} | GitHub: ${profile.github}`;
                   </div>
 
                   {(() => {
-                    const t1 = pipelineStats?.tierBreakdown?.tier1Mnc ?? 420;
-                    const t2 = pipelineStats?.tierBreakdown?.tier2Unicorn ?? 680;
-                    const t3 = pipelineStats?.tierBreakdown?.remoteTech ?? 540;
-                    const t4 = pipelineStats?.tierBreakdown?.midMarket ?? 746;
-                    const totalTiers = t1 + t2 + t3 + t4 || jobs.length || 1;
+                    const t1 = jobs.filter((job) => job.category === "TIER_1_MNC" || job.category === "MNC").length;
+                    const t2 = jobs.filter((job) => job.category === "TIER_2_UNICORN" || job.category === "SEMI_MNC").length;
+                    const t3 = jobs.filter((job) => job.category === "REMOTE").length;
+                    const t4 = jobs.filter((job) => job.category === "TIER_3_MIDMARKET" || job.category === "TIER_4_SERVICES").length;
+                    const totalTiers = t1 + t2 + t3 + t4 || 1;
 
                     const p1 = Math.round((t1 / totalTiers) * 100);
                     const p2 = Math.min(100, p1 + Math.round((t2 / totalTiers) * 100));
