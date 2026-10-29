@@ -212,6 +212,7 @@ test("Task 4: Email & Human-Intervention Workflow Suite", async (t) => {
       ],
     });
 
+    assert.ok(action, "Human action must be created");
     assert.ok(action.id);
     assert.equal(action.resolvedAt, null, "Pending action must have resolvedAt === null");
 

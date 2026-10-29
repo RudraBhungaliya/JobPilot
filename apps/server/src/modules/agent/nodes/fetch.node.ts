@@ -1,6 +1,8 @@
+import crawlerService from "../../crawler/crawler.service.js";
+import logger from "../../../core/logger/logger.js";
+import { isCanonicalJobUrl } from "../../sources/web-scraper.source.js";
 import type { AgentStateType, AgentStateUpdate } from "../graph/state.js";
 import type { AgentJob } from "../agent.types.js";
-import { isCanonicalJobUrl } from "../../sources/web-scraper.source.js";
 
 export class FetchNode {
     private normalizeJobs(jobs: AgentJob[]): {
@@ -22,7 +24,14 @@ export class FetchNode {
                 continue;
             }
 
-            const normalizedUrl = new URL(url).toString().replace(/\/$/, "").toLowerCase();
+            let normalizedUrl: string;
+            try {
+                normalizedUrl = new URL(url).toString().replace(/\/$/, "").toLowerCase();
+            } catch {
+                skipped++;
+                continue;
+            }
+
             const normalizedId = job.id.trim();
             if (seenIds.has(normalizedId) || seenUrls.has(normalizedUrl)) {
                 skipped++;
@@ -50,9 +59,35 @@ export class FetchNode {
     async execute(
         state: AgentStateType,
     ): Promise<AgentStateUpdate> {
-        const { jobs, skipped } = this.normalizeJobs(state.jobs);
+        let rawJobs = state.jobs || [];
+
+        // If no jobs exist in state but query is provided, crawl live openings
+        if (rawJobs.length === 0 && state.query?.trim()) {
+            try {
+                const crawled = await crawlerService.crawl({
+                    keyword: state.query,
+                });
+                rawJobs = crawled.map((c, index) => ({
+                    id: `job-crawled-${Date.now()}-${index}`,
+                    title: c.title,
+                    company: c.company,
+                    location: c.location || "Remote / Various",
+                    url: c.url,
+                    description: c.description || undefined,
+                    source: "web_scraper",
+                    platform: c.platform || "web",
+                }));
+            } catch (err: any) {
+                logger.warn(
+                    { error: err?.message || err },
+                    "FetchNode: Crawl error for query",
+                );
+            }
+        }
+
+        const { jobs, skipped } = this.normalizeJobs(rawJobs);
         const validJobIds = new Set(jobs.map((job) => job.id));
-        const selectedJobs = state.selectedJobs.filter((job) => validJobIds.has(job.id));
+        const selectedJobs = (state.selectedJobs || []).filter((job) => validJobIds.has(job.id));
 
         if (jobs.length === 0) {
             return {
